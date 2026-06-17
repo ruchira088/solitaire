@@ -1,0 +1,46 @@
+---
+- hosts: localhost
+  connection: local
+
+  tasks:
+    - name: Gather git information
+      import_tasks: tasks/git-info.yml
+
+    - name: Install dependencies
+      import_tasks: tasks/install-dependencies.yml
+
+    - name: Build production bundle
+      block:
+        - name: Remove existing production bundle
+          file:
+            path: ../dist
+            state: absent
+
+        - name: Build production bundle
+          shell: |
+            cd ../ && npm ci && npm run build
+
+        - name: Ensure bundle output directory exists
+          file:
+            path: ../build
+            state: directory
+
+        - name: Zip production bundle
+          archive:
+            path: ../dist/*
+            dest: ../build/client.zip
+            format: zip
+
+    - name: Upload to S3
+      block:
+        - name: Create S3 bucket
+          amazon.aws.s3_bucket:
+            name: solitaire-bundles.ruchij.com
+            state: present
+
+        - name: Upload production bundle to S3
+          amazon.aws.s3_object:
+            bucket: solitaire-bundles.ruchij.com
+            object: "{{ git_branch }}/{{ git_commit }}/client.zip"
+            src: ../build/client.zip
+            mode: put

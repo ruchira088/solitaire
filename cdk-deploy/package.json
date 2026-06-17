@@ -1,0 +1,22 @@
+{
+  "name": "cdk-deploy",
+  "version": "0.1.0",
+  "bin": {
+    "cdk-deploy": "bin/cdk-deploy.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "cdk": "cdk",
+    "cdk-deploy": "cdk deploy --require-approval=never",
+    "deploy": "npm run build && npm run cdk-deploy"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "aws-cdk": "^2.1100.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~6.0.3"
+  },
+  "dependencies": {
+    "react-app-cdk-deploy": "github:ruchira088/react-app-cdk-deploy#v1.0.0"
+  }
+}

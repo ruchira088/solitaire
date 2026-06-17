@@ -1,0 +1,184 @@
+name: solitaire pipeline
+
+on:
+  push:
+    branches:
+      - "**"
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-typecheck:
+    name: Build and Typecheck
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up NodeJS
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production bundle
+        run: npm run build
+
+  upload-bundle:
+    name: Upload bundle to S3
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-typecheck
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up NodeJS
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ap-southeast-2
+          role-session-name: solitaire-s3-publish
+          role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
+
+      - name: Upload bundle to S3
+        run: ansible-playbook playbooks/s3-upload.yml
+
+  deploy-to-dev:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    needs:
+      - upload-bundle
+
+    if: github.ref != 'refs/heads/main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ap-southeast-2
+          role-session-name: solitaire-dev-deploy
+          role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
+
+      - name: Install deploy dependencies
+        run: npm ci
+        working-directory: cdk-deploy
+
+      - name: Deploy to S3 & Cloudfront
+        run: npm run deploy
+        working-directory: cdk-deploy
+
+  deploy-to-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs:
+      - upload-bundle
+
+    environment: Staging
+
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ap-southeast-2
+          role-session-name: solitaire-staging-deploy
+          role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
+
+      - name: Install deploy dependencies
+        run: npm ci
+        working-directory: cdk-deploy
+
+      - name: Deploy to S3 & Cloudfront
+        run: npm run deploy
+        working-directory: cdk-deploy
+
+  deploy-to-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-to-staging
+
+    environment: Production
+
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ap-southeast-2
+          role-session-name: solitaire-production-deploy
+          role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
+
+      - name: Install deploy dependencies
+        run: npm ci
+        working-directory: cdk-deploy
+
+      - name: Deploy to S3 & Cloudfront
+        run: ENVIRONMENT=production npm run deploy
+        working-directory: cdk-deploy
+
+      - name: Create GitHub release
+        run: ansible-playbook playbooks/github-release.yml
+
+  send-notification:
+    runs-on: ubuntu-latest
+    if: always()
+
+    permissions:
+      id-token: write
+
+    needs:
+      - build-and-typecheck
+      - deploy-to-dev
+      - deploy-to-staging
+      - deploy-to-production
+
+    steps:
+      - name: Send Slack notification
+        uses: ruchira088/slack-github-action@v1
