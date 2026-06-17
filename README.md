@@ -3,10 +3,10 @@
 ### ▶️ [**Play now → solitaire.ruchij.com**](https://solitaire.ruchij.com)
 
 A polished, high-quality **Klondike Solitaire** built with **TypeScript** and the
-**HTML5 Canvas**. Every card — including the illustrated court cards and ornate
-Aces — is drawn procedurally as vectors, so the game stays razor-sharp at any
-resolution or pixel density, with smooth, physics-flavoured animations
-throughout. Zero runtime dependencies.
+**HTML5 Canvas**. Cards are crisp **SVG** faces (the public-domain
+*vector-playing-cards* set) drawn onto procedurally-rendered, rounded, shadowed
+card bodies, so the game stays razor-sharp at any resolution or pixel density,
+with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
 
 ![Solitaire gameplay](screenshots/gameplay.png)
 
@@ -14,13 +14,13 @@ throughout. Zero runtime dependencies.
 
 ## Highlights
 
-- 🎴 **Hand-illustrated court cards & Aces** — Kings, Queens and Jacks are drawn
-  as detailed SVG portraits (crowns, tiaras, feathered caps, ermine collars,
-  pearl necklaces, regalia); Aces feature a large glossy suit symbol framed by a
-  gold double-ring and filigree.
-- ✨ **Crisp procedural graphics** — rounded cards with soft drop shadows, proper
-  A–10 pip layouts, patterned card backs, and a felt-green gradient table with a
-  subtle vignette. No image assets; everything is vector and DPI-aware.
+- 🎴 **Classic SVG card faces** — all 52 cards use the public-domain
+  *vector-playing-cards* set (detailed court figures, clean pips), drawn on
+  rounded, shadowed card bodies. Crisp at any size; a procedural face is used as
+  a fallback while the SVGs decode.
+- ✨ **Crisp Canvas rendering** — rounded cards with soft drop shadows, patterned
+  card backs, and a felt-green gradient table with a subtle vignette. Everything
+  is vector and DPI-aware.
 - 🎞️ **Fluid animations** — staggered opening deal, card flips, fly-to-pile
   moves, lift-and-drop drag feedback, animated snap-back on illegal moves,
   auto-complete sweep, and a classic bouncing-card **win celebration**.
@@ -35,11 +35,12 @@ throughout. Zero runtime dependencies.
 
 ## Card art
 
-All 52 cards are rendered in code. The court cards and Aces are illustrated
-vector art, distinct per rank and themed to the suit colour (royal blue for
-♠/♣, crimson for ♥/♦):
+The 52 card faces are the public-domain
+[*vector-playing-cards*](http://code.google.com/p/vector-playing-cards/) SVG set
+(`public/cards/`), each drawn onto a rounded, shadowed card body rendered on the
+canvas:
 
-![Court cards and Aces](screenshots/cards.png)
+![The full deck](screenshots/cards.png)
 
 ## Light & dark themes
 
@@ -114,11 +115,14 @@ src/
   game.ts        Klondike rules, draw modes, undo, win / auto-complete (pure)
   layout.ts      responsive pile positions, column-offset compression
   positions.ts   shared geometry: hit-testing + animation targets
-  render.ts      procedural card + table drawing
-  courtArt.ts    SVG illustrations for J/Q/K + Aces (rasterised & cached)
+  render.ts      card body + table drawing, SVG-face compositing
+  cardFaces.ts   loads & caches the SVG card faces from public/cards/
+  courtArt.ts    procedural J/Q/K + Ace fallback art (used until SVGs decode)
   theme.ts       light / dark felt + placeholder palettes
   animation.ts   tween engine, card flights, win-celebration physics
   input.ts       pointer drag & drop, click-to-draw, double-click auto-move
+public/
+  cards/         52 SVG card faces (vector-playing-cards, public domain)
 ```
 
 A few design notes:
@@ -126,10 +130,10 @@ A few design notes:
 - **`game.ts` is framework-free and side-effect-light** — the rules, move
   validation, scoring and undo snapshots are pure and could be unit-tested in
   isolation.
-- **Card art is SVG, rasterised once and cached.** `courtArt.ts` builds each
-  illustration as an SVG string, draws it into an `Image`, and the renderer
-  blits the cached bitmap (falling back to simple text until it decodes). This
-  keeps the art crisp while avoiding per-frame SVG parsing.
+- **Card faces are SVG images, loaded once and cached.** `cardFaces.ts` loads
+  each face from `public/cards/` into an `Image`; the renderer draws it onto a
+  rounded white card body (for clean corners + shadow). A procedural face
+  (`courtArt.ts` + pip layouts) is drawn as a fallback until the SVG decodes.
 - **Animations decouple model from view.** A move updates the model instantly;
   the `Animator` then flies the affected cards from their old screen positions
   to their new ones, so logic never waits on animation.
@@ -227,6 +231,13 @@ ENVIRONMENT=production npm run deploy   # production → solitaire.ruchij.com
 - **Vite** for the dev server and production bundling
 - **No runtime dependencies** — the shipped bundle is pure vanilla JS/Canvas
 
+## Credits
+
+Card faces are from the
+[*vector-playing-cards*](http://code.google.com/p/vector-playing-cards/) project,
+released into the **public domain**.
+
 ## License
 
-MIT — free to use, modify and share.
+MIT — free to use, modify and share. (Card-face SVGs are public domain; see
+Credits.)

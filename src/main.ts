@@ -10,6 +10,7 @@ import { HintHighlight, Renderer } from "./render";
 import { Input } from "./input";
 import { cardPos } from "./positions";
 import { preloadFaceArt } from "./courtArt";
+import { preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
@@ -19,6 +20,12 @@ const game = new Game(3);
 const animator = new Animator();
 const renderer = new Renderer();
 const celebration = new Celebration();
+
+// Deal/flip animations can be disabled via ?animate=off or the OS
+// "reduce motion" setting (also handy for deterministic screenshots).
+const ANIMATIONS =
+  new URLSearchParams(location.search).get("animate") !== "off" &&
+  !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let layout: Layout = computeLayout(1, 1);
 let dpr = 1;
@@ -220,6 +227,14 @@ function startDeal(): void {
   busy = true;
   animator.clear();
   animator.setNow(performance.now());
+
+  // Allow skipping the deal animation (reduced-motion / screenshots).
+  if (!ANIMATIONS) {
+    busy = false;
+    updateStats();
+    return;
+  }
+
   let dealIndex = 0;
   const stagger = 42;
 
@@ -343,6 +358,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+preloadCardFaces();
 preloadFaceArt();
 const savedTheme = (() => {
   const fromUrl = new URLSearchParams(location.search).get("theme");
