@@ -1,5 +1,7 @@
 # Solitaire
 
+### ▶️ [**Play now → solitaire.ruchij.com**](https://solitaire.ruchij.com)
+
 A polished, high-quality **Klondike Solitaire** built with **TypeScript** and the
 **HTML5 Canvas**. Every card — including the illustrated court cards and ornate
 Aces — is drawn procedurally as vectors, so the game stays razor-sharp at any
