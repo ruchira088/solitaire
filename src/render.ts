@@ -193,15 +193,28 @@ export class Renderer {
     ctx.fill();
 
     ctx.shadowColor = "transparent";
+    // Scale the artwork into an inset region so it has padding inside the card.
+    const padX = w * 0.05;
+    const padY = h * 0.05;
+    const ix = x + padX;
+    const iy = y + padY;
+    const iw = w - padX * 2;
+    const ih = h - padY * 2;
+    const ir = Math.max(0, r - Math.min(padX, padY));
+
     ctx.save();
-    roundRectPath(ctx, x, y, w, h, r);
+    roundRectPath(ctx, ix, iy, iw, ih, ir);
     ctx.clip();
-    // Overscan slightly so the SVG's own thin black border is clipped away,
-    // leaving a clean white rounded edge (the corner indices sit well inside).
-    const ox = w * 0.018;
-    const oy = h * 0.018;
-    ctx.drawImage(img, x - ox, y - oy, w + ox * 2, h + oy * 2);
+    // Draw the full artwork (no overscan, so nothing is clipped off).
+    ctx.drawImage(img, ix, iy, iw, ih);
     ctx.restore();
+
+    // Mask the SVG's own thin black border (which sits at the inset edge) with
+    // white, so the card reads as a clean white edge — without cropping the art.
+    ctx.lineWidth = w * 0.016;
+    ctx.strokeStyle = "#ffffff";
+    roundRectPath(ctx, ix, iy, iw, ih, ir);
+    ctx.stroke();
   }
 
   private drawFace(
