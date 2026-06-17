@@ -15,6 +15,7 @@ import {
   Rect,
   tableauCardAt,
 } from "./positions";
+import { playDraw, playFlip, playPlace } from "./sound";
 
 const DRAG_THRESHOLD = 6; // px before a press becomes a drag
 const DOUBLE_TAP_MS = 320;
@@ -313,6 +314,8 @@ export class Input {
     const result = g.drawFromStock();
     if (!result) return;
 
+    playDraw();
+
     if (recycling) {
       // Whole waste snaps back to the stock; a quick fade is enough.
       this.cb.onChange();
@@ -349,6 +352,7 @@ export class Input {
   ): void {
     const layout = this.cb.layout();
     const moved = result.moved;
+    playPlace();
     for (let i = 0; i < moved.length; i++) {
       const to = cardPos(this.game, layout, dest, destStartIndex + i);
       this.animator.flyCard(moved[i], srcPositions[i], to, {
@@ -365,6 +369,7 @@ export class Input {
         delay: 120,
         flip: true,
         faceShown: false,
+        onDone: playFlip,
       });
     }
   }

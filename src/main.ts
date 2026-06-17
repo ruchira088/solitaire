@@ -12,11 +12,12 @@ import { cardPos } from "./positions";
 import { preloadFaceArt } from "./courtArt";
 import { preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
+import { isSoundEnabled, setSoundEnabled } from "./sound";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 
-const game = new Game(3);
+const game = new Game(1);
 const animator = new Animator();
 const renderer = new Renderer();
 const celebration = new Celebration();
@@ -59,6 +60,8 @@ const el = {
   undo: document.getElementById("btn-undo") as HTMLButtonElement,
   hint: document.getElementById("btn-hint") as HTMLButtonElement,
   drawToggle: document.getElementById("draw-toggle") as HTMLElement,
+  easy: document.getElementById("btn-easy") as HTMLButtonElement,
+  sound: document.getElementById("btn-sound") as HTMLButtonElement,
   theme: document.getElementById("btn-theme") as HTMLButtonElement,
   time: document.getElementById("stat-time") as HTMLElement,
   moves: document.getElementById("stat-moves") as HTMLElement,
@@ -330,6 +333,38 @@ function toggleTheme(): void {
   applyTheme(getThemeName() === "dark" ? "light" : "dark");
 }
 
+function applySound(on: boolean): void {
+  setSoundEnabled(on);
+  el.sound.textContent = on ? "🔊" : "🔇";
+  el.sound.title = on ? "Mute sound effects" : "Unmute sound effects";
+  try {
+    localStorage.setItem("solitaire-sound", on ? "on" : "off");
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+function toggleSound(): void {
+  applySound(!isSoundEnabled());
+}
+
+function applyEasy(on: boolean): void {
+  game.easyEmptyStacks = on;
+  el.easy.setAttribute("aria-pressed", on ? "true" : "false");
+  el.easy.title = on
+    ? "Easy mode on: empty columns accept any card"
+    : "Easy mode: empty columns accept any card";
+  try {
+    localStorage.setItem("solitaire-easy", on ? "on" : "off");
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+function toggleEasy(): void {
+  applyEasy(!game.easyEmptyStacks);
+}
+
 // ---- Wire up ---------------------------------------------------------------
 
 const input = new Input(canvas, game, animator, {
@@ -342,6 +377,8 @@ el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
 el.hint.addEventListener("click", showHint);
 el.theme.addEventListener("click", toggleTheme);
+el.sound.addEventListener("click", toggleSound);
+el.easy.addEventListener("click", toggleEasy);
 el.drawToggle.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (btn) setDrawCount(Number(btn.dataset.draw) as DrawCount);
@@ -370,6 +407,23 @@ const savedTheme = (() => {
   }
 })();
 applyTheme(savedTheme === "light" ? "light" : "dark");
+const savedSound = (() => {
+  try {
+    return localStorage.getItem("solitaire-sound");
+  } catch {
+    return null;
+  }
+})();
+applySound(savedSound !== "off");
+const savedEasy = (() => {
+  try {
+    return localStorage.getItem("solitaire-easy");
+  } catch {
+    return null;
+  }
+})();
+applyEasy(savedEasy === "on");
+setDrawCount(game.drawCount);
 resize();
 updateStats();
 startDeal();

@@ -44,6 +44,9 @@ export class Game {
   foundations: Card[][] = [[], [], [], []];
   tableau: Card[][] = [[], [], [], [], [], [], []];
   drawCount: DrawCount = 3;
+  /** Easy mode: when true, an empty tableau column accepts any card, not
+   *  only a King. */
+  easyEmptyStacks = false;
   moves = 0;
   score = 0;
 
@@ -116,7 +119,7 @@ export class Game {
 
   canMoveToTableau(card: Card, col: number): boolean {
     const pile = this.tableau[col];
-    if (pile.length === 0) return card.rank === 13; // empty accepts King
+    if (pile.length === 0) return this.easyEmptyStacks || card.rank === 13; // empty accepts King (or any card in easy mode)
     const top = pile[pile.length - 1];
     if (!top.faceUp) return false;
     return (
