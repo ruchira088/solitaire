@@ -1,0 +1,64 @@
+name: PR cleanup
+
+# When a pull request is merged, tear down the per-branch dev environment that
+# was deployed for it (the `SolitaireFrontEndStack-<branch>` stack and its
+# `<branch>.solitaire.ruchij.com` S3 bucket + CloudFront distribution).
+
+on:
+  pull_request:
+    types:
+      - closed
+
+concurrency:
+  group: pr-cleanup-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: false
+
+jobs:
+  destroy-dev-environment:
+    name: Destroy PR dev environment
+    runs-on: ubuntu-latest
+
+    # Only when the PR was actually merged, and never for a `main` head branch
+    # (which maps to the persistent staging / production environments).
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref != 'main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          # The head branch may already be deleted on merge, so check out the
+          # base branch (always present) — the CDK config is identical.
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Recreate PR branch ref
+        # The CDK app derives the stack name from the current git branch, so put
+        # HEAD on a local branch named after the PR head to target its stack.
+        run: git checkout -B "$HEAD_REF"
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+
+      - name: Set up NodeJS
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ap-southeast-2
+          role-session-name: solitaire-pr-cleanup
+          role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
+
+      - name: Destroy dev resources
+        run: |
+          echo "Destroying dev environment for branch: $HEAD_REF"
+          npm ci
+          npm run destroy
+        working-directory: cdk-deploy
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
