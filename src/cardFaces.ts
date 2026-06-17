@@ -21,7 +21,9 @@ const SUIT_NAME: Record<Suit, string> = {
 
 function fileName(card: Card): string {
   const rank = RANK_NAME[card.rank] ?? String(card.rank);
-  return `${rank}_of_${SUIT_NAME[card.suit]}`;
+  // Court cards (J/Q/K) use the alternate "2" face designs.
+  const variant = card.rank >= 11 && card.rank <= 13 ? "2" : "";
+  return `${rank}_of_${SUIT_NAME[card.suit]}${variant}`;
 }
 
 // Respects Vite's configured base path so it works in dev and when deployed.

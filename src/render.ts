@@ -186,8 +186,8 @@ export class Renderer {
     h: number,
     r: number,
   ): void {
-    // White rounded body gives clean rounded corners (the SVGs are square) and
-    // carries the drop shadow already configured by the caller.
+    // White rounded body forms the visible card edge and carries the drop
+    // shadow already configured by the caller.
     roundRectPath(ctx, x, y, w, h, r);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
@@ -196,15 +196,12 @@ export class Renderer {
     ctx.save();
     roundRectPath(ctx, x, y, w, h, r);
     ctx.clip();
-    // Inset very slightly so the artwork sits inside the rounded edge.
-    const pad = w * 0.012;
-    ctx.drawImage(img, x + pad, y + pad, w - pad * 2, h - pad * 2);
+    // Overscan slightly so the SVG's own thin black border is clipped away,
+    // leaving a clean white rounded edge (the corner indices sit well inside).
+    const ox = w * 0.018;
+    const oy = h * 0.018;
+    ctx.drawImage(img, x - ox, y - oy, w + ox * 2, h + oy * 2);
     ctx.restore();
-
-    ctx.lineWidth = Math.max(1, w * 0.012);
-    ctx.strokeStyle = "rgba(20,30,50,0.18)";
-    roundRectPath(ctx, x, y, w, h, r);
-    ctx.stroke();
   }
 
   private drawFace(
