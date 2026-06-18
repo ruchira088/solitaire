@@ -329,7 +329,7 @@ export class Game {
     this.foundations = snap.foundations;
     this.tableau = snap.tableau;
     this.moves = snap.moves;
-    this.score = snap.score;
+    this.score = Math.max(0, snap.score - 5);
     return true;
   }
 
