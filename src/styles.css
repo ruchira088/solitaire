@@ -199,3 +199,60 @@ body {
     font-size: 12.5px;
   }
 }
+
+/* ---- Click-to-start overlay --------------------------------------------- */
+
+#start-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3, 12, 8, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+
+#start-overlay.is-hiding {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#start-btn {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 44px;
+  border-radius: 16px;
+  border: 1px solid var(--btn-border);
+  background: linear-gradient(180deg, var(--btn-bg-1), var(--btn-bg-2));
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+#start-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+#start-btn:active {
+  transform: translateY(0);
+}
+
+.start-pips {
+  font-size: 30px;
+  letter-spacing: 4px;
+}
+
+.start-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}

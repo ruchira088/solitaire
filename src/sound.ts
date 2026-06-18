@@ -76,6 +76,19 @@ export function playFlip(): void {
   noiseBurst(ac, { duration: 0.08, freq: 2400, q: 1.0, gain: 0.12 });
 }
 
+/** Card dealt at the start — a quick, soft tick (one per card during the deal). */
+export function playDeal(): void {
+  const ac = ensureCtx();
+  if (!ac) return;
+  noiseBurst(ac, { duration: 0.07, freq: 1500, q: 0.9, gain: 0.1 });
+}
+
+/** Create / resume the AudioContext from within a user gesture so subsequent
+ *  sounds (including the opening deal) are allowed to play. */
+export function unlockAudio(): void {
+  ensureCtx();
+}
+
 export function setSoundEnabled(on: boolean): void {
   enabled = on;
 }

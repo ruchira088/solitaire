@@ -12,7 +12,7 @@ import { cardPos } from "./positions";
 import { preloadFaceArt } from "./courtArt";
 import { preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
-import { isSoundEnabled, setSoundEnabled } from "./sound";
+import { isSoundEnabled, setSoundEnabled, playDeal, unlockAudio } from "./sound";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -253,6 +253,8 @@ function startDeal(): void {
         flip: isTop,
         faceShown: false,
       });
+      // Soft tick as each card lands during the deal.
+      animator.delay(dealIndex * stagger, () => playDeal());
       dealIndex++;
     }
   }
@@ -426,5 +428,16 @@ applyEasy(savedEasy === "on");
 setDrawCount(game.drawCount);
 resize();
 updateStats();
-startDeal();
 requestAnimationFrame(frame);
+
+// The opening deal waits for a click so its sound can play (browsers block
+// audio until the first user gesture). Clicking unlocks audio, then deals.
+const startOverlay = document.getElementById("start-overlay") as HTMLElement;
+const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
+function dismissStartOverlay(): void {
+  unlockAudio();
+  startOverlay.classList.add("is-hiding");
+  setTimeout(() => startOverlay.remove(), 400);
+  startDeal();
+}
+startBtn.addEventListener("click", dismissStartOverlay);
