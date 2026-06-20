@@ -207,8 +207,10 @@ body {
   inset: 0;
   z-index: 10;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 18px;
   background: rgba(3, 12, 8, 0.62);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -255,4 +257,26 @@ body {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.3px;
+}
+
+#start-mute {
+  font-size: 18px;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+}
+
+.start-tip {
+  margin-top: 8px;
+  max-width: 320px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--muted);
+  text-align: center;
+}
+
+.start-tip strong {
+  color: var(--text);
+  font-weight: 600;
 }

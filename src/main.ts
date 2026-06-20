@@ -62,6 +62,7 @@ const el = {
   drawToggle: document.getElementById("draw-toggle") as HTMLElement,
   easy: document.getElementById("btn-easy") as HTMLButtonElement,
   sound: document.getElementById("btn-sound") as HTMLButtonElement,
+  startMute: document.getElementById("start-mute") as HTMLButtonElement,
   theme: document.getElementById("btn-theme") as HTMLButtonElement,
   time: document.getElementById("stat-time") as HTMLElement,
   moves: document.getElementById("stat-moves") as HTMLElement,
@@ -337,8 +338,14 @@ function toggleTheme(): void {
 
 function applySound(on: boolean): void {
   setSoundEnabled(on);
-  el.sound.textContent = on ? "🔊" : "🔇";
-  el.sound.title = on ? "Mute sound effects" : "Unmute sound effects";
+  const icon = on ? "🔊" : "🔇";
+  const title = on ? "Mute sound effects" : "Unmute sound effects";
+  el.sound.textContent = icon;
+  el.sound.title = title;
+  if (el.startMute) {
+    el.startMute.textContent = icon;
+    el.startMute.title = title;
+  }
   try {
     localStorage.setItem("solitaire-sound", on ? "on" : "off");
   } catch {
@@ -380,6 +387,7 @@ el.undo.addEventListener("click", doUndo);
 el.hint.addEventListener("click", showHint);
 el.theme.addEventListener("click", toggleTheme);
 el.sound.addEventListener("click", toggleSound);
+el.startMute.addEventListener("click", toggleSound);
 el.easy.addEventListener("click", toggleEasy);
 el.drawToggle.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
@@ -428,6 +436,11 @@ applyEasy(savedEasy === "on");
 setDrawCount(game.drawCount);
 resize();
 updateStats();
+
+// Keep the dealt cards hidden behind the start overlay so the board doesn't
+// show a fully-dealt game underneath it — the deal plays out only on click.
+animator.hideCards(game.tableau.flat().map((c) => c.id));
+
 requestAnimationFrame(frame);
 
 // The opening deal waits for a click so its sound can play (browsers block

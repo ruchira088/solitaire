@@ -85,6 +85,13 @@ export class Animator {
     return this.flyingIds.has(cardId);
   }
 
+  /** Mark cards as hidden without animating them. Used to keep the dealt cards
+   *  off-screen until the opening deal begins (they have no active flight, so
+   *  the renderer skips them entirely). Cleared by `clear()`. */
+  hideCards(ids: number[]): void {
+    for (const id of ids) this.flyingIds.add(id);
+  }
+
   activeFlights(): Flight[] {
     return this.flights;
   }
