@@ -29,6 +29,11 @@ export interface Layout {
 const CARD_RATIO = 1.4; // height / width
 const COLS = 7;
 
+// Tableau stack metrics, as fractions of card height.
+const FACE_DOWN_DY = 0.16;
+const FACE_UP_DY = 0.29;
+const TOP_GAP = 0.34; // gap between the top row and the tableau
+
 export function computeLayout(width: number, height: number): Layout {
   const margin = Math.round(Math.min(width, height) * 0.03) + 10;
   const gapX = Math.max(8, Math.round(width * 0.012));
@@ -37,8 +42,11 @@ export function computeLayout(width: number, height: number): Layout {
   let cardW = (width - margin * 2 - gapX * (COLS - 1)) / COLS;
   let cardH = cardW * CARD_RATIO;
 
-  // Don't let cards get absurdly large on very wide screens.
-  const maxCardH = height * 0.26;
+  // Don't let cards get so tall that stacks run out of room: reserve space
+  // for the top row plus a deep column (6 face-down + ~8 face-up offsets +
+  // one full card) before offset compression has to kick in.
+  const deepColumnH = 1 + TOP_GAP + 1 + 6 * FACE_DOWN_DY + 8 * FACE_UP_DY;
+  const maxCardH = (height - margin * 2) / deepColumnH;
   if (cardH > maxCardH) {
     cardH = maxCardH;
     cardW = cardH / CARD_RATIO;
@@ -49,7 +57,7 @@ export function computeLayout(width: number, height: number): Layout {
   const colX = (i: number) => originX + i * (cardW + gapX);
 
   const topY = margin;
-  const tableauY = topY + cardH + Math.round(cardH * 0.34);
+  const tableauY = topY + cardH + Math.round(cardH * TOP_GAP);
 
   const foundations: Point[] = [
     { x: colX(3), y: topY },
@@ -71,8 +79,8 @@ export function computeLayout(width: number, height: number): Layout {
     waste: { x: colX(1), y: topY },
     foundations,
     tableau,
-    faceDownDY: cardH * 0.16,
-    faceUpDY: cardH * 0.29,
+    faceDownDY: cardH * FACE_DOWN_DY,
+    faceUpDY: cardH * FACE_UP_DY,
     wasteFanDX: cardW * 0.28,
     tableauBottom: height - margin,
   };
