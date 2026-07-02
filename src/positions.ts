@@ -30,9 +30,10 @@ export function cardPos(
     }
     case "foundation":
       return { ...layout.foundations[id.index] };
-    case "tableau": {
-      const base = layout.tableau[id.index];
-      const offsets = columnOffsets(game.tableau[id.index], layout);
+    case "tableau":
+    case "spare": {
+      const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spare;
+      const offsets = columnOffsets(game.getPile(id), layout);
       const dy = offsets[index] ?? (offsets.length ? offsets[offsets.length - 1] : 0);
       return { x: base.x, y: base.y + dy };
     }
@@ -42,9 +43,9 @@ export function cardPos(
 /** Bounding rectangle used as a pile's drop / hit zone. */
 export function pileRect(game: Game, layout: Layout, id: PileId): Rect {
   const { cardW, cardH } = layout;
-  if (id.kind === "tableau") {
-    const base = layout.tableau[id.index];
-    const col = game.tableau[id.index];
+  if (id.kind === "tableau" || id.kind === "spare") {
+    const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spare;
+    const col = game.getPile(id);
     if (col.length === 0) return { x: base.x, y: base.y, w: cardW, h: cardH };
     const offsets = columnOffsets(col, layout);
     const last = offsets[offsets.length - 1];
@@ -65,16 +66,14 @@ export function overlapArea(a: Rect, b: Rect): number {
   return ox * oy;
 }
 
-/** Which card index within a tableau column sits under (px,py), or -1. */
-export function tableauCardAt(
-  game: Game,
+/** Which card index within a fanned-down stack sits under (px,py), or -1. */
+function stackCardAt(
+  cards: { faceUp: boolean }[],
+  base: Point,
   layout: Layout,
-  col: number,
   px: number,
   py: number,
 ): number {
-  const base = layout.tableau[col];
-  const cards = game.tableau[col];
   if (cards.length === 0) return -1;
   if (px < base.x || px > base.x + layout.cardW) return -1;
   const offsets = columnOffsets(cards, layout);
@@ -85,4 +84,25 @@ export function tableauCardAt(
     if (py >= top && py <= bottom) return i;
   }
   return -1;
+}
+
+/** Which card index within a tableau column sits under (px,py), or -1. */
+export function tableauCardAt(
+  game: Game,
+  layout: Layout,
+  col: number,
+  px: number,
+  py: number,
+): number {
+  return stackCardAt(game.tableau[col], layout.tableau[col], layout, px, py);
+}
+
+/** Which card index within the spare pile sits under (px,py), or -1. */
+export function spareCardAt(
+  game: Game,
+  layout: Layout,
+  px: number,
+  py: number,
+): number {
+  return stackCardAt(game.spare, layout.spare, layout, px, py);
 }

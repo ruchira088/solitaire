@@ -13,6 +13,7 @@ import {
   pileRect,
   pointInRect,
   Rect,
+  spareCardAt,
   tableauCardAt,
 } from "./positions";
 import { playDraw, playFlip, playPlace } from "./sound";
@@ -159,6 +160,16 @@ export class Input {
       }
     }
 
+    // Spare pile — any suffix of the parked run can be picked up.
+    if (g.spare.length > 0) {
+      const idx = spareCardAt(g, layout, p.x, p.y);
+      if (idx >= 0) {
+        const run = g.spare.slice(idx);
+        if (!g.isValidRun(run)) return null;
+        return { from: { kind: "spare" }, index: idx, cards: run };
+      }
+    }
+
     // Waste top card.
     if (g.waste.length > 0) {
       const top = g.waste.length - 1;
@@ -221,10 +232,12 @@ export class Input {
     const g = this.game;
     type IndexedPile =
       | { kind: "tableau"; index: number }
-      | { kind: "foundation"; index: number };
+      | { kind: "foundation"; index: number }
+      | { kind: "spare" };
     const candidates: IndexedPile[] = [];
     for (let i = 0; i < 7; i++) candidates.push({ kind: "tableau", index: i });
     for (let i = 0; i < 4; i++) candidates.push({ kind: "foundation", index: i });
+    candidates.push({ kind: "spare" });
 
     let best: PileId | null = null;
     let bestArea = 0;
@@ -234,7 +247,9 @@ export class Input {
       const legal =
         c.kind === "tableau"
           ? g.canMoveToTableau(top, c.index)
-          : this.drag!.cards.length === 1 && g.canMoveToFoundation(top, c.index);
+          : c.kind === "spare"
+            ? g.canMoveToSpare()
+            : this.drag!.cards.length === 1 && g.canMoveToFoundation(top, c.index);
       if (!legal) continue;
       const area = overlapArea(topRect, pileRect(g, layout, c));
       if (area > bestArea) {
@@ -279,6 +294,13 @@ export class Input {
         from = { kind: "tableau", index: c };
         index = idx;
         break;
+      }
+    }
+    if (!from && g.spare.length > 0) {
+      const idx = spareCardAt(g, layout, p.x, p.y);
+      if (idx >= 0) {
+        from = { kind: "spare" };
+        index = idx;
       }
     }
     if (!from && g.waste.length > 0) {

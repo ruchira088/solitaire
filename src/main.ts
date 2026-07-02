@@ -41,13 +41,25 @@ let celebStarted = false;
 
 // ---- DPI-aware sizing ------------------------------------------------------
 
+// The spare pile adds an 8th board column while easy mode is on (or while it
+// still holds cards after easy mode was turned off).
+let spareShown = false;
+function spareActive(): boolean {
+  return game.easyEmptyStacks || game.spare.length > 0;
+}
+
 function resize(): void {
   const rect = canvas.getBoundingClientRect();
   dpr = Math.min(window.devicePixelRatio || 1, 3);
   canvas.width = Math.max(1, Math.round(rect.width * dpr));
   canvas.height = Math.max(1, Math.round(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  layout = computeLayout(rect.width, rect.height);
+  spareShown = spareActive();
+  layout = computeLayout(rect.width, rect.height, spareShown);
+}
+
+function syncSpareLayout(): void {
+  if (spareActive() !== spareShown) resize();
 }
 
 const ro = new ResizeObserver(() => resize());
@@ -122,6 +134,7 @@ function nextAutoSource(): { from: PileId; index: number } | null {
   const sources: PileId[] = [];
   for (let i = 0; i < 7; i++) sources.push({ kind: "tableau", index: i });
   sources.push({ kind: "waste" });
+  sources.push({ kind: "spare" });
   for (const from of sources) {
     const pile = game.getPile(from);
     if (pile.length === 0) continue;
@@ -269,6 +282,7 @@ function startDeal(): void {
 
 function onChange(): void {
   clearHint();
+  syncSpareLayout();
   if (timerStart === null && elapsedFrozen === 0 && game.moves > 0) {
     timerStart = performance.now();
   }
@@ -283,6 +297,7 @@ function newGame(): void {
   animator.clear();
   clearHint();
   game.deal();
+  syncSpareLayout();
   timerStart = null;
   elapsedFrozen = 0;
   el.time.textContent = "0:00";
@@ -295,6 +310,7 @@ function doUndo(): void {
   if (game.undo()) {
     animator.clear();
     clearHint();
+    syncSpareLayout();
     updateStats();
   }
 }
@@ -359,10 +375,11 @@ function toggleSound(): void {
 
 function applyEasy(on: boolean): void {
   game.easyEmptyStacks = on;
+  syncSpareLayout();
   el.easy.setAttribute("aria-pressed", on ? "true" : "false");
   el.easy.title = on
-    ? "Easy mode on: empty columns accept any card"
-    : "Easy mode: empty columns accept any card";
+    ? "Easy mode on: empty columns accept any card; park a stack on the ✦ pile"
+    : "Easy mode: empty columns accept any card; park a stack on the ✦ pile";
   try {
     localStorage.setItem("solitaire-easy", on ? "on" : "off");
   } catch {

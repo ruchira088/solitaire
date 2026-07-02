@@ -17,6 +17,9 @@ export interface Layout {
   waste: Point;
   foundations: Point[]; // 4
   tableau: Point[]; // 7
+  /** Easy-mode parking pile: an 8th column right of the tableau. Positioned
+   *  unconditionally but only rendered / hit-tested while active. */
+  spare: Point;
   /** Vertical spacing between stacked tableau cards. */
   faceDownDY: number;
   faceUpDY: number;
@@ -34,12 +37,14 @@ const FACE_DOWN_DY = 0.16;
 const FACE_UP_DY = 0.29;
 const TOP_GAP = 0.34; // gap between the top row and the tableau
 
-export function computeLayout(width: number, height: number): Layout {
+export function computeLayout(width: number, height: number, includeSpare = false): Layout {
   const margin = Math.round(Math.min(width, height) * 0.03) + 10;
   const gapX = Math.max(8, Math.round(width * 0.012));
 
-  // Fit 7 columns across the available width.
-  let cardW = (width - margin * 2 - gapX * (COLS - 1)) / COLS;
+  // Fit the columns across the available width (an extra one for the spare
+  // pile when easy mode is active).
+  const cols = includeSpare ? COLS + 1 : COLS;
+  let cardW = (width - margin * 2 - gapX * (cols - 1)) / cols;
   let cardH = cardW * CARD_RATIO;
 
   // Don't let cards get so tall that stacks run out of room: reserve space
@@ -52,7 +57,7 @@ export function computeLayout(width: number, height: number): Layout {
     cardW = cardH / CARD_RATIO;
   }
 
-  const totalRowW = cardW * COLS + gapX * (COLS - 1);
+  const totalRowW = cardW * cols + gapX * (cols - 1);
   const originX = (width - totalRowW) / 2;
   const colX = (i: number) => originX + i * (cardW + gapX);
 
@@ -79,6 +84,7 @@ export function computeLayout(width: number, height: number): Layout {
     waste: { x: colX(1), y: topY },
     foundations,
     tableau,
+    spare: { x: colX(COLS), y: tableauY },
     faceDownDY: cardH * FACE_DOWN_DY,
     faceUpDY: cardH * FACE_UP_DY,
     wasteFanDX: cardW * 0.28,

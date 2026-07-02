@@ -9,7 +9,8 @@ export type PileId =
   | { kind: "stock" }
   | { kind: "waste" }
   | { kind: "foundation"; index: number }
-  | { kind: "tableau"; index: number };
+  | { kind: "tableau"; index: number }
+  | { kind: "spare" };
 
 export interface MoveResult {
   moved: Card[];
@@ -24,6 +25,7 @@ interface Snapshot {
   waste: Card[];
   foundations: Card[][];
   tableau: Card[][];
+  spare: Card[];
   moves: number;
   score: number;
 }
@@ -47,6 +49,10 @@ export class Game {
   /** Easy mode: when true, an empty tableau column accepts any card, not
    *  only a King. */
   easyEmptyStacks = false;
+  /** Easy-mode parking pile: holds one run set aside to break a stalemate.
+   *  Accepts drops only while empty (and easy mode is on); cards can always
+   *  be moved back out. */
+  spare: Card[] = [];
   moves = 0;
   score = 0;
 
@@ -66,6 +72,7 @@ export class Game {
     this.waste = [];
     this.foundations = [[], [], [], []];
     this.tableau = [[], [], [], [], [], [], []];
+    this.spare = [];
     this.moves = 0;
     this.score = 0;
     this.history = [];
@@ -97,6 +104,8 @@ export class Game {
         return this.foundations[id.index];
       case "tableau":
         return this.tableau[id.index];
+      case "spare":
+        return this.spare;
     }
   }
 
@@ -135,6 +144,10 @@ export class Game {
     return card.suit === top.suit && card.rank === top.rank + 1;
   }
 
+  canMoveToSpare(): boolean {
+    return this.easyEmptyStacks && this.spare.length === 0;
+  }
+
   /** Find a foundation index that legally accepts this card, or -1. */
   foundationTargetFor(card: Card): number {
     for (let i = 0; i < 4; i++) {
@@ -152,15 +165,18 @@ export class Game {
     if (fromIndex < 0 || fromIndex >= src.length) return null;
     const moving = src.slice(fromIndex);
 
-    // Only tableau allows multi-card runs; everything else moves a single top card.
-    if (moving.length > 1 && from.kind !== "tableau") return null;
-    if (from.kind === "tableau" && !this.isValidRun(moving)) return null;
+    // Only tableau and spare allow multi-card runs; everything else moves a
+    // single top card.
+    if (moving.length > 1 && from.kind !== "tableau" && from.kind !== "spare") return null;
+    if ((from.kind === "tableau" || from.kind === "spare") && !this.isValidRun(moving)) return null;
 
     if (to.kind === "tableau") {
       if (!this.canMoveToTableau(moving[0], to.index)) return null;
     } else if (to.kind === "foundation") {
       if (moving.length !== 1) return null;
       if (!this.canMoveToFoundation(moving[0], to.index)) return null;
+    } else if (to.kind === "spare") {
+      if (!this.canMoveToSpare()) return null;
     } else {
       return null; // cannot move onto stock or waste
     }
@@ -248,10 +264,11 @@ export class Game {
 
   /** A single step of auto-complete: send one eligible card to a foundation. */
   autoCompleteStep(): MoveResult | null {
-    // Prefer tableau tops, then waste.
+    // Prefer tableau tops, then waste, then the spare pile.
     const sources: PileId[] = [];
     for (let i = 0; i < 7; i++) sources.push({ kind: "tableau", index: i });
     sources.push({ kind: "waste" });
+    sources.push({ kind: "spare" });
     for (const src of sources) {
       const pile = this.getPile(src);
       if (pile.length === 0) continue;
@@ -272,6 +289,7 @@ export class Game {
     // 1) Anything that can go to a foundation.
     const singleSources: PileId[] = [
       { kind: "waste" },
+      { kind: "spare" },
       ...Array.from({ length: 7 }, (_, i): PileId => ({ kind: "tableau", index: i })),
     ];
     for (const src of singleSources) {
@@ -299,7 +317,15 @@ export class Game {
         }
       }
     }
-    // 3) Waste → tableau.
+    // 3) Spare → tableau (frees the parking pile).
+    if (this.spare.length > 0 && this.isValidRun(this.spare)) {
+      for (let d = 0; d < 7; d++) {
+        if (this.canMoveToTableau(this.spare[0], d)) {
+          return { from: { kind: "spare" }, fromIndex: 0, to: { kind: "tableau", index: d } };
+        }
+      }
+    }
+    // 4) Waste → tableau.
     if (this.waste.length > 0) {
       const card = this.waste[this.waste.length - 1];
       for (let d = 0; d < 7; d++) {
@@ -308,7 +334,7 @@ export class Game {
         }
       }
     }
-    // 4) Otherwise a draw is the move.
+    // 5) Otherwise a draw is the move.
     if (this.stock.length > 0 || this.waste.length > 0) {
       return { from: { kind: "stock" }, fromIndex: 0, to: { kind: "waste" } };
     }
@@ -328,6 +354,7 @@ export class Game {
     this.waste = snap.waste;
     this.foundations = snap.foundations;
     this.tableau = snap.tableau;
+    this.spare = snap.spare;
     this.moves = snap.moves;
     this.score = Math.max(0, snap.score - 5);
     return true;
@@ -339,6 +366,7 @@ export class Game {
       waste: clonePile(this.waste),
       foundations: this.foundations.map(clonePile),
       tableau: this.tableau.map(clonePile),
+      spare: clonePile(this.spare),
       moves: this.moves,
       score: this.score,
     });
@@ -347,6 +375,7 @@ export class Game {
 
   private applyScore(from: PileId, to: PileId, flipped: boolean): void {
     let delta = 0;
+    if (to.kind === "spare") delta -= 50; // parking a stack is a costly escape hatch
     if (to.kind === "foundation") delta += 10;
     if (from.kind === "foundation" && to.kind === "tableau") delta -= 15;
     if (from.kind === "waste" && to.kind === "tableau") delta += 5;
