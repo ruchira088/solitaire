@@ -26,6 +26,9 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   auto-complete sweep, and a classic bouncing-card **win celebration**.
 - 🃏 **Full Klondike rules** — Draw 1 / Draw 3 toggle, multi-card run dragging,
   waste recycling, undo history, hints, scoring, move counter and timer.
+- 🆘 **Easy mode with a spare pile** — a friendlier ruleset: empty columns
+  accept any card (not just Kings), and a dedicated ✦ **spare pile** lets you
+  park one stack to break a stalemate, at a 50-point cost.
 - 🌗 **Light & dark themes** — a toolbar toggle switches the felt and chrome
   between a bright table and a deep, low-light one; your choice is remembered.
 - 🖱️ **Mouse & touch** — drag-and-drop, click-to-draw, and double-click /
@@ -49,6 +52,22 @@ and toolbar all adapt, and the preference is saved to `localStorage` (you can
 also deep-link a theme with `?theme=light` or `?theme=dark`).
 
 ![Light theme](screenshots/gameplay-light.png)
+
+## Easy mode & the spare pile
+
+Stuck? Toggle **Easy** in the toolbar for a friendlier ruleset:
+
+- **Empty columns accept any card**, not just Kings.
+- A **✦ spare pile** appears as an extra column on the right of the board.
+  When the game stalls, drag any card or run onto it to park it — the card
+  underneath is revealed and play can continue. Parking costs **50 points**,
+  and only works while the pile is empty; the parked run can be moved back
+  out at any time, in whole or in part, following the usual tableau rules.
+
+The spare pile sticks around until it's emptied, even if you switch easy mode
+off with cards still parked.
+
+![Easy mode with the spare pile](screenshots/spare-pile.png)
 
 ## Win celebration
 
@@ -84,6 +103,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Draw from stock** | Click the stock pile (top-left). Toggle **Draw 1 / Draw 3** in the toolbar. When the stock is empty, click it again to recycle the waste. |
 | **Move a card / run** | Drag a card — or a valid descending, alternating-colour run — between tableau columns. Empty columns accept a King. |
 | **Send to a foundation** | Drag an Ace (or the next card in sequence) onto a foundation, or **double-click** (double-tap on touch) a card to auto-send it. |
+| **Park a stack (Easy mode)** | Toggle **Easy** in the toolbar, then drag a card or run onto the ✦ spare pile on the right to set it aside and reveal the card underneath (−50 points; the pile must be empty). |
 | **Undo** | The **Undo** button, or `Ctrl/Cmd + Z`. |
 | **Hint** | The **Hint** button (or `H`) pulses a useful move. |
 | **New game** | The **New Game** button, or `N`. |
