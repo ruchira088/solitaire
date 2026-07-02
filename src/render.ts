@@ -532,9 +532,9 @@ export class Renderer {
       this.drawCard(ctx, stockTop, layout.stock.x, layout.stock.y, layout, { faceShown: false });
     }
 
-    // Waste (fan the last few cards for draw-3 feel).
+    // Waste (fan the last few cards in draw-3; a single card in draw-1).
     this.drawPlaceholder(ctx, layout.waste, layout);
-    const wasteFan = Math.min(3, game.waste.length);
+    const wasteFan = Math.min(game.drawCount, game.waste.length);
     const startFan = game.waste.length - wasteFan;
     for (let i = 0; i < wasteFan; i++) {
       const card = game.waste[startFan + i];
@@ -590,7 +590,7 @@ export class Renderer {
       case "stock":
         return layout.stock;
       case "waste": {
-        const fan = Math.min(2, Math.max(0, game.waste.length - 1));
+        const fan = Math.min(game.drawCount - 1, Math.max(0, game.waste.length - 1));
         return { x: layout.waste.x + fan * layout.wasteFanDX, y: layout.waste.y };
       }
       case "foundation":

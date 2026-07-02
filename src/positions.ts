@@ -24,7 +24,7 @@ export function cardPos(
       return { ...layout.stock };
     case "waste": {
       const len = game.waste.length;
-      const fanStart = Math.max(0, len - 3);
+      const fanStart = Math.max(0, len - game.drawCount);
       const fanIndex = Math.max(0, index - fanStart);
       return { x: layout.waste.x + fanIndex * layout.wasteFanDX, y: layout.waste.y };
     }
