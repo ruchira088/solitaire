@@ -531,6 +531,7 @@ export class Renderer {
     if (stockTop && !hidden(stockTop)) {
       this.drawCard(ctx, stockTop, layout.stock.x, layout.stock.y, layout, { faceShown: false });
     }
+    this.drawStockCounter(ctx, game, layout);
 
     // Waste (fan the last few cards in draw-3; a single card in draw-1).
     this.drawPlaceholder(ctx, layout.waste, layout);
@@ -594,6 +595,29 @@ export class Renderer {
         });
       }
     }
+  }
+
+  /** "drawn/total" tally under the stock: how far through the draw pile the
+   *  player is. Total shrinks as waste cards are played onto the board. */
+  private drawStockCounter(
+    ctx: CanvasRenderingContext2D,
+    game: Game,
+    layout: Layout,
+  ): void {
+    const total = game.stock.length + game.waste.length;
+    if (total === 0) return;
+    const felt = getFelt();
+    ctx.save();
+    ctx.fillStyle = felt.placeholderStroke;
+    ctx.font = `600 ${Math.round(layout.cardH * 0.11)}px -apple-system, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(
+      `${game.waste.length}/${total}`,
+      layout.stock.x + layout.cardW / 2,
+      layout.stock.y + layout.cardH + layout.cardH * 0.06,
+    );
+    ctx.restore();
   }
 
   private pileAnchor(game: Game, layout: Layout, id: PileId): Point {
