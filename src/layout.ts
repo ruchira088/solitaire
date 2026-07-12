@@ -17,9 +17,9 @@ export interface Layout {
   waste: Point;
   foundations: Point[]; // 4
   tableau: Point[]; // 7
-  /** Easy-mode parking pile: an 8th column right of the tableau. Positioned
-   *  unconditionally but only rendered / hit-tested while active. */
-  spare: Point;
+  /** Temp parking piles: extra columns right of the tableau. Length matches
+   *  the live stack count (0–3). */
+  spares: Point[];
   /** Vertical spacing between stacked tableau cards. */
   faceDownDY: number;
   faceUpDY: number;
@@ -37,13 +37,13 @@ const FACE_DOWN_DY = 0.16;
 const FACE_UP_DY = 0.29;
 const TOP_GAP = 0.34; // gap between the top row and the tableau
 
-export function computeLayout(width: number, height: number, includeSpare = false): Layout {
+export function computeLayout(width: number, height: number, spareCount = 0): Layout {
   const margin = Math.round(Math.min(width, height) * 0.03) + 10;
   const gapX = Math.max(8, Math.round(width * 0.012));
 
-  // Fit the columns across the available width (an extra one for the spare
-  // pile when easy mode is active).
-  const cols = includeSpare ? COLS + 1 : COLS;
+  // Fit the columns across the available width (an extra one per live temp
+  // stack).
+  const cols = COLS + spareCount;
   let cardW = (width - margin * 2 - gapX * (cols - 1)) / cols;
   let cardH = cardW * CARD_RATIO;
 
@@ -74,6 +74,9 @@ export function computeLayout(width: number, height: number, includeSpare = fals
   const tableau: Point[] = [];
   for (let i = 0; i < COLS; i++) tableau.push({ x: colX(i), y: tableauY });
 
+  const spares: Point[] = [];
+  for (let i = 0; i < spareCount; i++) spares.push({ x: colX(COLS + i), y: tableauY });
+
   return {
     width,
     height,
@@ -84,7 +87,7 @@ export function computeLayout(width: number, height: number, includeSpare = fals
     waste: { x: colX(1), y: topY },
     foundations,
     tableau,
-    spare: { x: colX(COLS), y: tableauY },
+    spares,
     faceDownDY: cardH * FACE_DOWN_DY,
     faceUpDY: cardH * FACE_UP_DY,
     wasteFanDX: cardW * 0.28,

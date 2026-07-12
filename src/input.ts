@@ -160,13 +160,13 @@ export class Input {
       }
     }
 
-    // Spare pile — any suffix of the parked run can be picked up.
-    if (g.spare.length > 0) {
-      const idx = spareCardAt(g, layout, p.x, p.y);
+    // Temp stacks — any suffix of a parked run can be picked up.
+    for (let s = 0; s < g.spares.length; s++) {
+      const idx = spareCardAt(g, layout, s, p.x, p.y);
       if (idx >= 0) {
-        const run = g.spare.slice(idx);
+        const run = g.spares[s].slice(idx);
         if (!g.isValidRun(run)) return null;
-        return { from: { kind: "spare" }, index: idx, cards: run };
+        return { from: { kind: "spare", index: s }, index: idx, cards: run };
       }
     }
 
@@ -218,8 +218,11 @@ export class Input {
       const before = this.game.getPile(target).length;
       const result = this.game.moveCards(drag.from, fromIndex, target);
       if (result) {
-        this.animateLanding(srcPositions, target, before, result);
+        // onChange first: emptying a temp stack changes the column count, so
+        // the layout must be refreshed before flight targets are computed.
+        // result.to carries the index adjusted for any removed stack.
         this.cb.onChange();
+        this.animateLanding(srcPositions, result.to, before, result);
         return;
       }
     }
@@ -230,14 +233,10 @@ export class Input {
   private bestTarget(topRect: Rect, from: PileId): PileId | null {
     const layout = this.cb.layout();
     const g = this.game;
-    type IndexedPile =
-      | { kind: "tableau"; index: number }
-      | { kind: "foundation"; index: number }
-      | { kind: "spare" };
-    const candidates: IndexedPile[] = [];
+    const candidates: PileId[] = [];
     for (let i = 0; i < 7; i++) candidates.push({ kind: "tableau", index: i });
     for (let i = 0; i < 4; i++) candidates.push({ kind: "foundation", index: i });
-    candidates.push({ kind: "spare" });
+    for (let i = 0; i < g.spares.length; i++) candidates.push({ kind: "spare", index: i });
 
     let best: PileId | null = null;
     let bestArea = 0;
@@ -248,8 +247,10 @@ export class Input {
         c.kind === "tableau"
           ? g.canMoveToTableau(top, c.index)
           : c.kind === "spare"
-            ? g.canMoveToSpare()
-            : this.drag!.cards.length === 1 && g.canMoveToFoundation(top, c.index);
+            ? g.canMoveToSpare(c.index)
+            : c.kind === "foundation"
+              ? this.drag!.cards.length === 1 && g.canMoveToFoundation(top, c.index)
+              : false;
       if (!legal) continue;
       const area = overlapArea(topRect, pileRect(g, layout, c));
       if (area > bestArea) {
@@ -296,11 +297,14 @@ export class Input {
         break;
       }
     }
-    if (!from && g.spare.length > 0) {
-      const idx = spareCardAt(g, layout, p.x, p.y);
-      if (idx >= 0) {
-        from = { kind: "spare" };
-        index = idx;
+    if (!from) {
+      for (let s = 0; s < g.spares.length; s++) {
+        const idx = spareCardAt(g, layout, s, p.x, p.y);
+        if (idx >= 0) {
+          from = { kind: "spare", index: s };
+          index = idx;
+          break;
+        }
       }
     }
     if (!from && g.waste.length > 0) {
@@ -323,8 +327,10 @@ export class Input {
     const before = g.getPile(dest).length;
     const result = g.autoMoveToFoundation(from);
     if (result) {
-      this.animateLanding([src], dest, before, result);
+      // onChange first so a temp stack emptied by this move re-lays-out the
+      // board before the flight target is computed.
       this.cb.onChange();
+      this.animateLanding([src], dest, before, result);
     }
   }
 
@@ -416,5 +422,6 @@ function samePile(a: PileId, b: PileId): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "tableau" && b.kind === "tableau") return a.index === b.index;
   if (a.kind === "foundation" && b.kind === "foundation") return a.index === b.index;
+  if (a.kind === "spare" && b.kind === "spare") return a.index === b.index;
   return true;
 }

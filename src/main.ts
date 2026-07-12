@@ -3,7 +3,7 @@
 
 import "./styles.css";
 import { Card } from "./cards";
-import { DrawCount, Game, PileId } from "./game";
+import { DrawCount, Game, MAX_SPARES, PileId } from "./game";
 import { computeLayout, Layout } from "./layout";
 import { Animator, Celebration, Easings } from "./animation";
 import { HintHighlight, Renderer } from "./render";
@@ -41,12 +41,8 @@ let celebStarted = false;
 
 // ---- DPI-aware sizing ------------------------------------------------------
 
-// The spare pile adds an 8th board column while easy mode is on (or while it
-// still holds cards after easy mode was turned off).
-let spareShown = false;
-function spareActive(): boolean {
-  return game.easyEmptyStacks || game.spare.length > 0;
-}
+// Each live temp stack adds an extra board column right of the tableau.
+let sparesShown = 0;
 
 function resize(): void {
   const rect = canvas.getBoundingClientRect();
@@ -54,12 +50,12 @@ function resize(): void {
   canvas.width = Math.max(1, Math.round(rect.width * dpr));
   canvas.height = Math.max(1, Math.round(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  spareShown = spareActive();
-  layout = computeLayout(rect.width, rect.height, spareShown);
+  sparesShown = game.spares.length;
+  layout = computeLayout(rect.width, rect.height, sparesShown);
 }
 
 function syncSpareLayout(): void {
-  if (spareActive() !== spareShown) resize();
+  if (game.spares.length !== sparesShown) resize();
 }
 
 const ro = new ResizeObserver(() => resize());
@@ -73,6 +69,7 @@ const el = {
   hint: document.getElementById("btn-hint") as HTMLButtonElement,
   drawToggle: document.getElementById("draw-toggle") as HTMLElement,
   easy: document.getElementById("btn-easy") as HTMLButtonElement,
+  addStack: document.getElementById("btn-add-stack") as HTMLButtonElement,
   sound: document.getElementById("btn-sound") as HTMLButtonElement,
   startMute: document.getElementById("start-mute") as HTMLButtonElement,
   theme: document.getElementById("btn-theme") as HTMLButtonElement,
@@ -92,6 +89,7 @@ function updateStats(): void {
   el.moves.textContent = String(game.moves);
   el.score.textContent = String(game.score);
   el.undo.disabled = !game.canUndo() || busy;
+  el.addStack.disabled = busy || game.spares.length >= MAX_SPARES;
 }
 
 // ---- Game loop -------------------------------------------------------------
@@ -134,7 +132,7 @@ function nextAutoSource(): { from: PileId; index: number } | null {
   const sources: PileId[] = [];
   for (let i = 0; i < 7; i++) sources.push({ kind: "tableau", index: i });
   sources.push({ kind: "waste" });
-  sources.push({ kind: "spare" });
+  for (let i = 0; i < game.spares.length; i++) sources.push({ kind: "spare", index: i });
   for (const from of sources) {
     const pile = game.getPile(from);
     if (pile.length === 0) continue;
@@ -164,6 +162,9 @@ function autoStep(): void {
     autoCompleting = false;
     return;
   }
+  // Emptying a temp stack removes its column; refresh the layout before
+  // computing the flight target.
+  syncSpareLayout();
   const to = cardPos(game, layout, dest, before);
   updateStats();
   animator.flyCard(card, src, to, {
@@ -375,11 +376,10 @@ function toggleSound(): void {
 
 function applyEasy(on: boolean): void {
   game.easyEmptyStacks = on;
-  syncSpareLayout();
   el.easy.setAttribute("aria-pressed", on ? "true" : "false");
   el.easy.title = on
-    ? "Easy mode on: empty columns accept any card; park a stack on the ✦ pile"
-    : "Easy mode: empty columns accept any card; park a stack on the ✦ pile";
+    ? "Easy mode on: empty columns accept any card"
+    : "Easy mode: empty columns accept any card";
   try {
     localStorage.setItem("solitaire-easy", on ? "on" : "off");
   } catch {
@@ -389,6 +389,12 @@ function applyEasy(on: boolean): void {
 
 function toggleEasy(): void {
   applyEasy(!game.easyEmptyStacks);
+}
+
+function addTempStack(): void {
+  if (busy || celebration.active || autoCompleting) return;
+  if (input.drag) return; // don't re-layout the board under a live drag
+  if (game.addTempStack()) onChange();
 }
 
 // ---- Wire up ---------------------------------------------------------------
@@ -406,6 +412,7 @@ el.theme.addEventListener("click", toggleTheme);
 el.sound.addEventListener("click", toggleSound);
 el.startMute.addEventListener("click", toggleSound);
 el.easy.addEventListener("click", toggleEasy);
+el.addStack.addEventListener("click", addTempStack);
 el.drawToggle.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (btn) setDrawCount(Number(btn.dataset.draw) as DrawCount);

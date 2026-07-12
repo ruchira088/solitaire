@@ -544,14 +544,16 @@ export class Renderer {
       this.drawCard(ctx, card, wx, layout.waste.y, layout);
     }
 
-    // Spare parking pile (easy mode): renders like an extra tableau column.
-    if (game.easyEmptyStacks || game.spare.length > 0) {
-      this.drawPlaceholder(ctx, layout.spare, layout, "✦");
-      const spareOffsets = columnOffsets(game.spare, layout);
-      for (let i = 0; i < game.spare.length; i++) {
-        const card = game.spare[i];
+    // Temp parking stacks: each renders like an extra tableau column.
+    for (let s = 0; s < game.spares.length; s++) {
+      const spare = game.spares[s];
+      const base = layout.spares[s];
+      this.drawPlaceholder(ctx, base, layout, "✦");
+      const spareOffsets = columnOffsets(spare, layout);
+      for (let i = 0; i < spare.length; i++) {
+        const card = spare[i];
         if (hidden(card)) continue;
-        this.drawCard(ctx, card, layout.spare.x, layout.spare.y + spareOffsets[i], layout);
+        this.drawCard(ctx, card, base.x, base.y + spareOffsets[i], layout);
       }
     }
 
@@ -632,7 +634,7 @@ export class Renderer {
         return layout.foundations[id.index];
       case "tableau":
       case "spare": {
-        const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spare;
+        const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spares[id.index];
         const col = game.getPile(id);
         const offsets = columnOffsets(col, layout);
         const dy = offsets.length ? offsets[offsets.length - 1] : 0;

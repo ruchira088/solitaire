@@ -10,7 +10,7 @@ export type PileId =
   | { kind: "waste" }
   | { kind: "foundation"; index: number }
   | { kind: "tableau"; index: number }
-  | { kind: "spare" };
+  | { kind: "spare"; index: number };
 
 export interface MoveResult {
   moved: Card[];
@@ -25,12 +25,15 @@ interface Snapshot {
   waste: Card[];
   foundations: Card[][];
   tableau: Card[][];
-  spare: Card[];
+  spares: Card[][];
   moves: number;
   score: number;
 }
 
 const MAX_HISTORY = 200;
+
+/** Maximum number of temp parking stacks alive at once. */
+export const MAX_SPARES = 3;
 
 function cloneCard(c: Card): Card {
   return { id: c.id, suit: c.suit, rank: c.rank, faceUp: c.faceUp };
@@ -49,10 +52,10 @@ export class Game {
   /** Easy mode: when true, an empty tableau column accepts any card, not
    *  only a King. */
   easyEmptyStacks = false;
-  /** Easy-mode parking pile: holds one run set aside to break a stalemate.
-   *  Accepts drops only while empty (and easy mode is on); cards can always
-   *  be moved back out. */
-  spare: Card[] = [];
+  /** Temp parking piles bought with the + Stack button (−50 each, max 3).
+   *  Each accepts a drop only while empty and is removed once a move empties
+   *  it again. */
+  spares: Card[][] = [];
   moves = 0;
   score = 0;
 
@@ -72,7 +75,7 @@ export class Game {
     this.waste = [];
     this.foundations = [[], [], [], []];
     this.tableau = [[], [], [], [], [], [], []];
-    this.spare = [];
+    this.spares = [];
     this.moves = 0;
     this.score = 0;
     this.history = [];
@@ -105,7 +108,7 @@ export class Game {
       case "tableau":
         return this.tableau[id.index];
       case "spare":
-        return this.spare;
+        return this.spares[id.index];
     }
   }
 
@@ -144,8 +147,9 @@ export class Game {
     return card.suit === top.suit && card.rank === top.rank + 1;
   }
 
-  canMoveToSpare(): boolean {
-    return this.easyEmptyStacks && this.spare.length === 0;
+  canMoveToSpare(index: number): boolean {
+    const pile = this.spares[index];
+    return pile !== undefined && pile.length === 0;
   }
 
   /** Find a foundation index that legally accepts this card, or -1. */
@@ -176,15 +180,15 @@ export class Game {
       if (moving.length !== 1) return null;
       if (!this.canMoveToFoundation(moving[0], to.index)) return null;
     } else if (to.kind === "spare") {
-      if (!this.canMoveToSpare()) return null;
+      if (!this.canMoveToSpare(to.index)) return null;
     } else {
       return null; // cannot move onto stock or waste
     }
 
     this.pushHistory();
 
+    const dst = this.getPile(to); // resolve before any spares splice below
     src.splice(fromIndex);
-    const dst = this.getPile(to);
     for (const c of moving) dst.push(c);
 
     // Turn up a newly exposed tableau card.
@@ -197,9 +201,28 @@ export class Game {
       }
     }
 
+    // An emptied temp stack is removed; later stacks shift down one index.
+    let adjTo = to;
+    if (from.kind === "spare" && src.length === 0) {
+      this.spares.splice(from.index, 1);
+      if (to.kind === "spare" && to.index > from.index) {
+        adjTo = { kind: "spare", index: to.index - 1 };
+      }
+    }
+
     this.moves++;
     this.applyScore(from, to, !!flipped);
-    return { moved: moving, from, to, flipped };
+    return { moved: moving, from, to: adjTo, flipped };
+  }
+
+  /** Buy a temp parking stack (−50 points, max 3 alive at once). Undoable. */
+  addTempStack(): boolean {
+    if (this.spares.length >= MAX_SPARES) return false;
+    this.pushHistory();
+    this.spares.push([]);
+    this.moves++;
+    this.score = Math.max(0, this.score - 50);
+    return true;
   }
 
   /** Auto-send the top card of a pile to a foundation (double-click). */
@@ -264,11 +287,11 @@ export class Game {
 
   /** A single step of auto-complete: send one eligible card to a foundation. */
   autoCompleteStep(): MoveResult | null {
-    // Prefer tableau tops, then waste, then the spare pile.
+    // Prefer tableau tops, then waste, then the temp stacks.
     const sources: PileId[] = [];
     for (let i = 0; i < 7; i++) sources.push({ kind: "tableau", index: i });
     sources.push({ kind: "waste" });
-    sources.push({ kind: "spare" });
+    for (let i = 0; i < this.spares.length; i++) sources.push({ kind: "spare", index: i });
     for (const src of sources) {
       const pile = this.getPile(src);
       if (pile.length === 0) continue;
@@ -289,7 +312,7 @@ export class Game {
     // 1) Anything that can go to a foundation.
     const singleSources: PileId[] = [
       { kind: "waste" },
-      { kind: "spare" },
+      ...Array.from({ length: this.spares.length }, (_, i): PileId => ({ kind: "spare", index: i })),
       ...Array.from({ length: 7 }, (_, i): PileId => ({ kind: "tableau", index: i })),
     ];
     for (const src of singleSources) {
@@ -317,11 +340,13 @@ export class Game {
         }
       }
     }
-    // 3) Spare → tableau (frees the parking pile).
-    if (this.spare.length > 0 && this.isValidRun(this.spare)) {
+    // 3) Spare → tableau (frees a temp stack).
+    for (let s = 0; s < this.spares.length; s++) {
+      const spare = this.spares[s];
+      if (spare.length === 0 || !this.isValidRun(spare)) continue;
       for (let d = 0; d < 7; d++) {
-        if (this.canMoveToTableau(this.spare[0], d)) {
-          return { from: { kind: "spare" }, fromIndex: 0, to: { kind: "tableau", index: d } };
+        if (this.canMoveToTableau(spare[0], d)) {
+          return { from: { kind: "spare", index: s }, fromIndex: 0, to: { kind: "tableau", index: d } };
         }
       }
     }
@@ -354,7 +379,7 @@ export class Game {
     this.waste = snap.waste;
     this.foundations = snap.foundations;
     this.tableau = snap.tableau;
-    this.spare = snap.spare;
+    this.spares = snap.spares;
     this.moves = snap.moves;
     this.score = Math.max(0, snap.score - 5);
     return true;
@@ -366,7 +391,7 @@ export class Game {
       waste: clonePile(this.waste),
       foundations: this.foundations.map(clonePile),
       tableau: this.tableau.map(clonePile),
-      spare: clonePile(this.spare),
+      spares: this.spares.map(clonePile),
       moves: this.moves,
       score: this.score,
     });
@@ -375,7 +400,6 @@ export class Game {
 
   private applyScore(from: PileId, to: PileId, flipped: boolean): void {
     let delta = 0;
-    if (to.kind === "spare") delta -= 50; // parking a stack is a costly escape hatch
     if (to.kind === "foundation") delta += 10;
     if (from.kind === "foundation" && to.kind === "tableau") delta -= 15;
     if (from.kind === "waste" && to.kind === "tableau") delta += 5;

@@ -32,7 +32,7 @@ export function cardPos(
       return { ...layout.foundations[id.index] };
     case "tableau":
     case "spare": {
-      const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spare;
+      const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spares[id.index];
       const offsets = columnOffsets(game.getPile(id), layout);
       const dy = offsets[index] ?? (offsets.length ? offsets[offsets.length - 1] : 0);
       return { x: base.x, y: base.y + dy };
@@ -44,7 +44,7 @@ export function cardPos(
 export function pileRect(game: Game, layout: Layout, id: PileId): Rect {
   const { cardW, cardH } = layout;
   if (id.kind === "tableau" || id.kind === "spare") {
-    const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spare;
+    const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spares[id.index];
     const col = game.getPile(id);
     if (col.length === 0) return { x: base.x, y: base.y, w: cardW, h: cardH };
     const offsets = columnOffsets(col, layout);
@@ -97,12 +97,13 @@ export function tableauCardAt(
   return stackCardAt(game.tableau[col], layout.tableau[col], layout, px, py);
 }
 
-/** Which card index within the spare pile sits under (px,py), or -1. */
+/** Which card index within a temp stack sits under (px,py), or -1. */
 export function spareCardAt(
   game: Game,
   layout: Layout,
+  spareIndex: number,
   px: number,
   py: number,
 ): number {
-  return stackCardAt(game.spare, layout.spare, layout, px, py);
+  return stackCardAt(game.spares[spareIndex], layout.spares[spareIndex], layout, px, py);
 }
