@@ -544,20 +544,26 @@ export class Renderer {
       this.drawCard(ctx, card, wx, layout.waste.y, layout);
     }
 
-    // Temp parking stacks: each renders like an extra tableau column.
+    // Temp parking stacks: each renders like an extra tableau pile.
     for (let s = 0; s < game.spares.length; s++) {
       const spare = game.spares[s];
       const base = layout.spares[s];
       this.drawPlaceholder(ctx, base, layout, "✦");
-      const spareOffsets = columnOffsets(spare, layout);
+      const spareOffsets = columnOffsets(
+        spare,
+        layout,
+        layout.fanX ? base.x : base.y,
+        layout.spareFanLimit,
+      );
       for (let i = 0; i < spare.length; i++) {
         const card = spare[i];
         if (hidden(card)) continue;
-        this.drawCard(ctx, card, base.x, base.y + spareOffsets[i], layout);
+        const d = spareOffsets[i];
+        this.drawCard(ctx, card, base.x + (layout.fanX ? d : 0), base.y + (layout.fanX ? 0 : d), layout);
       }
     }
 
-    // Tableau columns.
+    // Tableau piles.
     for (let c = 0; c < 7; c++) {
       const col = game.tableau[c];
       const base = layout.tableau[c];
@@ -566,7 +572,8 @@ export class Renderer {
       for (let i = 0; i < col.length; i++) {
         const card = col[i];
         if (hidden(card)) continue;
-        this.drawCard(ctx, card, base.x, base.y + offsets[i], layout);
+        const d = offsets[i];
+        this.drawCard(ctx, card, base.x + (layout.fanX ? d : 0), base.y + (layout.fanX ? 0 : d), layout);
       }
     }
 
@@ -590,8 +597,10 @@ export class Renderer {
     if (drag) {
       const x = drag.pointer.x - drag.offset.x;
       const y = drag.pointer.y - drag.offset.y;
+      const dx = layout.fanX ? layout.faceUpStep : 0;
+      const dy = layout.fanX ? 0 : layout.faceUpStep;
       for (let i = 0; i < drag.cards.length; i++) {
-        this.drawCard(ctx, drag.cards[i], x, y + i * layout.faceUpDY, layout, {
+        this.drawCard(ctx, drag.cards[i], x + i * dx, y + i * dy, layout, {
           scale: 1.04,
           lift: true,
         });
@@ -634,11 +643,13 @@ export class Renderer {
         return layout.foundations[id.index];
       case "tableau":
       case "spare": {
-        const base = id.kind === "tableau" ? layout.tableau[id.index] : layout.spares[id.index];
+        const spare = id.kind === "spare";
+        const base = spare ? layout.spares[id.index] : layout.tableau[id.index];
         const col = game.getPile(id);
-        const offsets = columnOffsets(col, layout);
-        const dy = offsets.length ? offsets[offsets.length - 1] : 0;
-        return { x: base.x, y: base.y + dy };
+        const limit = spare ? layout.spareFanLimit : layout.fanLimit;
+        const offsets = columnOffsets(col, layout, layout.fanX ? base.x : base.y, limit);
+        const d = offsets.length ? offsets[offsets.length - 1] : 0;
+        return layout.fanX ? { x: base.x + d, y: base.y } : { x: base.x, y: base.y + d };
       }
     }
   }

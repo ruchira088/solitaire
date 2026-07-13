@@ -212,8 +212,8 @@ export class Input {
 
     if (target) {
       const srcPositions = drag.cards.map((_, i) => ({
-        x: topRect.x,
-        y: topRect.y + i * layout.faceUpDY,
+        x: topRect.x + (layout.fanX ? i * layout.faceUpStep : 0),
+        y: topRect.y + (layout.fanX ? 0 : i * layout.faceUpStep),
       }));
       const before = this.game.getPile(target).length;
       const result = this.game.moveCards(drag.from, fromIndex, target);
@@ -409,7 +409,10 @@ export class Input {
     const startX = drag.pointer.x - drag.offset.x;
     const startY = drag.pointer.y - drag.offset.y;
     for (let i = 0; i < drag.cards.length; i++) {
-      const from = { x: startX, y: startY + i * layout.faceUpDY };
+      const from = {
+        x: startX + (layout.fanX ? i * layout.faceUpStep : 0),
+        y: startY + (layout.fanX ? 0 : i * layout.faceUpStep),
+      };
       this.animator.flyCard(drag.cards[i], from, this.pickOrigins[i], {
         duration: 200,
         easing: Easings.easeOutCubic,
