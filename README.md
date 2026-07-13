@@ -34,7 +34,8 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
 - 🖱️ **Mouse & touch** — drag-and-drop, click-to-draw, and double-click /
   double-tap to auto-send a card to its foundation.
 - 📐 **Responsive** — the board re-lays out to fit any window size, compressing
-  tall columns automatically.
+  tall columns automatically. Phone-portrait screens get a dedicated vertical
+  layout where the piles are listed top-to-bottom and cards fan sideways.
 
 ## Card art
 
@@ -60,13 +61,23 @@ Two independent assists live in the toolbar:
 - **Easy** toggles a friendlier ruleset where **empty columns accept any
   card**, not just Kings.
 - **+ Stack** buys a temporary **✦ parking pile** for **50 points**, added as
-  an extra column on the right of the board. Drag any card or run onto it to
-  park it — the card underneath is revealed and play can continue. Up to
-  three stacks can exist at once; parking on one you've bought is free, and a
-  stack **vanishes once you empty it** (freeing a slot for another). Buying a
-  stack is undoable like any move.
+  an extra column on the right of the board (or an extra row on phones). Drag
+  any card or run onto it to park it — the card underneath is revealed and
+  play can continue. Up to three stacks can exist at once; parking on one
+  you've bought is free, and a stack **vanishes once you empty it** (freeing a
+  slot for another). Buying a stack is undoable like any move.
 
 ![Temporary parking stacks](screenshots/spare-pile.png)
+
+## Phone layout
+
+On phone-sized portrait screens the board transposes to fit the tall, narrow
+viewport: the stock and waste form a header, the foundations run down the left
+edge (anchored to the bottom), and the tableau piles become rows that fan
+rightward — with larger, easier-to-tap cards than squeezing seven columns
+side-by-side. Rotating the phone switches back to the classic column layout.
+
+<img src="screenshots/iphone.png" alt="Phone-portrait layout" width="340">
 
 ## Win celebration
 
