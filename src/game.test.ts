@@ -432,6 +432,102 @@ describe("undo", () => {
   });
 });
 
+describe("redo", () => {
+  it("returns false with nothing undone", () => {
+    expect(boardOf().redo()).toBe(false);
+    expect(boardOf().canRedo()).toBe(false);
+  });
+
+  it("puts the board back exactly as it was before the undo", () => {
+    const g = boardOf({ tableau: [[up(H, 8), up(S, 7)], [up(S, 9)], [], [], [], [], []] });
+    g.moveCards(TABLEAU(0), 0, TABLEAU(1));
+    const afterMove = g.serialize();
+    g.undo();
+    expect(g.canRedo()).toBe(true);
+    expect(g.redo()).toBe(true);
+    expect(g.serialize()).toEqual(afterMove);
+  });
+
+  it("refunds the undo penalty, so a round trip costs nothing", () => {
+    const g = boardOf({ score: 100, tableau: [[up(S, 1)], [], [], [], [], [], []] });
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0)); // -> 110
+    g.undo();
+    expect(g.score).toBe(95);
+    g.redo();
+    expect(g.score).toBe(110);
+  });
+
+  it("is invalidated by a new move", () => {
+    const g = boardOf({ tableau: [[up(S, 1)], [up(H, 1)], [], [], [], [], []] });
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0));
+    g.undo();
+    expect(g.canRedo()).toBe(true);
+    g.moveCards(TABLEAU(1), 0, FOUNDATION(1)); // a different branch
+    expect(g.canRedo()).toBe(false);
+  });
+
+  it("is invalidated by buying a spare stack", () => {
+    const g = boardOf({ tableau: [[up(S, 1)], [], [], [], [], [], []] });
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0));
+    g.undo();
+    g.addTempStack();
+    expect(g.canRedo()).toBe(false);
+  });
+
+  it("survives a dead-stock click, which records no history", () => {
+    // Regression: drawFromStock used to push history and pop it again on this
+    // path, which would have cleared the redo stack as a side effect.
+    const g = boardOf({ stock: [], waste: [], tableau: [[up(S, 1)], [], [], [], [], [], []] });
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0));
+    g.undo();
+    expect(g.canRedo()).toBe(true);
+    expect(g.drawFromStock()).toBeNull();
+    expect(g.canRedo()).toBe(true);
+  });
+
+  it("walks a multi-move sequence forwards and backwards", () => {
+    const g = boardOf({ tableau: [[up(S, 1)], [up(H, 1)], [up(D, 1)], [], [], [], []] });
+    const states = [g.serialize()];
+    for (let i = 0; i < 3; i++) {
+      g.moveCards(TABLEAU(i), 0, FOUNDATION(i));
+      states.push(g.serialize());
+    }
+    for (let i = 3; i > 0; i--) {
+      g.undo();
+      expect(g.serialize().tableau, `after undo to ${i - 1}`).toEqual(states[i - 1].tableau);
+    }
+    for (let i = 1; i <= 3; i++) {
+      g.redo();
+      expect(g.serialize().tableau, `after redo to ${i}`).toEqual(states[i].tableau);
+    }
+    expect(g.canRedo()).toBe(false);
+  });
+
+  it("is cleared by deal and by restore", () => {
+    const g = boardOf({ tableau: [[up(S, 1)], [], [], [], [], [], []] });
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0));
+    g.undo();
+    expect(g.canRedo()).toBe(true);
+    g.deal();
+    expect(g.canRedo()).toBe(false);
+
+    const g2 = boardOf({ tableau: [[up(S, 1)], [], [], [], [], [], []] });
+    g2.moveCards(TABLEAU(0), 0, FOUNDATION(0));
+    g2.undo();
+    g2.restore(state());
+    expect(g2.canRedo()).toBe(false);
+  });
+
+  it("does not alias the live board through the forward stack", () => {
+    const g = boardOf({ tableau: [[up(S, 1)], [], [], [], [], [], []] });
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0));
+    g.undo();
+    g.tableau[0].pop(); // mutate the live board
+    g.redo();
+    expect(g.foundations[0]).toHaveLength(1); // redo unaffected by that mutation
+  });
+});
+
 describe("isWon / canAutoComplete", () => {
   const full = (suit: number): number[] => Array.from({ length: 13 }, (_, r) => up(suit, r + 1));
 

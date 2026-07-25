@@ -80,6 +80,7 @@ ro.observe(canvas);
 const el = {
   newGame: document.getElementById("btn-new") as HTMLButtonElement,
   undo: document.getElementById("btn-undo") as HTMLButtonElement,
+  redo: document.getElementById("btn-redo") as HTMLButtonElement,
   hint: document.getElementById("btn-hint") as HTMLButtonElement,
   drawToggle: document.getElementById("draw-toggle") as HTMLElement,
   easy: document.getElementById("btn-easy") as HTMLButtonElement,
@@ -103,6 +104,7 @@ function updateStats(): void {
   el.moves.textContent = String(game.moves);
   el.score.textContent = String(game.score);
   el.undo.disabled = !game.canUndo() || busy;
+  el.redo.disabled = !game.canRedo() || busy;
   el.addStack.disabled = busy || game.spares.length >= MAX_SPARES;
 }
 
@@ -340,13 +342,24 @@ function newGame(): void {
 
 function doUndo(): void {
   if (busy || celebration.active) return;
-  if (game.undo()) {
-    animator.clear();
-    clearHint();
-    syncSpareLayout();
-    updateStats();
-    persist();
+  if (game.undo()) afterTimeTravel();
+}
+
+function doRedo(): void {
+  if (busy || celebration.active) return;
+  if (game.redo()) {
+    afterTimeTravel();
+    // Unlike undo, redo can land back on a won or auto-completable board.
+    pendingCheck = true;
   }
+}
+
+function afterTimeTravel(): void {
+  animator.clear();
+  clearHint();
+  syncSpareLayout();
+  updateStats();
+  persist();
 }
 
 function showHint(): void {
@@ -430,6 +443,7 @@ const input = new Input(canvas, game, animator, {
 
 el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
+el.redo.addEventListener("click", doRedo);
 el.hint.addEventListener("click", showHint);
 el.theme.addEventListener("click", toggleTheme);
 el.sound.addEventListener("click", toggleSound);
@@ -446,12 +460,20 @@ el.drawToggle.addEventListener("click", (e) => {
 
 window.addEventListener("keydown", (e) => {
   if (!started) return; // the start overlay owns the board until it's dismissed
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+  const mod = e.ctrlKey || e.metaKey;
+  const key = e.key.toLowerCase();
+  if (mod && key === "z") {
     e.preventDefault();
-    doUndo();
-  } else if (e.key.toLowerCase() === "n") {
+    if (e.shiftKey) doRedo();
+    else doUndo();
+  } else if (mod && key === "y") {
+    e.preventDefault(); // the Windows convention for redo
+    doRedo();
+  } else if (mod || e.altKey) {
+    // Leave browser shortcuts alone — Cmd+N used to also deal a new game.
+  } else if (key === "n") {
     newGame();
-  } else if (e.key.toLowerCase() === "h") {
+  } else if (key === "h") {
     showHint();
   }
 });
@@ -496,7 +518,7 @@ const startNew = document.getElementById("start-new") as HTMLButtonElement;
 if (resuming) {
   (startOverlay.querySelector(".start-title") as HTMLElement).textContent = "Resume game";
   (startOverlay.querySelector(".start-tip") as HTMLElement).textContent =
-    `Game in progress — ${game.moves} moves, ${game.score} points. Undo history isn't kept across a reload.`;
+    `Game in progress — ${game.moves} moves, ${game.score} points. Undo/redo history isn't kept across a reload.`;
   startNew.hidden = false;
 }
 
