@@ -60,9 +60,13 @@ logic, rendering, animation, and input kept cleanly separated.
 All access goes through `src/storage.ts` and is best-effort — storage can be
 absent or full, in which case the game just runs without it.
 
-Settings: theme (`solitaire-theme`), sound (`solitaire-sound`), and easy mode
-(`solitaire-easy`). Theme also accepts `?theme=light|dark`; animations can be
-disabled with `?animate=off` (also off under `prefers-reduced-motion`).
+Settings: theme (`solitaire-theme`) and sound (`solitaire-sound`). Theme also
+accepts `?theme=light|dark`; animations can be disabled with `?animate=off`
+(also off under `prefers-reduced-motion`).
+
+**Easy mode is not a setting** — it's per-game. Every fresh deal starts with it
+off (`applyEasy(false)` in `newGame`, and `false` on a save-less boot); it only
+travels with a game through that game's save.
 
 The game in progress (`solitaire-game`) so a refresh resumes the same board:
 

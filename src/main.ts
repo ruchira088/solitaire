@@ -328,6 +328,7 @@ function newGame(): void {
   animator.clear();
   clearHint();
   game.deal();
+  applyEasy(false); // the assist doesn't carry over to the next game
   clearGame();
   syncSpareLayout();
   timerStart = null;
@@ -398,13 +399,14 @@ function toggleSound(): void {
   applySound(!isSoundEnabled());
 }
 
+/** Easy mode is per-game, not a saved preference: every new deal starts with it
+ *  off, and it only travels with a game via that game's save. */
 function applyEasy(on: boolean): void {
   game.easyEmptyStacks = on;
   el.easy.setAttribute("aria-pressed", on ? "true" : "false");
   el.easy.title = on
     ? "Easy mode on: empty columns accept any card"
     : "Easy mode: empty columns accept any card";
-  writeItem("solitaire-easy", on ? "on" : "off");
 }
 
 function toggleEasy(): void {
@@ -470,9 +472,9 @@ if (saved) {
   elapsedFrozen = saved.elapsed;
   resuming = true;
 }
-// A resumed board is only coherent under the rules it was played with, so the save
-// wins over the standalone preference; applyEasy writes it back so they can't drift.
-applyEasy(saved ? saved.state.easy : readItem("solitaire-easy") === "on");
+// A resumed board is only coherent under the rules it was played with; a fresh deal
+// always starts with the assist off.
+applyEasy(saved ? saved.state.easy : false);
 setDrawCount(game.drawCount);
 resize();
 el.time.textContent = fmtTime(elapsedFrozen);

@@ -63,7 +63,9 @@ also deep-link a theme with `?theme=light` or `?theme=dark`).
 Two independent assists live in the toolbar:
 
 - **Easy** toggles a friendlier ruleset where **empty columns accept any
-  card**, not just Kings.
+  card**, not just Kings. It applies to the game you're playing rather than
+  sticking as a preference — every new game starts with it off. (Resuming a
+  saved game keeps whatever setting that game was played under.)
 - **+ Stack** buys a temporary **✦ parking pile** for **50 points**, added as
   an extra column on the right of the board (or an extra row on phones). Drag
   any card or run onto it to park it — the card underneath is revealed and
