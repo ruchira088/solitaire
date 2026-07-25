@@ -25,10 +25,15 @@ const renderer = new Renderer();
 const celebration = new Celebration();
 
 // Deal/flip animations can be disabled via ?animate=off or the OS
-// "reduce motion" setting (also handy for deterministic screenshots).
-const ANIMATIONS =
-  new URLSearchParams(location.search).get("animate") !== "off" &&
-  !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// "reduce motion" setting (also handy for deterministic screenshots). The media
+// query is watched rather than read once, so toggling the OS setting takes effect
+// without a reload.
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const animateParam = new URLSearchParams(location.search).get("animate") !== "off";
+let animationsOn = animateParam && !reduceMotion.matches;
+reduceMotion.addEventListener("change", (e) => {
+  animationsOn = animateParam && !e.matches;
+});
 
 let layout: Layout = computeLayout(1, 1);
 let dpr = 1;
@@ -120,6 +125,7 @@ function frame(now: number): void {
   if (celebration.active) {
     runCelebrationFrame(now);
   } else {
+    input.updateDropTarget();
     renderer.drawScene(ctx, game, layout, animator, input.drag, hint, now);
     if (pendingCheck && !animator.isAnimating() && !input.drag) {
       pendingCheck = false;
@@ -268,7 +274,7 @@ function startDeal(): void {
   animator.setNow(performance.now());
 
   // Allow skipping the deal animation (reduced-motion / screenshots).
-  if (!ANIMATIONS) {
+  if (!animationsOn) {
     busy = false;
     updateStats();
     return;
@@ -491,7 +497,12 @@ const input = new Input(canvas, game, animator, {
   layout: () => layout,
   busy: () => busy || celebration.active || autoCompleting,
   onChange,
+  onPickUp: clearHint,
 });
+
+// A drag left mid-air when the tab loses focus: pointercancel usually fires, but not
+// on every platform.
+window.addEventListener("blur", () => input.cancelDrag());
 
 el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
@@ -516,6 +527,10 @@ window.addEventListener("keydown", (e) => {
   if (!started) return; // the start overlay owns the board until it's dismissed
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
+  if (e.key === "Escape") {
+    input.cancelDrag();
+    return;
+  }
   if (mod && key === "z") {
     e.preventDefault();
     if (e.shiftKey) doRedo();

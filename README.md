@@ -39,7 +39,9 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   score, moves and clock. The opening screen offers **Resume game**, or a fresh
   deal if you'd rather start over. (Undo history isn't kept across a reload.)
 - 🖱️ **Mouse & touch** — drag-and-drop, click-to-draw, and double-click /
-  double-tap to auto-send a card to its foundation.
+  double-tap to auto-send a card to its foundation. While you drag, the pile
+  you'd land on lights up, the cursor shows what's grabbable, and `Esc` puts
+  the cards back.
 - 📐 **Responsive** — the board re-lays out to fit any window size, compressing
   tall columns automatically. Phone-portrait screens get a dedicated vertical
   layout where the piles are listed top-to-bottom and cards fan sideways.
@@ -146,6 +148,7 @@ When only foundation moves remain, the game auto-completes and celebrates.
 | --- | --- |
 | `Ctrl/Cmd + Z` | Undo |
 | `Ctrl/Cmd + Shift + Z` or `Ctrl + Y` | Redo |
+| `Esc` | Cancel a drag in progress |
 | `H` | Hint |
 | `N` | New game |
 

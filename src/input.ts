@@ -25,6 +25,9 @@ export interface InputCallbacks {
   layout: () => Layout;
   busy: () => boolean; // ignore input while true (dealing / celebrating)
   onChange: () => void; // a successful state change occurred
+  /** A card was picked up — used to clear a live hint so its ring can't be
+   *  mistaken for the drop-target ring. */
+  onPickUp?: () => void;
 }
 
 export class Input {
@@ -40,6 +43,8 @@ export class Input {
   private startedDrag = false;
   private pickOrigins: Point[] = []; // source positions for snap-back
   private lastTap = { time: 0, x: 0, y: 0 };
+  private cursor = "default";
+  private lastHover: Point = { x: -1, y: -1 };
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -57,12 +62,17 @@ export class Input {
     canvas.addEventListener("pointerup", this.onUp);
     canvas.addEventListener("pointercancel", this.onCancel);
     canvas.addEventListener("dblclick", this.onDblClick);
+    canvas.addEventListener("pointerleave", this.onLeave);
+    // A right-press over the board would otherwise start a drag and pop the OS menu
+    // on top of it.
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
   /** Swap in a fresh game (after New Game) without rebinding listeners. */
   setGame(game: Game): void {
     this.game = game;
     this.drag = null;
+    this.setCursor("default");
   }
 
   private eventPos(e: PointerEvent | MouseEvent): Point {
@@ -74,6 +84,7 @@ export class Input {
 
   private onDown = (e: PointerEvent): void => {
     if (this.cb.busy()) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return; // primary button only
     if (this.pointerId !== null) return;
     this.pointerId = e.pointerId;
     this.canvas.setPointerCapture(e.pointerId);
@@ -89,14 +100,21 @@ export class Input {
         from: pick.from,
         pointer: { ...this.downPos },
         offset: { x: this.downPos.x - origin.x, y: this.downPos.y - origin.y },
+        target: null,
       };
       this.pickOrigins = pick.cards.map((_, i) =>
         cardPos(this.game, layout, pick.from, pick.index + i),
       );
+      this.setCursor("grabbing");
+      this.cb.onPickUp?.();
     }
   };
 
   private onMove = (e: PointerEvent): void => {
+    if (this.pointerId === null) {
+      this.onHover(e);
+      return;
+    }
     if (e.pointerId !== this.pointerId) return;
     const p = this.eventPos(e);
     if (!this.startedDrag) {
@@ -111,6 +129,7 @@ export class Input {
     if (e.pointerId !== this.pointerId) return;
     const p = this.eventPos(e);
     this.release();
+    this.setCursor("default");
 
     if (this.drag && this.startedDrag) {
       this.dropDrag(p);
@@ -122,10 +141,69 @@ export class Input {
 
   private onCancel = (e: PointerEvent): void => {
     if (e.pointerId !== this.pointerId) return;
-    this.release();
-    if (this.drag) this.snapBack();
-    this.drag = null;
+    this.cancelDrag();
   };
+
+  private onLeave = (): void => {
+    if (this.pointerId === null) this.setCursor("default");
+  };
+
+  /** Abort a live drag, flying the cards home. True if there was one — so callers
+   *  can tell whether Escape was consumed. */
+  cancelDrag(): boolean {
+    this.release();
+    if (!this.drag) {
+      this.setCursor("default");
+      return false;
+    }
+    this.snapBack();
+    this.drag = null;
+    this.startedDrag = false;
+    this.setCursor("default");
+    return true;
+  }
+
+  /** Recompute the live drop target from the stored pointer. Driven once per frame
+   *  by the game loop rather than from pointermove: a high-rate mouse fires several
+   *  times per frame and would just recompute the same answer. */
+  updateDropTarget(): void {
+    const d = this.drag;
+    if (!d) return;
+    d.target = this.startedDrag
+      ? this.bestTarget(this.dragTopRect(d, this.cb.layout()), d.from)
+      : null; // a stationary press shouldn't glow
+  }
+
+  private dragTopRect(drag: DragState, layout: Layout): Rect {
+    return {
+      x: drag.pointer.x - drag.offset.x,
+      y: drag.pointer.y - drag.offset.y,
+      w: layout.cardW,
+      h: layout.cardH,
+    };
+  }
+
+  private onHover(e: PointerEvent): void {
+    if (e.pointerType !== "mouse") return; // touch and pen have no hover state
+    const p = this.eventPos(e);
+    if (Math.hypot(p.x - this.lastHover.x, p.y - this.lastHover.y) < 3) return;
+    this.lastHover = p;
+    if (this.cb.busy()) {
+      this.setCursor("default");
+      return;
+    }
+    const layout = this.cb.layout();
+    if (this.hitPickable(p)) this.setCursor("grab");
+    else if (pointInRect(p.x, p.y, { ...layout.stock, w: layout.cardW, h: layout.cardH })) {
+      this.setCursor("pointer"); // the stock is a click action, not a grab
+    } else this.setCursor("default");
+  }
+
+  private setCursor(c: string): void {
+    if (this.cursor === c) return;
+    this.cursor = c;
+    this.canvas.style.cursor = c;
+  }
 
   private onDblClick = (e: MouseEvent): void => {
     if (this.cb.busy()) return;
@@ -200,12 +278,9 @@ export class Input {
   private dropDrag(pointer: Point): void {
     const drag = this.drag!;
     const layout = this.cb.layout();
-    const topRect: Rect = {
-      x: pointer.x - drag.offset.x,
-      y: pointer.y - drag.offset.y,
-      w: layout.cardW,
-      h: layout.cardH,
-    };
+    // Recomputed from the pointerup position rather than reusing drag.target: on
+    // touch, up can land several px from the last move.
+    const topRect = this.dragTopRect({ ...drag, pointer }, layout);
 
     const target = this.bestTarget(topRect, drag.from);
     const fromIndex = this.game.getPile(drag.from).length - drag.cards.length;
@@ -338,7 +413,6 @@ export class Input {
     const layout = this.cb.layout();
     const g = this.game;
     const recycling = g.stock.length === 0;
-    const srcTop = g.stock.length - 1;
     const result = g.drawFromStock();
     if (!result) return;
 
@@ -366,7 +440,6 @@ export class Input {
         onDone: this.cb.onChange,
       });
     }
-    void srcTop;
     this.cb.onChange();
   }
 

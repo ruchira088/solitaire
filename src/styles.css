@@ -182,6 +182,7 @@ body {
 }
 
 #board {
+  cursor: default;
   flex: 1;
   display: block;
   width: 100%;
@@ -400,4 +401,34 @@ body {
 .stat-btn.is-copied .value::after {
   content: " ✓";
   color: var(--accent);
+}
+
+/* ---- Motion & focus ------------------------------------------------------ */
+
+/* The JS side gates card animations, but these CSS transitions ran regardless. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* There was no focus style at all; the board is styled too because it is about to
+   become focusable. Keyboard-only, so a click never paints a ring. */
+.btn:focus-visible,
+.seg-btn:focus-visible,
+.stat-btn:focus-visible,
+#start-btn:focus-visible,
+.start-alt:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#board:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
 }

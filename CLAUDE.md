@@ -77,6 +77,14 @@ logic, rendering, animation, and input kept cleanly separated.
   position — `render.ts`'s `hidden()` checks `animator.isFlying(id)`. This is how
   in-flight cards aren't double-drawn, and how the opening deal is held hidden
   behind the start overlay until the user clicks.
+- **The drop target is computed once per frame, not per pointer event.** A 1000 Hz
+  mouse fires several `pointermove`s per frame; `Input.updateDropTarget()` is called
+  from the game loop instead and stores the result on `drag.target`, which the
+  renderer rings. `dropDrag` still recomputes from the pointer-*up* position, because
+  on touch that can land several px from the last move.
+- **The drop ring is steady; the hint pulses.** Both go through
+  `render.ts`'s `highlightPile`, so that difference — not just colour — is what keeps
+  them apart when both are on screen.
 - **Everything is DPI-aware.** The canvas backing store is scaled by
   `devicePixelRatio`; all drawing happens in CSS pixels.
 - **Audio needs a user gesture.** Browsers block audio until the first click, so
@@ -152,6 +160,9 @@ artifact bucket) is in `cdk-deploy/bin/cdk-deploy.ts`.
 
 - TypeScript strict mode. Match the existing terse, comment-light-but-purposeful
   style — file headers and non-obvious invariants get a comment; mechanics don't.
+- Motion respects `prefers-reduced-motion` from **both** sides: `main.ts` watches the
+  media query (and re-reads it on change, so toggling the OS setting needs no
+  reload), and `styles.css` has a matching block for the CSS transitions.
 - Card faces are the public-domain *vector-playing-cards* set; don't commit
   replacements without checking licensing. They ship in two formats for size
   reasons — the 12 court cards as WebP rasterised from `art/cards-src/`, the 40
