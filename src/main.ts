@@ -13,6 +13,7 @@ import { preloadFaceArt } from "./courtArt";
 import { preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
 import { isSoundEnabled, setSoundEnabled, playDeal, unlockAudio } from "./sound";
+import { clearGame, loadGame, readItem, saveGame, writeItem } from "./storage";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -38,6 +39,8 @@ let hintTimer = 0;
 let timerStart: number | null = null;
 let elapsedFrozen = 0;
 let celebStarted = false;
+let resuming = false; // a saved game was restored; the overlay reveals it instead of dealing
+let started = false; // the start overlay has been dismissed
 
 // ---- DPI-aware sizing ------------------------------------------------------
 
@@ -56,6 +59,17 @@ function resize(): void {
 
 function syncSpareLayout(): void {
   if (game.spares.length !== sparesShown) resize();
+}
+
+/** Every card sitting on the board. The stock is excluded — it draws as a face-down
+ *  pile, exactly as it does under the overlay before a fresh deal. */
+function boardCardIds(): number[] {
+  return [
+    ...game.tableau.flat(),
+    ...game.waste,
+    ...game.foundations.flat(),
+    ...game.spares.flat(),
+  ].map((c) => c.id);
 }
 
 const ro = new ResizeObserver(() => resize());
@@ -178,6 +192,7 @@ function autoStep(): void {
 
 function startCelebration(): void {
   if (celebration.active) return;
+  clearGame(); // a finished game shouldn't resume on the next load
   if (timerStart !== null) {
     elapsedFrozen += performance.now() - timerStart;
     timerStart = null;
@@ -281,13 +296,27 @@ function startDeal(): void {
 
 // ---- Controller actions ----------------------------------------------------
 
+function elapsedNow(): number {
+  return elapsedFrozen + (timerStart === null ? 0 : performance.now() - timerStart);
+}
+
+/** Autosave. The save exists exactly while there is an in-progress game worth
+ *  coming back to, so New Game and winning clear it simply by falling through here. */
+function persist(): void {
+  if (!started || game.moves === 0 || game.isWon() || celebration.active) return;
+  saveGame(game.serialize(), elapsedNow());
+}
+
 function onChange(): void {
   clearHint();
   syncSpareLayout();
-  if (timerStart === null && elapsedFrozen === 0 && game.moves > 0) {
+  // Restart the clock on the first move, and after a resume (where elapsedFrozen
+  // carries the saved time, so it can't be the "not started yet" signal).
+  if (timerStart === null && !game.isWon() && game.moves > 0) {
     timerStart = performance.now();
   }
   updateStats();
+  persist();
   pendingCheck = true;
 }
 
@@ -295,9 +324,11 @@ function newGame(): void {
   celebration.stop();
   celebStarted = false;
   autoCompleting = false;
+  resuming = false;
   animator.clear();
   clearHint();
   game.deal();
+  clearGame();
   syncSpareLayout();
   timerStart = null;
   elapsedFrozen = 0;
@@ -313,6 +344,7 @@ function doUndo(): void {
     clearHint();
     syncSpareLayout();
     updateStats();
+    persist();
   }
 }
 
@@ -342,11 +374,7 @@ function applyTheme(name: ThemeName): void {
   document.body.classList.toggle("theme-light", name === "light");
   el.theme.textContent = name === "light" ? "☀️" : "🌙";
   el.theme.title = name === "light" ? "Switch to dark theme" : "Switch to light theme";
-  try {
-    localStorage.setItem("solitaire-theme", name);
-  } catch {
-    /* storage may be unavailable */
-  }
+  writeItem("solitaire-theme", name);
 }
 
 function toggleTheme(): void {
@@ -363,11 +391,7 @@ function applySound(on: boolean): void {
     el.startMute.textContent = icon;
     el.startMute.title = title;
   }
-  try {
-    localStorage.setItem("solitaire-sound", on ? "on" : "off");
-  } catch {
-    /* storage may be unavailable */
-  }
+  writeItem("solitaire-sound", on ? "on" : "off");
 }
 
 function toggleSound(): void {
@@ -380,15 +404,12 @@ function applyEasy(on: boolean): void {
   el.easy.title = on
     ? "Easy mode on: empty columns accept any card"
     : "Easy mode: empty columns accept any card";
-  try {
-    localStorage.setItem("solitaire-easy", on ? "on" : "off");
-  } catch {
-    /* storage may be unavailable */
-  }
+  writeItem("solitaire-easy", on ? "on" : "off");
 }
 
 function toggleEasy(): void {
   applyEasy(!game.easyEmptyStacks);
+  persist(); // the board's rules are part of the save
 }
 
 function addTempStack(): void {
@@ -415,10 +436,14 @@ el.easy.addEventListener("click", toggleEasy);
 el.addStack.addEventListener("click", addTempStack);
 el.drawToggle.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
-  if (btn) setDrawCount(Number(btn.dataset.draw) as DrawCount);
+  if (btn) {
+    setDrawCount(Number(btn.dataset.draw) as DrawCount);
+    persist();
+  }
 });
 
 window.addEventListener("keydown", (e) => {
+  if (!started) return; // the start overlay owns the board until it's dismissed
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
     doUndo();
@@ -431,39 +456,32 @@ window.addEventListener("keydown", (e) => {
 
 preloadCardFaces();
 preloadFaceArt();
-const savedTheme = (() => {
-  const fromUrl = new URLSearchParams(location.search).get("theme");
-  if (fromUrl === "light" || fromUrl === "dark") return fromUrl;
-  try {
-    return localStorage.getItem("solitaire-theme");
-  } catch {
-    return null;
-  }
-})();
+const urlTheme = new URLSearchParams(location.search).get("theme");
+const savedTheme = urlTheme === "light" || urlTheme === "dark" ? urlTheme : readItem("solitaire-theme");
 applyTheme(savedTheme === "light" ? "light" : "dark");
-const savedSound = (() => {
-  try {
-    return localStorage.getItem("solitaire-sound");
-  } catch {
-    return null;
-  }
-})();
-applySound(savedSound !== "off");
-const savedEasy = (() => {
-  try {
-    return localStorage.getItem("solitaire-easy");
-  } catch {
-    return null;
-  }
-})();
-applyEasy(savedEasy === "on");
+applySound(readItem("solitaire-sound") !== "off");
+
+// Pick up a saved game if there is a valid one, replacing the constructor's fresh
+// deal. This has to run before resize(), which sizes the board from the number of
+// temp stacks, and before setDrawCount, which reflects the restored draw mode.
+const saved = loadGame();
+if (saved) {
+  game.restore(saved.state);
+  elapsedFrozen = saved.elapsed;
+  resuming = true;
+}
+// A resumed board is only coherent under the rules it was played with, so the save
+// wins over the standalone preference; applyEasy writes it back so they can't drift.
+applyEasy(saved ? saved.state.easy : readItem("solitaire-easy") === "on");
 setDrawCount(game.drawCount);
 resize();
+el.time.textContent = fmtTime(elapsedFrozen);
 updateStats();
 
-// Keep the dealt cards hidden behind the start overlay so the board doesn't
-// show a fully-dealt game underneath it — the deal plays out only on click.
-animator.hideCards(game.tableau.flat().map((c) => c.id));
+// Keep the board hidden behind the start overlay so a dealt (or restored) game
+// doesn't show underneath it — a fresh game is revealed by the deal animation, a
+// resumed one the moment the overlay is dismissed.
+animator.hideCards(boardCardIds());
 
 requestAnimationFrame(frame);
 
@@ -471,10 +489,38 @@ requestAnimationFrame(frame);
 // audio until the first user gesture). Clicking unlocks audio, then deals.
 const startOverlay = document.getElementById("start-overlay") as HTMLElement;
 const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
-function dismissStartOverlay(): void {
+const startNew = document.getElementById("start-new") as HTMLButtonElement;
+
+if (resuming) {
+  (startOverlay.querySelector(".start-title") as HTMLElement).textContent = "Resume game";
+  (startOverlay.querySelector(".start-tip") as HTMLElement).textContent =
+    `Game in progress — ${game.moves} moves, ${game.score} points. Undo history isn't kept across a reload.`;
+  startNew.hidden = false;
+}
+
+function dismissStartOverlay(resume: boolean): void {
   unlockAudio();
+  started = true;
   startOverlay.classList.add("is-hiding");
   setTimeout(() => startOverlay.remove(), 400);
-  startDeal();
+  if (!resume) {
+    // Deal fresh, discarding any save. Also covers the first-ever load, where the
+    // constructor's deal is the one being revealed.
+    if (resuming) newGame();
+    else startDeal();
+    return;
+  }
+  resuming = false;
+  animator.clear(); // reveals the restored board; startDeal() assumes a fresh pyramid
+  if (game.moves > 0 && !game.isWon()) timerStart = performance.now();
+  updateStats();
+  pendingCheck = true; // a restored board may already be won or auto-completable
 }
-startBtn.addEventListener("click", dismissStartOverlay);
+
+startBtn.addEventListener("click", () => dismissStartOverlay(resuming));
+startNew.addEventListener("click", () => dismissStartOverlay(false));
+
+// Capture think-time since the last move, and act as a backstop for tab eviction.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") persist();
+});

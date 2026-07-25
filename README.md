@@ -31,6 +31,10 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   ✦ **parking stacks** (50 points each) to break a stalemate.
 - 🌗 **Light & dark themes** — a toolbar toggle switches the felt and chrome
   between a bright table and a deep, low-light one; your choice is remembered.
+- 💾 **Resumes where you left off** — the game in progress is saved to
+  `localStorage`, so closing the tab or refreshing brings back the same board,
+  score, moves and clock. The opening screen offers **Resume game**, or a fresh
+  deal if you'd rather start over. (Undo history isn't kept across a reload.)
 - 🖱️ **Mouse & touch** — drag-and-drop, click-to-draw, and double-click /
   double-tap to auto-send a card to its foundation.
 - 📐 **Responsive** — the board re-lays out to fit any window size, compressing

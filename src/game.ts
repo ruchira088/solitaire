@@ -1,7 +1,7 @@
 // Klondike Solitaire rules and state. Framework-free and self-contained so the
 // logic can be reasoned about (and tested) independently of rendering.
 
-import { Card, buildDeck, shuffle, suitColor } from "./cards";
+import { Card, buildDeck, decodeCard, encodeCard, shuffle, suitColor } from "./cards";
 
 export type DrawCount = 1 | 3;
 
@@ -30,6 +30,20 @@ interface Snapshot {
   score: number;
 }
 
+/** A whole game as plain JSON-safe data. Piles hold encoded cards (see
+ *  `encodeCard`); the undo history is deliberately not part of this. */
+export interface GameState {
+  drawCount: DrawCount;
+  easy: boolean;
+  moves: number;
+  score: number;
+  stock: number[];
+  waste: number[];
+  foundations: number[][];
+  tableau: number[][];
+  spares: number[][];
+}
+
 const MAX_HISTORY = 200;
 
 /** Maximum number of temp parking stacks alive at once. */
@@ -41,6 +55,88 @@ function cloneCard(c: Card): Card {
 
 function clonePile(p: Card[]): Card[] {
   return p.map(cloneCard);
+}
+
+function encodePile(p: Card[]): number[] {
+  return p.map(encodeCard);
+}
+
+function decodePile(codes: number[]): Card[] {
+  return codes.map(decodeCard);
+}
+
+// ---- Deserialization -------------------------------------------------------
+
+function asDrawCount(v: unknown): DrawCount | null {
+  return v === 1 ? 1 : v === 3 ? 3 : null;
+}
+
+function asCount(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null;
+}
+
+function isCodePile(v: unknown): v is number[] {
+  return (
+    Array.isArray(v) &&
+    v.every((n) => typeof n === "number" && Number.isInteger(n) && n >= 0 && n < 104)
+  );
+}
+
+function isCodeGrid(v: unknown, len: number): v is number[][] {
+  return Array.isArray(v) && v.length === len && v.every(isCodePile);
+}
+
+const allFaceUp = (p: number[]): boolean => p.every((c) => c >= 52);
+
+/** Validate untrusted data — a localStorage save, possibly hand-edited or
+ *  written by an older build — as a structurally legal Klondike board. Returns
+ *  null instead of throwing so callers can quietly fall back to a fresh deal. */
+export function parseGameState(data: unknown): GameState | null {
+  if (typeof data !== "object" || data === null) return null;
+  const d = data as Record<string, unknown>;
+
+  const drawCount = asDrawCount(d.drawCount);
+  const moves = asCount(d.moves);
+  const score = asCount(d.score);
+  const { easy, stock, waste, foundations, tableau, spares } = d;
+  if (drawCount === null || moves === null || score === null) return null;
+  if (typeof easy !== "boolean") return null;
+  if (!isCodePile(stock) || !isCodePile(waste)) return null;
+  if (!isCodeGrid(foundations, 4) || !isCodeGrid(tableau, 7)) return null;
+  if (!Array.isArray(spares) || spares.length > MAX_SPARES) return null;
+  if (!spares.every(isCodePile)) return null;
+  const sparePiles: number[][] = spares;
+
+  // Exactly one deck, no duplicates and nothing missing.
+  const ids = new Set<number>();
+  let total = 0;
+  for (const p of [stock, waste, ...foundations, ...tableau, ...sparePiles]) {
+    total += p.length;
+    for (const c of p) ids.add(c % 52);
+  }
+  if (total !== 52 || ids.size !== 52) return null;
+
+  // Face state: the stock is face down, everything off-tableau is face up, and a
+  // tableau column is a face-down run followed by a face-up one.
+  if (stock.some((c) => c >= 52)) return null;
+  if (!allFaceUp(waste) || !foundations.every(allFaceUp) || !sparePiles.every(allFaceUp)) return null;
+  for (const col of tableau) {
+    let up = false;
+    for (const c of col) {
+      if (c >= 52) up = true;
+      else if (up) return null; // a face-down card resting on a face-up one
+    }
+  }
+
+  // Foundations run up from the Ace in a single suit.
+  for (const f of foundations) {
+    for (let i = 0; i < f.length; i++) {
+      const card = decodeCard(f[i]);
+      if (card.rank !== i + 1 || card.suit !== decodeCard(f[0]).suit) return null;
+    }
+  }
+
+  return { drawCount, easy, moves, score, stock, waste, foundations, tableau, spares: sparePiles };
 }
 
 export class Game {
@@ -364,6 +460,38 @@ export class Game {
       return { from: { kind: "stock" }, fromIndex: 0, to: { kind: "waste" } };
     }
     return null;
+  }
+
+  // ---- Persistence -------------------------------------------------------
+
+  serialize(): GameState {
+    return {
+      drawCount: this.drawCount,
+      easy: this.easyEmptyStacks,
+      moves: this.moves,
+      score: this.score,
+      stock: encodePile(this.stock),
+      waste: encodePile(this.waste),
+      foundations: this.foundations.map(encodePile),
+      tableau: this.tableau.map(encodePile),
+      spares: this.spares.map(encodePile),
+    };
+  }
+
+  /** Adopt a state produced by `parseGameState`, which owns validation. Cards are
+   *  rebuilt fresh so nothing aliases the replaced board, and the undo history is
+   *  dropped — it isn't persisted. */
+  restore(state: GameState): void {
+    this.drawCount = state.drawCount;
+    this.easyEmptyStacks = state.easy;
+    this.moves = state.moves;
+    this.score = state.score;
+    this.stock = decodePile(state.stock);
+    this.waste = decodePile(state.waste);
+    this.foundations = state.foundations.map(decodePile);
+    this.tableau = state.tableau.map(decodePile);
+    this.spares = state.spares.map(decodePile);
+    this.history = [];
   }
 
   // ---- Undo --------------------------------------------------------------

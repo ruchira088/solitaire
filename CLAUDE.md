@@ -34,6 +34,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/input.ts` | Pointer drag & drop, click-to-draw, double-click auto-move |
 | `src/theme.ts` | Light / dark felt + placeholder palettes |
 | `src/sound.ts` | WebAudio sound effects (deal tick, etc.) |
+| `src/storage.ts` | `localStorage`: UI preferences + the in-progress game save |
 
 ### Key design invariants
 
@@ -54,11 +55,30 @@ logic, rendering, animation, and input kept cleanly separated.
   the opening deal (and its sound) waits behind the click-to-play overlay in
   `index.html` / `#start-overlay`; clicking calls `unlockAudio()` then `startDeal()`.
 
-### Settings persisted to `localStorage`
+### Persisted to `localStorage`
 
-Theme (`solitaire-theme`), sound (`solitaire-sound`), and easy mode
+All access goes through `src/storage.ts` and is best-effort — storage can be
+absent or full, in which case the game just runs without it.
+
+Settings: theme (`solitaire-theme`), sound (`solitaire-sound`), and easy mode
 (`solitaire-easy`). Theme also accepts `?theme=light|dark`; animations can be
 disabled with `?animate=off` (also off under `prefers-reduced-motion`).
+
+The game in progress (`solitaire-game`) so a refresh resumes the same board:
+
+- `Game.serialize()` / `Game.restore()` are pure; piles are arrays of compact card
+  codes (`encodeCard`: the card id, plus 52 when face up). `parseGameState` in
+  `game.ts` validates untrusted saves — full-deck, face-state, and foundation
+  checks — and anything it rejects is dropped so a fresh deal takes over silently.
+- The envelope is schema-versioned (`v`). Bump `SCHEMA` in `storage.ts` when the
+  meaning of `GameState` changes; old saves are discarded, never migrated.
+- The save exists exactly while there's an in-progress game: `persist()` no-ops
+  before the first move and once won, so New Game and winning clear it.
+- **Undo history is not persisted** — Undo starts disabled on a resumed game.
+- Elapsed play time rides along, and freezes while the tab is closed.
+- The start overlay reads "Resume game" when a save exists and reveals the board
+  via `animator.clear()`. It must not call `startDeal()`, which assumes a freshly
+  dealt pyramid and would throw on a restored board.
 
 ## Verifying visual changes
 
