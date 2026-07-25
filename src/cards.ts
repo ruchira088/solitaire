@@ -1,5 +1,7 @@
 // Card model and deck utilities for Klondike Solitaire.
 
+import { Rng } from "./rng";
+
 export type Suit = "spades" | "hearts" | "diamonds" | "clubs";
 export type Color = "red" | "black";
 
@@ -66,10 +68,12 @@ export function buildDeck(): Card[] {
   return deck;
 }
 
-/** In-place Fisher–Yates shuffle. */
-export function shuffle<T>(arr: T[]): T[] {
+/** In-place Fisher–Yates shuffle. The generator is a parameter so a deal can be
+ *  reproduced from a seed; together with `rng.ts` this loop defines what any given
+ *  deal code lays out, so its order of operations is a wire format. */
+export function shuffle<T>(arr: T[], rand: Rng = Math.random): T[] {
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rand() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;

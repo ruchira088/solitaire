@@ -379,3 +379,25 @@ body {
   color: var(--text);
   font-weight: 600;
 }
+
+/* ---- Deal-code chip ------------------------------------------------------ */
+
+.stat-btn {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.stat-btn:hover .value {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.stat-btn.is-copied .value::after {
+  content: " ✓";
+  color: var(--accent);
+}

@@ -16,6 +16,7 @@ const up = (suit: number, rank: number): number => dn(suit, rank) + UP;
 
 function state(over: Partial<GameState> = {}): GameState {
   return {
+    seed: 12345,
     drawCount: 1,
     easy: false,
     moves: 0,

@@ -43,6 +43,15 @@ function install(storage: unknown): void {
 
 const sample = (): GameState => new Game(3).serialize();
 
+/** The schema version storage.ts currently writes, read back from a real save so a
+ *  future bump can't quietly turn these into version-rejection tests. */
+function currentVersion(store: Store, mem: MemoryStorage): number {
+  store.saveGame(sample(), 0);
+  const v = JSON.parse(mem.getItem("solitaire-game")!).v as number;
+  store.clearGame();
+  return v;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -95,9 +104,10 @@ describe("with working storage", () => {
   });
 
   it("drops and deletes a save from a different schema version", () => {
+    const stale = currentVersion(store, mem) - 1;
     mem.setItem(
       "solitaire-game",
-      JSON.stringify({ v: 99, elapsed: 0, state: sample() }),
+      JSON.stringify({ v: stale, elapsed: 0, state: sample() }),
     );
     expect(store.loadGame()).toBeNull();
     expect(mem.getItem("solitaire-game")).toBeNull();
@@ -106,7 +116,7 @@ describe("with working storage", () => {
   it("drops a structurally valid envelope holding an invalid state", () => {
     mem.setItem(
       "solitaire-game",
-      JSON.stringify({ v: 1, elapsed: 0, state: { drawCount: 3 } }),
+      JSON.stringify({ v: currentVersion(store, mem), elapsed: 0, state: { drawCount: 3 } }),
     );
     expect(store.loadGame()).toBeNull();
     expect(mem.getItem("solitaire-game")).toBeNull();
@@ -126,7 +136,8 @@ describe("with working storage", () => {
   it.each([-5, NaN, Infinity, "83", null, undefined])(
     "coerces an elapsed of %p to 0",
     (elapsed) => {
-      mem.setItem("solitaire-game", JSON.stringify({ v: 1, elapsed, state: sample() }));
+      const v = currentVersion(store, mem);
+      mem.setItem("solitaire-game", JSON.stringify({ v, elapsed, state: sample() }));
       expect(store.loadGame()!.elapsed).toBe(0);
     },
   );

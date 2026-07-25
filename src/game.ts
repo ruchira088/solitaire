@@ -2,6 +2,7 @@
 // logic can be reasoned about (and tested) independently of rendering.
 
 import { Card, buildDeck, decodeCard, encodeCard, shuffle, suitColor } from "./cards";
+import { mulberry32, randomSeed } from "./rng";
 
 export type DrawCount = 1 | 3;
 
@@ -33,6 +34,8 @@ interface Snapshot {
 /** A whole game as plain JSON-safe data. Piles hold encoded cards (see
  *  `encodeCard`); the undo history is deliberately not part of this. */
 export interface GameState {
+  /** The 32-bit seed this board was dealt from; see rng.ts. */
+  seed: number;
   drawCount: DrawCount;
   easy: boolean;
   moves: number;
@@ -71,6 +74,10 @@ function asDrawCount(v: unknown): DrawCount | null {
   return v === 1 ? 1 : v === 3 ? 3 : null;
 }
 
+function asSeed(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 0xffffffff ? v : null;
+}
+
 function asCount(v: unknown): number | null {
   return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null;
 }
@@ -95,11 +102,12 @@ export function parseGameState(data: unknown): GameState | null {
   if (typeof data !== "object" || data === null) return null;
   const d = data as Record<string, unknown>;
 
+  const seed = asSeed(d.seed);
   const drawCount = asDrawCount(d.drawCount);
   const moves = asCount(d.moves);
   const score = asCount(d.score);
   const { easy, stock, waste, foundations, tableau, spares } = d;
-  if (drawCount === null || moves === null || score === null) return null;
+  if (seed === null || drawCount === null || moves === null || score === null) return null;
   if (typeof easy !== "boolean") return null;
   if (!isCodePile(stock) || !isCodePile(waste)) return null;
   if (!isCodeGrid(foundations, 4) || !isCodeGrid(tableau, 7)) return null;
@@ -136,7 +144,10 @@ export function parseGameState(data: unknown): GameState | null {
     }
   }
 
-  return { drawCount, easy, moves, score, stock, waste, foundations, tableau, spares: sparePiles };
+  // Deliberately not checked: that the seed actually deals this board. Verifying
+  // would mean re-running the deal on every load, and the only consequence of a
+  // hand-edited mismatch is that Restart lays out a different game.
+  return { seed, drawCount, easy, moves, score, stock, waste, foundations, tableau, spares: sparePiles };
 }
 
 export class Game {
@@ -154,22 +165,27 @@ export class Game {
   spares: Card[][] = [];
   moves = 0;
   score = 0;
+  /** The seed this board was dealt from. Every game has one, so Restart and the
+   *  shareable deal code are always available. */
+  seed = 0;
 
   private history: Snapshot[] = [];
   /** Undone snapshots, awaiting redo. Bounded by MAX_HISTORY for free: every entry
    *  here was moved out of `history`, which is itself capped. */
   private future: Snapshot[] = [];
 
-  constructor(drawCount: DrawCount = 3) {
+  constructor(drawCount: DrawCount = 3, seed: number = randomSeed()) {
     this.drawCount = drawCount;
-    this.deal();
+    this.deal(seed);
   }
 
   // ---- Setup -------------------------------------------------------------
 
-  /** Reset and deal a fresh game. Cards start face down for the deal animation. */
-  deal(): void {
-    const deck = shuffle(buildDeck());
+  /** Reset and deal. Cards start face down for the deal animation. Passing the
+   *  current seed re-deals the identical layout. */
+  deal(seed: number = randomSeed()): void {
+    this.seed = seed >>> 0;
+    const deck = shuffle(buildDeck(), mulberry32(this.seed));
     this.stock = [];
     this.waste = [];
     this.foundations = [[], [], [], []];
@@ -193,6 +209,12 @@ export class Game {
       card.faceUp = false;
       this.stock.push(card);
     }
+  }
+
+  /** Re-deal this same layout from scratch — a fresh attempt, not an undo, so
+   *  moves, score and history all reset. */
+  restartDeal(): void {
+    this.deal(this.seed);
   }
 
   // ---- Pile access -------------------------------------------------------
@@ -470,6 +492,7 @@ export class Game {
 
   serialize(): GameState {
     return {
+      seed: this.seed,
       drawCount: this.drawCount,
       easy: this.easyEmptyStacks,
       moves: this.moves,
@@ -486,6 +509,7 @@ export class Game {
    *  rebuilt fresh so nothing aliases the replaced board, and the undo history is
    *  dropped — it isn't persisted. */
   restore(state: GameState): void {
+    this.seed = state.seed;
     this.drawCount = state.drawCount;
     this.easyEmptyStacks = state.easy;
     this.moves = state.moves;

@@ -16,6 +16,7 @@
         </div>
         <div class="controls">
           <button id="btn-new" class="btn" title="Start a new game">New Game</button>
+          <button id="btn-restart" class="btn" title="Replay this same deal from the start">Restart</button>
           <button id="btn-undo" class="btn" title="Undo last move (Ctrl+Z)">Undo</button>
           <button id="btn-redo" class="btn" title="Redo (Ctrl+Shift+Z)">Redo</button>
           <button id="btn-hint" class="btn" title="Highlight a useful move">Hint</button>
@@ -32,6 +33,7 @@
           <div class="stat"><span class="label">Time</span><span id="stat-time" class="value">0:00</span></div>
           <div class="stat"><span class="label">Moves</span><span id="stat-moves" class="value">0</span></div>
           <div class="stat"><span class="label">Score</span><span id="stat-score" class="value">0</span></div>
+          <button id="deal-code" class="stat stat-btn" type="button" title="Copy a link to this deal"><span class="label">Deal</span><span id="stat-deal" class="value">—</span></button>
         </div>
       </header>
       <canvas id="board"></canvas>

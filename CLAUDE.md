@@ -52,6 +52,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/main.ts` | Bootstrap, HiDPI canvas sizing, the game loop, deal / auto-complete / win sequences, toolbar wiring |
 | `src/game.ts` | Klondike rules, draw modes, undo snapshots, win / auto-complete — **pure, framework-free, no DOM** |
 | `src/cards.ts` | Card model, deck construction, Fisher–Yates shuffle |
+| `src/rng.ts` | Seeded PRNG + deal codes — **a frozen wire format**, see below |
 | `src/layout.ts` | Responsive pile positions, tall-column offset compression |
 | `src/positions.ts` | Shared geometry: hit-testing + animation targets |
 | `src/render.ts` | Drawing: card bodies, table felt, SVG-face compositing |
@@ -89,7 +90,8 @@ absent or full, in which case the game just runs without it.
 
 Settings: theme (`solitaire-theme`) and sound (`solitaire-sound`). Theme also
 accepts `?theme=light|dark`; animations can be disabled with `?animate=off`
-(also off under `prefers-reduced-motion`).
+(also off under `prefers-reduced-motion`). A specific layout can be requested
+with `?deal=<code>` and `?draw=1|3`.
 
 **Easy mode is not a setting** — it's per-game. Every fresh deal starts with it
 off (`applyEasy(false)` in `newGame`, and `false` on a save-less boot); it only
@@ -110,6 +112,26 @@ The game in progress (`solitaire-game`) so a refresh resumes the same board:
 - The start overlay reads "Resume game" when a save exists and reveals the board
   via `animator.clear()`. It must not call `startDeal()`, which assumes a freshly
   dealt pyramid and would throw on a restored board.
+
+### Seeded deals
+
+Every game carries a 32-bit `seed`, so Restart and the shareable deal code are always
+available with no special state. `deal(seed?)` defaults to a fresh random seed;
+`restartDeal()` replays the current one.
+
+**`rng.ts` plus the shuffle loop in `cards.ts` is a wire format.** Deal codes get
+shared, bookmarked and pasted into URLs, so changing the generator, the loop, or the
+`SUITS` order silently reinterprets every code already out there. `rng.test.ts` pins
+the first values of the stream for exactly this reason.
+
+Boot rule: a saved game resumes unless `?deal=` names a *different* layout, so
+reloading a shared link mid-game keeps your board instead of wiping it. The current
+code is kept in the address bar via `replaceState`, which also makes screenshots
+reproducible — `?deal=N&animate=off` is fully deterministic.
+
+Note `parseGameState` deliberately does **not** check that the seed actually deals
+the saved board; verifying would mean re-running the deal on every load, and the
+only consequence of a mismatch is that Restart lays out a different game.
 
 ## Verifying visual changes
 

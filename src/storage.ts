@@ -8,7 +8,7 @@ const GAME_KEY = "solitaire-game";
 
 /** Bumped whenever the meaning of `GameState` changes; older saves are discarded
  *  rather than migrated. */
-const SCHEMA = 1;
+const SCHEMA = 2;
 
 export interface SavedGame {
   state: GameState;

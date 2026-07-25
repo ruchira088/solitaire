@@ -18,6 +18,7 @@ function valid(): GameState {
  *  needs a *specific* card, since a real deal scatters 28 of them into the tableau. */
 function blank(): GameState {
   return {
+    seed: 12345,
     drawCount: 3,
     easy: false,
     moves: 0,
