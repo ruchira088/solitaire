@@ -110,6 +110,13 @@ npm run build    # type-check + bundle to dist/  (~13 kB gzipped)
 npm run preview  # serve the production build locally
 ```
 
+Tests:
+
+```bash
+npm test         # run the suite once
+npm run test:watch
+```
+
 ## How to play
 
 The goal is to build all four foundations up from Ace to King, one per suit.
@@ -169,8 +176,9 @@ scripts/
 A few design notes:
 
 - **`game.ts` is framework-free and side-effect-light** — the rules, move
-  validation, scoring and undo snapshots are pure and could be unit-tested in
-  isolation.
+  validation, scoring and undo snapshots are pure, and are unit-tested in
+  isolation (`npm test`) along with the card codec, the layout maths and the
+  save/load layer.
 - **Card faces are images, loaded once and cached.** `cardFaces.ts` loads each
   face from `public/cards/` into an `Image`; the renderer draws it onto a
   rounded white card body (for clean corners + shadow). A procedural face
