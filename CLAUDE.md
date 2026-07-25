@@ -110,3 +110,8 @@ artifact bucket) is in `cdk-deploy/bin/cdk-deploy.ts`.
   the settings; `cardFaces.ts` picks the extension by rank. Regenerate with
   `npm run cards:rasterize` / `npm run cards:optimize` — both are one-off, their
   output is committed, and neither runs during `npm run build`.
+- **Only the pip faces are preloaded.** `preloadCardFaces` fetches the 40 pip/ace
+  SVGs (~150 KB) up front and warms the 12 court WebPs (~850 KB) on idle, so they
+  stay off the critical path. A court card needed before then loads on demand from
+  the render loop, with `courtArt.ts`'s procedural face covering the gap — so
+  `getCardFace` returning null is a normal state, not an error.
