@@ -42,6 +42,18 @@ export function isRed(suit: Suit): boolean {
   return suitColor(suit) === "red";
 }
 
+/** Compact encoding used to persist a card: its id, plus 52 when face up. Suit
+ *  and rank fall out of the id, so the ordering of `SUITS` is part of the saved
+ *  format — reordering it would misread existing saves. */
+export function encodeCard(c: Card): number {
+  return c.id + (c.faceUp ? 52 : 0);
+}
+
+export function decodeCard(code: number): Card {
+  const id = code % 52;
+  return { id, suit: SUITS[Math.floor(id / 13)], rank: (id % 13) + 1, faceUp: code >= 52 };
+}
+
 /** Build an ordered 52-card deck (all face down). */
 export function buildDeck(): Card[] {
   const deck: Card[] = [];

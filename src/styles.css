@@ -348,6 +348,23 @@ body {
   cursor: pointer;
 }
 
+.start-alt {
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.start-alt:hover {
+  color: var(--text);
+}
+
 .start-tip {
   margin-top: 8px;
   max-width: 320px;
