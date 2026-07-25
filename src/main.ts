@@ -14,6 +14,7 @@ import { preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
 import { isSoundEnabled, setSoundEnabled, playDeal, unlockAudio } from "./sound";
 import { clearGame, loadGame, readItem, saveGame, writeItem } from "./storage";
+import { encodeSeed, parseSeed } from "./rng";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -91,6 +92,9 @@ const el = {
   time: document.getElementById("stat-time") as HTMLElement,
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
+  deal: document.getElementById("stat-deal") as HTMLElement,
+  dealBtn: document.getElementById("deal-code") as HTMLButtonElement,
+  restart: document.getElementById("btn-restart") as HTMLButtonElement,
 };
 
 function fmtTime(ms: number): string {
@@ -322,22 +326,70 @@ function onChange(): void {
   pendingCheck = true;
 }
 
-function newGame(): void {
+/** Shared by New Game and Restart, so the two can't drift. `deal` either shuffles a
+ *  fresh layout or replays the current seed. */
+function beginGame(deal: () => void): void {
   celebration.stop();
   celebStarted = false;
   autoCompleting = false;
   resuming = false;
   animator.clear();
   clearHint();
-  game.deal();
+  deal();
   applyEasy(false); // the assist doesn't carry over to the next game
   clearGame();
   syncSpareLayout();
   timerStart = null;
   elapsedFrozen = 0;
   el.time.textContent = "0:00";
+  showDealCode();
   updateStats();
   startDeal();
+}
+
+function newGame(): void {
+  beginGame(() => game.deal());
+}
+
+/** Replay the same layout from the start. Not undoable — `deal()` clears history —
+ *  so it's guarded like the other board-destroying actions. */
+function restartDeal(): void {
+  if (busy || autoCompleting || input.drag) return;
+  beginGame(() => game.restartDeal());
+}
+
+function shareUrl(): string {
+  const u = new URL(location.href);
+  u.searchParams.set("deal", encodeSeed(game.seed));
+  u.searchParams.set("draw", String(game.drawCount));
+  return u.toString();
+}
+
+/** Show the current deal code, and keep it in the address bar so the page is always
+ *  shareable and always reproducible. */
+function showDealCode(): void {
+  el.deal.textContent = encodeSeed(game.seed);
+  el.dealBtn.classList.remove("is-copied");
+  el.dealBtn.title = `Copy a link to deal ${encodeSeed(game.seed)}`;
+  try {
+    history.replaceState(null, "", shareUrl());
+  } catch {
+    /* replaceState can throw on exotic origins; the chip still works */
+  }
+}
+
+function copyDealLink(): void {
+  // Clipboard access is async and rejects outside a secure context, so fall back to
+  // putting the bare code in the tooltip rather than claiming success.
+  navigator.clipboard?.writeText(shareUrl()).then(
+    () => {
+      el.dealBtn.classList.add("is-copied");
+      window.setTimeout(() => el.dealBtn.classList.remove("is-copied"), 1600);
+    },
+    () => {
+      el.dealBtn.title = `Deal ${encodeSeed(game.seed)} — copy failed, note it down`;
+    },
+  );
 }
 
 function doUndo(): void {
@@ -444,6 +496,8 @@ const input = new Input(canvas, game, animator, {
 el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
+el.restart.addEventListener("click", restartDeal);
+el.dealBtn.addEventListener("click", copyDealLink);
 el.hint.addEventListener("click", showHint);
 el.theme.addEventListener("click", toggleTheme);
 el.sound.addEventListener("click", toggleSound);
@@ -488,18 +542,28 @@ applySound(readItem("solitaire-sound") !== "off");
 // Pick up a saved game if there is a valid one, replacing the constructor's fresh
 // deal. This has to run before resize(), which sizes the board from the number of
 // temp stacks, and before setDrawCount, which reflects the restored draw mode.
+const params = new URLSearchParams(location.search);
+const urlSeed = parseSeed(params.get("deal"));
+const urlDraw = params.get("draw") === "3" ? 3 : params.get("draw") === "1" ? 1 : null;
 const saved = loadGame();
-if (saved) {
-  game.restore(saved.state);
-  elapsedFrozen = saved.elapsed;
+// Resume unless the URL names a *different* deal. Reloading a shared link mid-game
+// therefore keeps your board rather than wiping it.
+const resumeSaved = saved !== null && (urlSeed === null || urlSeed === saved.state.seed);
+if (resumeSaved) {
+  game.restore(saved!.state);
+  elapsedFrozen = saved!.elapsed;
   resuming = true;
+} else if (urlSeed !== null) {
+  game.deal(urlSeed);
 }
+if (urlDraw !== null && !resumeSaved) game.drawCount = urlDraw;
 // A resumed board is only coherent under the rules it was played with; a fresh deal
 // always starts with the assist off.
-applyEasy(saved ? saved.state.easy : false);
+applyEasy(resumeSaved ? saved!.state.easy : false);
 setDrawCount(game.drawCount);
 resize();
 el.time.textContent = fmtTime(elapsedFrozen);
+showDealCode();
 updateStats();
 
 // Keep the board hidden behind the start overlay so a dealt (or restored) game

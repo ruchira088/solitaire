@@ -31,6 +31,9 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   ✦ **parking stacks** (50 points each) to break a stalemate.
 - 🌗 **Light & dark themes** — a toolbar toggle switches the felt and chrome
   between a bright table and a deep, low-light one; your choice is remembered.
+- 🔁 **Seeded deals** — every game has a short **deal code** shown in the stats
+  bar. **Restart** replays the same layout from scratch, and clicking the code
+  copies a link so someone else can play the identical game (`?deal=ABC123`).
 - 💾 **Resumes where you left off** — the game in progress is saved to
   `localStorage`, so closing the tab or refreshing brings back the same board,
   score, moves and clock. The opening screen offers **Resume game**, or a fresh
@@ -130,6 +133,8 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
 | **Hint** | The **Hint** button (or `H`) pulses a useful move. |
 | **New game** | The **New Game** button, or `N`. |
+| **Replay a deal** | **Restart** re-deals the same layout from the start. |
+| **Share a deal** | Click the **Deal** code in the stats bar to copy a link to it. |
 
 **Tableau rules:** cards stack in descending rank and alternating colour
 (e.g. red 7 on black 8). **Foundation rules:** same suit, ascending from Ace.
