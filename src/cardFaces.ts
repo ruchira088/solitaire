@@ -1,9 +1,9 @@
-// Loads the static SVG card faces (the public-domain vector-playing-cards set)
-// from public/cards/ and caches them as HTMLImageElements. The renderer draws
-// the cached image for each face-up card; while an image is still decoding the
-// caller falls back to the procedural face so nothing pops in blank.
+// Loads the static card faces (the public-domain vector-playing-cards set) from
+// public/cards/ and caches them as HTMLImageElements. The renderer draws the
+// cached image for each face-up card; while an image is still decoding the caller
+// falls back to the procedural face so nothing pops in blank.
 
-import { Card, Suit } from "./cards";
+import { Card, Suit, SUITS } from "./cards";
 
 const RANK_NAME: Record<number, string> = {
   1: "ace",
@@ -49,12 +49,26 @@ export function getCardFace(card: Card): HTMLImageElement | null {
   return img.complete && img.naturalWidth > 0 ? img : null;
 }
 
-/** Eagerly start loading every face up front. */
+function request(suit: Suit, rank: number): void {
+  getCardFace({ id: -1, suit, rank, faceUp: true });
+}
+
+/** Start loading faces. The 40 pip/ace faces go up front — they total ~150 KB — but
+ *  the 12 court WebPs are ~850 KB between them, so they wait for idle rather than
+ *  competing with first paint. Any court card that appears before then loads on
+ *  demand via `getCardFace` from the render loop, showing the procedural courtArt
+ *  face until it decodes. */
 export function preloadCardFaces(): void {
-  const suits: Suit[] = ["spades", "hearts", "diamonds", "clubs"];
-  for (const suit of suits) {
-    for (let rank = 1; rank <= 13; rank++) {
-      getCardFace({ id: -1, suit, rank, faceUp: true });
-    }
+  for (const suit of SUITS) {
+    for (let rank = 1; rank <= 10; rank++) request(suit, rank);
   }
+  const warmCourt = (): void => {
+    for (const suit of SUITS) {
+      for (let rank = 11; rank <= 13; rank++) request(suit, rank);
+    }
+  };
+  // Aliased rather than tested with `in`, which narrows `window` itself to never.
+  const idle: typeof window.requestIdleCallback | undefined = window.requestIdleCallback;
+  if (idle) idle(warmCourt, { timeout: 4000 });
+  else window.setTimeout(warmCourt, 1500); // Safari < 17.4
 }
