@@ -8,12 +8,39 @@ runtime dependencies**; the shipped bundle is pure vanilla JS/Canvas.
 ```bash
 npm run dev        # Vite dev server with hot reload
 npm run typecheck  # tsc --noEmit (strict mode)
+npm test           # vitest run — the pure-logic suite
+npm run test:watch # vitest in watch mode
 npm run build      # tsc + vite build → dist/
 npm run preview    # serve the production build
 ```
 
-There is no test suite. After changes, run `npm run typecheck` and, when the
-change is visual or behavioural, run the app and look at it (see Verifying).
+After changes, run `npm run typecheck` and `npm test`, and when the change is
+visual or behavioural, run the app and look at it (see Verifying).
+
+### Tests
+
+Vitest, colocated as `src/*.test.ts`. Both `npm test` and `npm run typecheck` gate
+CI ahead of every deploy — see the `build-and-typecheck` job.
+
+Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts` and
+`storage.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
+and mocking one only buys assertions about the mock — those are covered by the
+Playwright procedure under "Verifying visual changes" instead.
+
+Conventions worth keeping:
+
+- **Build boards by hand and apply them with `restore()`** rather than dealing, so
+  each test states the exact position it cares about. `restore()` does no
+  validation, so a fixture may hold fewer than 52 cards when the rest is irrelevant.
+- **Mutate one field per rejection test** in `parseGameState.test.ts`, so a failure
+  names one branch rather than "the fixture is wrong".
+- **`storage.test.ts` reloads the module per case** (`vi.resetModules()`). Its
+  `writable` flag is module-level and latches off after the first failed write, so a
+  test touching the unavailable-storage path would otherwise silently no-op every
+  later write in the file.
+- `vitest.config.ts` is kept separate from `vite.config.ts`: `defineConfig` from
+  `"vite"` doesn't type a `test` key, and merging them would put test config on the
+  path of every production build.
 
 ## Architecture
 

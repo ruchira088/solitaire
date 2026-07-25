@@ -33,6 +33,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Gates every deploy: upload-bundle needs this job, and all four deploy jobs
+      # need upload-bundle. `npm test` is `vitest run` -- never bare `vitest`, which
+      # would enter watch mode and hang the runner.
+      - name: Test
+        run: npm test
+
       - name: Build production bundle
         run: npm run build
 
