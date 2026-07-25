@@ -25,7 +25,7 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   moves, lift-and-drop drag feedback, animated snap-back on illegal moves,
   auto-complete sweep, and a classic bouncing-card **win celebration**.
 - 🃏 **Full Klondike rules** — Draw 1 / Draw 3 toggle, multi-card run dragging,
-  waste recycling, undo history, hints, scoring, move counter and timer.
+  waste recycling, undo/redo history, hints, scoring, move counter and timer.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
@@ -127,7 +127,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Move a card / run** | Drag a card — or a valid descending, alternating-colour run — between tableau columns. Empty columns accept a King. |
 | **Send to a foundation** | Drag an Ace (or the next card in sequence) onto a foundation, or **double-click** (double-tap on touch) a card to auto-send it. |
 | **Park a stack** | Click **+ Stack** in the toolbar (−50 points, up to 3), then drag a card or run onto the ✦ pile to set it aside and reveal the card underneath. The pile disappears once you empty it. |
-| **Undo** | The **Undo** button, or `Ctrl/Cmd + Z`. |
+| **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
 | **Hint** | The **Hint** button (or `H`) pulses a useful move. |
 | **New game** | The **New Game** button, or `N`. |
 
@@ -140,6 +140,7 @@ When only foundation moves remain, the game auto-completes and celebrates.
 | Key | Action |
 | --- | --- |
 | `Ctrl/Cmd + Z` | Undo |
+| `Ctrl/Cmd + Shift + Z` or `Ctrl + Y` | Redo |
 | `H` | Hint |
 | `N` | New game |
 

@@ -105,7 +105,7 @@ The game in progress (`solitaire-game`) so a refresh resumes the same board:
   meaning of `GameState` changes; old saves are discarded, never migrated.
 - The save exists exactly while there's an in-progress game: `persist()` no-ops
   before the first move and once won, so New Game and winning clear it.
-- **Undo history is not persisted** — Undo starts disabled on a resumed game.
+- **Undo/redo history is not persisted** — both start disabled on a resumed game.
 - Elapsed play time rides along, and freezes while the tab is closed.
 - The start overlay reads "Resume game" when a save exists and reveals the board
   via `animator.clear()`. It must not call `startDeal()`, which assumes a freshly

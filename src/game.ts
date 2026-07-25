@@ -156,6 +156,9 @@ export class Game {
   score = 0;
 
   private history: Snapshot[] = [];
+  /** Undone snapshots, awaiting redo. Bounded by MAX_HISTORY for free: every entry
+   *  here was moved out of `history`, which is itself capped. */
+  private future: Snapshot[] = [];
 
   constructor(drawCount: DrawCount = 3) {
     this.drawCount = drawCount;
@@ -175,6 +178,7 @@ export class Game {
     this.moves = 0;
     this.score = 0;
     this.history = [];
+    this.future = [];
 
     let idx = 0;
     for (let col = 0; col < 7; col++) {
@@ -337,12 +341,12 @@ export class Game {
 
   /** Draw from stock to waste; recycle waste back to stock when empty. */
   drawFromStock(): MoveResult | null {
+    // Guard before recording history, not after: pushing and then popping would
+    // still have cleared the redo stack, so a click on a dead stock would silently
+    // throw away everything you could redo.
+    if (this.stock.length === 0 && this.waste.length === 0) return null;
     this.pushHistory();
     if (this.stock.length === 0) {
-      if (this.waste.length === 0) {
-        this.history.pop();
-        return null;
-      }
       // Recycle: waste back to stock, face down, original order restored.
       while (this.waste.length > 0) {
         const c = this.waste.pop()!;
@@ -492,29 +496,41 @@ export class Game {
     this.tableau = state.tableau.map(decodePile);
     this.spares = state.spares.map(decodePile);
     this.history = [];
+    this.future = [];
   }
 
-  // ---- Undo --------------------------------------------------------------
+  // ---- Undo / redo --------------------------------------------------------
 
   canUndo(): boolean {
     return this.history.length > 0;
   }
 
+  canRedo(): boolean {
+    return this.future.length > 0;
+  }
+
   undo(): boolean {
     const snap = this.history.pop();
     if (!snap) return false;
-    this.stock = snap.stock;
-    this.waste = snap.waste;
-    this.foundations = snap.foundations;
-    this.tableau = snap.tableau;
-    this.spares = snap.spares;
-    this.moves = snap.moves;
+    this.future.push(this.snapshot());
+    this.applySnapshot(snap);
     this.score = Math.max(0, snap.score - 5);
     return true;
   }
 
-  private pushHistory(): void {
-    this.history.push({
+  /** Step forward again after an undo. Redo restores the pre-undo snapshot whole,
+   *  which refunds the undo's 5-point penalty — a round trip that changes nothing
+   *  shouldn't cost anything. The penalty still bites for an undo you keep. */
+  redo(): boolean {
+    const snap = this.future.pop();
+    if (!snap) return false;
+    this.history.push(this.snapshot());
+    this.applySnapshot(snap);
+    return true;
+  }
+
+  private snapshot(): Snapshot {
+    return {
       stock: clonePile(this.stock),
       waste: clonePile(this.waste),
       foundations: this.foundations.map(clonePile),
@@ -522,7 +538,24 @@ export class Game {
       spares: this.spares.map(clonePile),
       moves: this.moves,
       score: this.score,
-    });
+    };
+  }
+
+  private applySnapshot(s: Snapshot): void {
+    this.stock = s.stock;
+    this.waste = s.waste;
+    this.foundations = s.foundations;
+    this.tableau = s.tableau;
+    this.spares = s.spares;
+    this.moves = s.moves;
+    this.score = s.score;
+  }
+
+  private pushHistory(): void {
+    // Any fresh move invalidates the forward stack. This is the single choke point
+    // for every mutating path, so one line covers them all.
+    this.future.length = 0;
+    this.history.push(this.snapshot());
     if (this.history.length > MAX_HISTORY) this.history.shift();
   }
 
