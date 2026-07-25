@@ -8,9 +8,13 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cards:rasterize": "node scripts/rasterize-cards.mjs",
+    "cards:optimize": "svgo -f public/cards --config svgo.config.mjs"
   },
   "devDependencies": {
+    "playwright-core": "^1.62.0",
+    "svgo": "^4.0.2",
     "typescript": "^7.0.2",
     "vite": "^8.1.5"
   },

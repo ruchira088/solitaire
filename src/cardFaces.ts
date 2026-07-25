@@ -19,9 +19,17 @@ const SUIT_NAME: Record<Suit, string> = {
   clubs: "clubs",
 };
 
+/** Court art is served as WebP rasterised from art/cards-src/ (the source SVGs are
+ *  auto-traced and up to 1.1 MB each); everything else stays vector. See
+ *  scripts/rasterize-cards.mjs. */
+function isCourt(rank: number): boolean {
+  return rank >= 11;
+}
+
 function fileName(card: Card): string {
   const rank = RANK_NAME[card.rank] ?? String(card.rank);
-  return `${rank}_of_${SUIT_NAME[card.suit]}`;
+  const ext = isCourt(card.rank) ? "webp" : "svg";
+  return `${rank}_of_${SUIT_NAME[card.suit]}.${ext}`;
 }
 
 // Respects Vite's configured base path so it works in dev and when deployed.
@@ -35,7 +43,7 @@ export function getCardFace(card: Card): HTMLImageElement | null {
   let img = cache.get(name);
   if (!img) {
     img = new Image();
-    img.src = `${BASE}cards/${name}.svg`;
+    img.src = `${BASE}cards/${name}`;
     cache.set(name, img);
   }
   return img.complete && img.naturalWidth > 0 ? img : null;

@@ -158,7 +158,12 @@ src/
   animation.ts   tween engine, card flights, win-celebration physics
   input.ts       pointer drag & drop, click-to-draw, double-click auto-move
 public/
-  cards/         52 SVG card faces (vector-playing-cards, public domain)
+  cards/         52 card faces (vector-playing-cards, public domain):
+                 12 court cards as WebP, 40 pip/ace faces as SVG
+art/
+  cards-src/     the original court-card SVGs the WebPs are rendered from
+scripts/
+  rasterize-cards.mjs   one-off court-card rasteriser
 ```
 
 A few design notes:
@@ -166,10 +171,14 @@ A few design notes:
 - **`game.ts` is framework-free and side-effect-light** — the rules, move
   validation, scoring and undo snapshots are pure and could be unit-tested in
   isolation.
-- **Card faces are SVG images, loaded once and cached.** `cardFaces.ts` loads
-  each face from `public/cards/` into an `Image`; the renderer draws it onto a
+- **Card faces are images, loaded once and cached.** `cardFaces.ts` loads each
+  face from `public/cards/` into an `Image`; the renderer draws it onto a
   rounded white card body (for clean corners + shadow). A procedural face
-  (`courtArt.ts` + pip layouts) is drawn as a fallback until the SVG decodes.
+  (`courtArt.ts` + pip layouts) is drawn as a fallback until it decodes. The
+  source art is auto-traced and the court cards were enormous — 7.7 MB for
+  twelve — so they ship as 512 px WebP instead, which is indistinguishable at
+  play size and cut the card payload from 8.2 MB to 1.1 MB. See
+  `art/cards-src/README.md`.
 - **Animations decouple model from view.** A move updates the model instantly;
   the `Animator` then flies the affected cards from their old screen positions
   to their new ones, so logic never waits on animation.

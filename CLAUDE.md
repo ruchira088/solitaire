@@ -103,5 +103,10 @@ artifact bucket) is in `cdk-deploy/bin/cdk-deploy.ts`.
 
 - TypeScript strict mode. Match the existing terse, comment-light-but-purposeful
   style — file headers and non-obvious invariants get a comment; mechanics don't.
-- Card faces are the public-domain *vector-playing-cards* SVG set in
-  `public/cards/`; don't commit replacements without checking licensing.
+- Card faces are the public-domain *vector-playing-cards* set; don't commit
+  replacements without checking licensing. They ship in two formats for size
+  reasons — the 12 court cards as WebP rasterised from `art/cards-src/`, the 40
+  pip/ace faces as SVGO'd SVG. `art/cards-src/README.md` explains why and records
+  the settings; `cardFaces.ts` picks the extension by rank. Regenerate with
+  `npm run cards:rasterize` / `npm run cards:optimize` — both are one-off, their
+  output is committed, and neither runs during `npm run build`.
