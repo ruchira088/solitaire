@@ -1,6 +1,7 @@
 {
   "name": "cdk-deploy",
   "version": "0.1.0",
+  "type": "module",
   "bin": {
     "cdk-deploy": "bin/cdk-deploy.js"
   },
@@ -12,12 +13,14 @@
     "destroy": "npm run build && cdk destroy --all --force"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "aws-cdk": "^2.1100.0",
-    "ts-node": "^10.9.2",
-    "typescript": "~6.0.3"
+    "@types/node": "^24.13.3",
+    "typescript": "~7.0.2"
   },
   "dependencies": {
+    "aws-cdk": "^2.1133.0",
     "react-app-cdk-deploy": "github:ruchira088/react-app-cdk-deploy#v1"
+  },
+  "allowScripts": {
+    "github:ruchira088/react-app-cdk-deploy#7e93af186985f350e5284e28be2d0acc8a2679e7": true
   }
 }
