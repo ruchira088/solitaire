@@ -101,10 +101,10 @@ cascade and bounce across the table in the classic Solitaire victory animation:
 
 ## Getting started
 
-Requires **Node 20.19+ or 22.12+** (Vite 8).
+Requires **Node 20.19+ or 22.12+** (Vite 8); `.nvmrc` pins 24.
 
 ```bash
-npm install      # install dev dependencies (Vite + TypeScript)
+npm install      # dev tooling only — Vite, TypeScript, Vitest, SVGO, playwright-core
 npm run dev      # start the dev server with hot reload (opens the browser)
 ```
 
@@ -271,9 +271,8 @@ the pipeline can deploy:
   whose trust policy allows this repository.
 - A **Route 53 hosted zone for `ruchij.com`** in the account (CDK looks it up).
 - SSM parameter **`/github/token`** (used to cut the GitHub release).
-- GitHub **`Staging`** and **`Production`** environments configured on the repo.
-- The repo pushed to GitHub (this project is not yet a git repo) and the
-  `npm run typecheck` / `npm run build` scripts present (they are).
+- GitHub **`Staging`** and **`Production`** environments configured on the repo
+  ([`ruchira088/solitaire`](https://github.com/ruchira088/solitaire)).
 
 ### Manual deploy
 
@@ -288,10 +287,14 @@ ENVIRONMENT=production npm run deploy   # production → solitaire.ruchij.com
 
 ## Tech stack
 
-- **TypeScript** (strict mode)
+- **TypeScript 7** (strict mode)
 - **HTML5 Canvas 2D** for all rendering
-- **Vite** for the dev server and production bundling
-- **No runtime dependencies** — the shipped bundle is pure vanilla JS/Canvas
+- **Vite 8** for the dev server and production bundling
+- **Vitest** for the pure-logic unit tests
+- **No runtime dependencies** — the shipped bundle is pure vanilla JS/Canvas, and
+  `package.json` has no `dependencies` block at all. Everything installed
+  (TypeScript, Vite, Vitest, plus SVGO and `playwright-core` for the one-off card-art
+  and screenshot tooling) is build-time only.
 
 ## Credits
 

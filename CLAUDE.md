@@ -3,6 +3,28 @@
 Klondike Solitaire — TypeScript + HTML5 Canvas 2D, bundled with Vite. **Zero
 runtime dependencies**; the shipped bundle is pure vanilla JS/Canvas.
 
+## Dependencies
+
+**There is no `dependencies` block in `package.json`, and adding one is a
+decision, not a detail.** Zero runtime dependencies is a project constraint —
+the shipped bundle stays pure vanilla JS/Canvas.
+
+Everything installed is dev/build tooling:
+
+| Package | Range | Used for |
+| --- | --- | --- |
+| `typescript` | `^7.0.2` | strict-mode checking (`npm run typecheck`) and the `tsc` step ahead of `vite build` |
+| `vite` | `^8.1.5` | dev server + production bundle. Its `engines` field is what sets the **Node 20.19+ / 22.12+** floor (`.nvmrc` pins 24) |
+| `vitest` | `^4.1.10` | the pure-logic suite (`npm test`), configured separately in `vitest.config.ts` |
+| `svgo` | `^4.0.2` | one-off pip/ace face optimisation (`npm run cards:optimize`) |
+| `playwright-core` | `^1.62.0` | drives *system* Chrome — both `scripts/rasterize-cards.mjs` and the visual checks below. `-core` on purpose: no browser binaries are downloaded |
+
+**When any of this changes — a package added, removed, or moved across a major
+version — update the table above *and* the matching spots in `README.md`:** the
+`npm install` comment and Node requirement under "Getting started", and the
+"Tech stack" list. The two files drift silently otherwise, since nothing checks
+them.
+
 ## Commands
 
 ```bash
