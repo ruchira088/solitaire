@@ -98,17 +98,21 @@ body {
 .controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .btn {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   border: 1px solid var(--btn-border);
   background: linear-gradient(180deg, var(--btn-bg-1), var(--btn-bg-2));
   color: var(--text);
   font-size: 13.5px;
   font-weight: 600;
-  padding: 8px 14px;
+  padding: 8px 11px;
   border-radius: 9px;
   cursor: pointer;
   touch-action: manipulation; /* no double-tap zoom (iOS ignores user-scalable=no) */
@@ -117,6 +121,17 @@ body {
 
 .btn:hover {
   filter: brightness(1.15);
+}
+
+/* Button icons are decoration: the label carries the meaning, so they're
+   aria-hidden in the markup and never the only thing in a labelled button. Undo and
+   redo use text glyphs (↺ ↻) rather than emoji, deliberately — they inherit the
+   button's colour, where the emoji arrows rendered dark blue-grey and vanished into
+   the dark bar. Colour emoji ignore `color`, so they survive the yellow pressed
+   state unchanged. */
+.ico {
+  font-size: 1.05em;
+  line-height: 1;
 }
 
 .icon-btn {
@@ -202,6 +217,18 @@ body {
   display: block;
   width: 100%;
   touch-action: none;
+}
+
+/* Laptop widths: the button icons cost ~140px, enough to push a 1280px window onto
+   a second row. Tighten just the button padding here so a common laptop still gets
+   the whole bar on one line, and wide windows keep their roomier buttons. */
+@media (max-width: 1340px) {
+  .controls {
+    gap: 7px;
+  }
+  .btn {
+    padding: 8px 9px;
+  }
 }
 
 /* Tablets / phone landscape: tighten everything so the full toolbar still

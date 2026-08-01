@@ -282,6 +282,15 @@ artifact bucket) is in `cdk-deploy/bin/cdk-deploy.ts`.
   the settings; `cardFaces.ts` picks the extension by rank. Regenerate with
   `npm run cards:rasterize` / `npm run cards:optimize` — both are one-off, their
   output is committed, and neither runs during `npm run build`.
+- **Button icons are decoration, and they cost width.** Each labelled control carries
+  a `<span class="ico" aria-hidden="true">` so the label keeps the accessible name;
+  never let an icon become a button's only content without an `aria-label` (the two
+  icon-only buttons have one). Undo/redo use text glyphs (`↺ ↻`) instead of emoji
+  because the emoji arrows render dark blue-grey and disappear into the dark bar,
+  while colour emoji survive the yellow `aria-pressed` state unchanged. The icons add
+  ~120px to the control row, which is why there's a `max-width: 1340px` block
+  tightening button padding — without it a 1280px window wraps onto a second row. On
+  phones they cost a third button row (+34px); the ☰ fold is the escape hatch.
 - **Only the pip faces are preloaded.** `preloadCardFaces` fetches the 40 pip/ace
   SVGs (~150 KB) up front and warms the 12 court WebPs (~850 KB) on idle, so they
   stay off the critical path. A court card needed before then loads on demand from
