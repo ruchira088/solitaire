@@ -115,9 +115,10 @@ Rotating the phone switches back to the classic column layout.
 ## Win celebration
 
 Finish a game — or let the **auto-complete** finish it for you — and the cards
-cascade and bounce across the table in the classic Solitaire victory animation. The
-banner shows what you scored against your **best score so far**, kept in
-`localStorage` and announced when you beat it:
+cascade and bounce across the table in the classic Solitaire victory animation. A
+dialog shows what you scored against your **best score so far** — kept in
+`localStorage` and announced when you beat it — with **New Game** and **Restart**
+right there. The cascade keeps running behind it, and the toolbar stays usable:
 
 ![Win celebration](screenshots/win.png)
 

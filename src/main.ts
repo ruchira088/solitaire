@@ -48,7 +48,7 @@ let celebStarted = false;
 let resuming = false; // a saved game was restored; the overlay reveals it instead of dealing
 let started = false; // the start overlay has been dismissed
 let chromeHidden = false; // toolbar folded down to its toggle
-/** Set when a game is won: the best score to show on the banner, and whether this
+/** Set when a game is won: the best score to show on the win panel, and whether this
  *  game just set it. Null until then. */
 let winRecord: { best: number; isRecord: boolean } | null = null;
 
@@ -157,6 +157,10 @@ const el = {
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
+  winOverlay: document.getElementById("win-overlay") as HTMLElement,
+  winScore: document.getElementById("win-score") as HTMLElement,
+  winNew: document.getElementById("win-new") as HTMLButtonElement,
+  winRestart: document.getElementById("win-restart") as HTMLButtonElement,
 };
 
 function fmtTime(ms: number): string {
@@ -274,6 +278,7 @@ function startCelebration(): void {
   }
   celebStarted = false;
   celebration.start(seeds);
+  showWinPanel();
 }
 
 function runCelebrationFrame(now: number): void {
@@ -287,53 +292,23 @@ function runCelebrationFrame(now: number): void {
     f.card.faceUp = true;
     renderer.drawCard(ctx, f.card, f.x, f.y, layout, { flat: true });
   }
-  drawWinBanner();
 }
 
-function drawWinBanner(): void {
-  const w = layout.width;
-  const cx = w / 2;
-  const cy = layout.height * 0.18;
-  const bw = Math.min(360, w * 0.7);
-  const bh = 104; // title, the score line, and the prompt
-  ctx.save();
-  ctx.globalAlpha = 0.92;
-  ctx.fillStyle = "rgba(8,40,26,0.9)";
-  ctx.strokeStyle = "rgba(255,211,78,0.9)";
-  ctx.lineWidth = 2;
-  const x = cx - bw / 2;
-  const y = cy - bh / 2;
-  const r = 16;
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + bw, y, x + bw, y + bh, r);
-  ctx.arcTo(x + bw, y + bh, x, y + bh, r);
-  ctx.arcTo(x, y + bh, x, y, r);
-  ctx.arcTo(x, y, x + bw, y, r);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#ffe9a8";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = "700 30px 'Helvetica Neue', Arial, sans-serif";
-  ctx.fillText("You Win! 🎉", cx, cy - 20);
+/** The win dialog: the score against the record, and the two ways out. A record gets
+ *  its own line and colour; otherwise the score sits next to the one to beat. */
+function showWinPanel(): void {
+  const record = winRecord?.isRecord ?? false;
+  el.winScore.textContent = record
+    ? `🏆 New best score — ${game.score}`
+    : `Score ${game.score}  ·  Best ${winRecord ? winRecord.best : game.score}`;
+  el.winScore.classList.toggle("is-record", record);
+  syncBarHeight();
+  el.winOverlay.hidden = false;
+  el.winNew.focus(); // so Enter/Space plays again without reaching for the mouse
+}
 
-  // A record is worth its own colour; otherwise the score sits next to the one to beat.
-  ctx.font = "700 14px 'Helvetica Neue', Arial, sans-serif";
-  if (winRecord?.isRecord) {
-    ctx.fillStyle = "#ffd34e";
-    ctx.fillText(`🏆 New best score — ${game.score}`, cx, cy + 12);
-  } else {
-    ctx.fillStyle = "#eafff3";
-    const best = winRecord ? winRecord.best : game.score;
-    ctx.fillText(`Score ${game.score}  ·  Best ${best}`, cx, cy + 12);
-  }
-
-  ctx.font = "500 13px 'Helvetica Neue', Arial, sans-serif";
-  ctx.fillStyle = "#bfe8d2";
-  ctx.fillText("Press New Game to play again", cx, cy + 36);
-  ctx.restore();
+function hideWinPanel(): void {
+  el.winOverlay.hidden = true;
 }
 
 // ---- Deal animation --------------------------------------------------------
@@ -407,6 +382,7 @@ function onChange(): void {
 function beginGame(deal: () => void): void {
   celebration.stop();
   celebStarted = false;
+  hideWinPanel();
   winRecord = null;
   autoCompleting = false;
   resuming = false;
@@ -539,11 +515,19 @@ function isSingleRow(box: HTMLElement): boolean {
   return inner <= tallest + 1;
 }
 
+/** Publish the toolbar's height, which is what the win panel centres below. Kept
+ *  beside the toggle measurement because the same events change both: a window
+ *  resize can rewrap the bar, and folding it changes its height outright. */
+function syncBarHeight(): void {
+  document.body.style.setProperty("--bar-h", `${el.toolbar.offsetHeight}px`);
+}
+
 /** The ☰ only earns its place when the buttons and the stats can't share one row.
  *  Measured with the button in flow, so its own width counts and the answer can't
  *  oscillate: a bar that fits *with* the toggle still fits once it's out. While the
  *  bar is folded away the toggle always shows — it's the only way back. */
 function updateChromeToggle(): void {
+  syncBarHeight();
   if (chromeHidden) {
     el.toolbar.classList.add("needs-toggle");
     return;
@@ -623,6 +607,8 @@ el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
 el.restart.addEventListener("click", restartDeal);
+el.winNew.addEventListener("click", newGame);
+el.winRestart.addEventListener("click", restartDeal);
 el.hint.addEventListener("click", showHint);
 el.theme.addEventListener("click", toggleTheme);
 el.chrome.addEventListener("click", toggleChrome);

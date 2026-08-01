@@ -394,6 +394,88 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   opacity: 1;
 }
 
+/* ---- Win panel ----------------------------------------------------------- */
+
+/* No backdrop and no dimming: the cascade is the reward, so only the panel itself
+   takes pointer events — the toolbar behind stays clickable and the animation keeps
+   running. Centred rather than offset, which is the one placement that can't collide
+   with a toolbar of unknown height. */
+#win-overlay {
+  position: fixed;
+  inset: 0;
+  /* Centre within the *board*, not the viewport: on a short landscape phone the
+     toolbar is a third of the height, and a viewport-centred panel sits on top of it
+     and blocks the buttons. main.ts keeps --bar-h current. */
+  padding-top: var(--bar-h, 0px);
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+#win-overlay[hidden] {
+  display: none;
+}
+
+/* Drawn as DOM rather than painted into the canvas, so the buttons are real buttons:
+   focusable, hoverable, keyboard-reachable, and styled by the same `.btn` rules as
+   the toolbar. */
+#win-panel {
+  /* The panel is dark in both themes, so it carries the dark palette for the buttons
+     inside it — `.btn` reads these, and the light theme's dark-on-translucent-black
+     treatment is invisible here. */
+  --text: #eafff3;
+  --accent: #ffd34e;
+  --btn-bg-1: rgba(255, 255, 255, 0.16);
+  --btn-bg-2: rgba(255, 255, 255, 0.05);
+  --btn-border: rgba(255, 255, 255, 0.16);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 420px);
+  padding: 18px 26px 20px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 211, 78, 0.9);
+  background: rgba(8, 40, 26, 0.98); /* the cascade's white trails show through anything lighter */
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  color: #eafff3;
+  text-align: center;
+}
+
+#win-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  color: #ffe9a8;
+}
+
+#win-score {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #eafff3;
+}
+
+/* Gold, and only when the game just beat the record. */
+#win-score.is-record {
+  color: var(--accent);
+}
+
+.win-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.win-actions .btn {
+  font-size: 14px;
+  padding: 9px 14px;
+}
+
 /* ---- Click-to-start overlay --------------------------------------------- */
 
 #start-overlay {

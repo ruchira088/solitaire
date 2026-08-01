@@ -163,6 +163,16 @@ logic, rendering, animation, and input kept cleanly separated.
   Before the overlay is dismissed it must *not* clear, or `hideCards` stops hiding
   the board. `syncSpareLayout` stays synchronous — its caller needs the new layout
   on the next line.
+- **The win dialog is DOM, not canvas.** `#win-overlay` / `#win-panel` in
+  `index.html` replaced a banner painted into the canvas, so New Game and Restart are
+  real buttons — focusable, keyboard-reachable, styled by the same `.btn` rules. Three
+  things it has to get right: the wrapper is `pointer-events: none` so the cascade
+  keeps running and the toolbar stays clickable; it centres inside the *board* via
+  `--bar-h` (which `syncBarHeight` publishes) because a viewport-centred panel sits on
+  the toolbar on a short landscape phone; and the panel re-declares the dark palette
+  (`--text`, `--btn-bg-*`) since it stays dark in both themes and light-theme buttons
+  would otherwise be dark-on-dark. It opens from `startCelebration` and closes in
+  `beginGame`, so it can't outlive its game.
 - **Audio needs a user gesture.** Browsers block audio until the first click, so
   the opening deal (and its sound) waits behind the click-to-play overlay in
   `index.html` / `#start-overlay`; clicking calls `unlockAudio()` then `startDeal()`.

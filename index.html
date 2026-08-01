@@ -37,6 +37,19 @@
         </div>
       </header>
       <canvas id="board"></canvas>
+      <!-- Sits over the board while the cards cascade. No backdrop, and the wrapper
+           passes pointer events through, so the celebration keeps running and the
+           toolbar stays usable behind it. -->
+      <div id="win-overlay" hidden>
+        <div id="win-panel" role="dialog" aria-labelledby="win-title">
+          <h2 id="win-title">You Win! 🎉</h2>
+          <p id="win-score">Score 0</p>
+          <div class="win-actions">
+            <button id="win-new" class="btn" type="button"><span class="ico" aria-hidden="true">🃏</span>New Game</button>
+            <button id="win-restart" class="btn" type="button" title="Replay this same deal from the start"><span class="ico" aria-hidden="true">🔄</span>Restart</button>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="start-overlay">
       <button id="start-btn" type="button">
