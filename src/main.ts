@@ -54,6 +54,14 @@ let chromeHidden = false; // toolbar folded down to its toggle
 // Each live temp stack adds an extra board column right of the tableau.
 let sparesShown = 0;
 
+/** Trailing debounce for size changes. A window drag fires a resize per frame, and a
+ *  phone rotation reports its new dimensions in several steps — each event restarts
+ *  the timer, so the board is rebuilt once, after things settle. */
+const RESIZE_DEBOUNCE_MS = 120;
+let resizeTimer = 0;
+let appliedW = 0;
+let appliedH = 0;
+
 function resize(): void {
   const rect = canvas.getBoundingClientRect();
   dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -62,9 +70,53 @@ function resize(): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   sparesShown = game.spares.length;
   layout = computeLayout(rect.width, rect.height, sparesShown);
+  appliedW = rect.width;
+  appliedH = rect.height;
+}
+
+function scheduleResize(): void {
+  window.clearTimeout(resizeTimer);
+  resizeTimer = window.setTimeout(applyResize, RESIZE_DEBOUNCE_MS);
+}
+
+/** Rebuild the board for a new window size. Cheap to call spuriously: several signals
+ *  feed it and most of them report a size that hasn't actually changed. */
+function applyResize(): void {
+  const rect = canvas.getBoundingClientRect();
+  const sameDpr = dpr === Math.min(window.devicePixelRatio || 1, 3);
+  if (sameDpr && Math.abs(rect.width - appliedW) < 0.5 && Math.abs(rect.height - appliedH) < 0.5) {
+    return;
+  }
+  resize();
+  refreshAfterResize();
+}
+
+/** Drop everything anchored to the old geometry, so the new board is drawn from the
+ *  model rather than half-inherited from the old one. */
+function refreshAfterResize(): void {
+  input.cancelDrag(); // its offsets and snap-back targets are in old-layout space
+  clearHint();
+  celebStarted = false; // resizing the canvas cleared the celebration's base frame
+
+  // Before the overlay is dismissed, the animator is holding the board hidden
+  // (hideCards); clearing it would reveal a dealt board through the overlay.
+  if (!started) return;
+
+  // Flights aim at old positions, and the callbacks that would have released `busy`
+  // (the deal) or driven the next step (auto-complete) live in the animator — so
+  // dropping them means owning what they were going to do.
+  animator.clear();
+  busy = false;
+  if (autoCompleting) {
+    autoCompleting = false;
+    pendingCheck = true; // pick the sweep back up against the new layout
+  }
+  updateStats();
 }
 
 function syncSpareLayout(): void {
+  // Deliberately synchronous, unlike the debounced path: callers compute a flight
+  // target from the new layout on the very next line.
   if (game.spares.length !== sparesShown) resize();
 }
 
@@ -79,7 +131,7 @@ function boardCardIds(): number[] {
   ].map((c) => c.id);
 }
 
-const ro = new ResizeObserver(() => resize());
+const ro = new ResizeObserver(scheduleResize);
 ro.observe(canvas);
 
 // ---- Toolbar / stats -------------------------------------------------------
@@ -535,8 +587,16 @@ const input = new Input(canvas, game, animator, {
 window.addEventListener("blur", () => input.cancelDrag());
 
 // Whether the bar fits on one row is a function of its width, so re-ask on resize
-// (and on orientation change, which fires the same event).
+// (and on orientation change, which fires the same event). Unlike the board, this only
+// measures the toolbar — and the height it may change feeds the canvas observer, which
+// is debounced.
 window.addEventListener("resize", updateChromeToggle);
+
+// The canvas ResizeObserver is the main signal; these cover the mobile cases where the
+// viewport settles in stages after a rotation and the observer has already fired.
+window.addEventListener("resize", scheduleResize);
+window.addEventListener("orientationchange", scheduleResize);
+window.visualViewport?.addEventListener("resize", scheduleResize);
 
 el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);

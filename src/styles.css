@@ -191,6 +191,14 @@ body {
 #board {
   cursor: default;
   flex: 1;
+  /* Not optional. A flex item's `min-height: auto` resolves through the
+     element's intrinsic ratio, and a canvas gets one from the width/height
+     attributes `resize()` writes — so the canvas can force itself taller than
+     the space it was given, and since resize() then measures that box and writes
+     it back, the wrong size sustains itself. Invisible until the window's aspect
+     ratio changes (rotate a phone), then permanent. */
+  min-height: 0;
+  min-width: 0;
   display: block;
   width: 100%;
   touch-action: none;

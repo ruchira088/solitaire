@@ -133,6 +133,26 @@ logic, rendering, animation, and input kept cleanly separated.
   the canvas `ResizeObserver` already does.
 - **Everything is DPI-aware.** The canvas backing store is scaled by
   `devicePixelRatio`; all drawing happens in CSS pixels.
+- **`#board` needs `min-height: 0` (and `min-width: 0`) — it is not cosmetic.** A
+  flex item's `min-height: auto` resolves through its intrinsic ratio, and a
+  canvas takes one from the `width`/`height` attributes `resize()` writes. Without
+  the override the canvas can force itself taller than its flex share, `resize()`
+  measures that inflated box, and writing it back into the attributes makes the
+  wrong size *self-sustaining*. It stays invisible while the window's aspect ratio
+  holds — the ratio-derived minimum happens to equal the real height — then a phone
+  rotation leaves the board permanently sized for a ~1700px-tall canvas.
+- **One debounced path rebuilds the board.** Every size signal (the canvas
+  `ResizeObserver`, `window` resize, `orientationchange`, `visualViewport` resize)
+  goes through `scheduleResize` → `applyResize`, trailing-debounced by
+  `RESIZE_DEBOUNCE_MS`; a rotation reports its new size in stages, and each stage
+  just restarts the timer. `applyResize` no-ops when the measured size and dpr are
+  unchanged, so extra signals are free. `refreshAfterResize` then drops what was
+  anchored to the old geometry — and because the deal's "unbusy" tween and the
+  auto-complete chain live in the animator, clearing it means owning their jobs:
+  reset `busy`, restart the sweep via `pendingCheck`, re-enable the buttons.
+  Before the overlay is dismissed it must *not* clear, or `hideCards` stops hiding
+  the board. `syncSpareLayout` stays synchronous — its caller needs the new layout
+  on the next line.
 - **Audio needs a user gesture.** Browsers block audio until the first click, so
   the opening deal (and its sound) waits behind the click-to-play overlay in
   `index.html` / `#start-overlay`; clicking calls `unlockAudio()` then `startDeal()`.
@@ -216,6 +236,20 @@ What makes them reproducible rather than fiddly:
   documented behaviour, and it silently ruins a screenshot run.
 - **Draw one card after dismissing the overlay.** A resumed game starts with no
   undo history, so otherwise every shot shows Undo/Redo greyed out.
+
+## Git workflow
+
+**"Push to remote" means: commit the working changes to the current branch, then
+push it.** It is not a request to push already-made commits — staging and
+committing whatever is outstanding is part of the ask.
+
+**Commit to `main`.** Don't create a branch unless explicitly asked to work on a
+separate one; the usual "branch before committing to the default branch" reflex
+does not apply here.
+
+Since a push to `main` triggers the deploy pipeline below, `npm run typecheck` and
+`npm test` should pass before pushing — and behavioural changes should have been
+looked at in a browser (see "Verifying visual changes").
 
 ## Deployment
 
