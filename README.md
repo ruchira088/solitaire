@@ -26,6 +26,8 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   auto-complete sweep, and a classic bouncing-card **win celebration**.
 - 🃏 **Full Klondike rules** — Draw 1 / Draw 3 toggle, multi-card run dragging,
   waste recycling, undo/redo history, hints, scoring, move counter and timer.
+- 🏆 **Best score remembered** — your highest score is kept in `localStorage` and
+  shown on the win banner, which calls it out when you've just beaten it.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
@@ -113,7 +115,9 @@ Rotating the phone switches back to the classic column layout.
 ## Win celebration
 
 Finish a game — or let the **auto-complete** finish it for you — and the cards
-cascade and bounce across the table in the classic Solitaire victory animation:
+cascade and bounce across the table in the classic Solitaire victory animation. The
+banner shows what you scored against your **best score so far**, kept in
+`localStorage` and announced when you beat it:
 
 ![Win celebration](screenshots/win.png)
 

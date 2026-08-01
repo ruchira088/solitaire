@@ -141,6 +141,42 @@ describe("with working storage", () => {
       expect(store.loadGame()!.elapsed).toBe(0);
     },
   );
+
+  it("has no best score before the first win", () => {
+    expect(store.loadBestScore()).toBe(0);
+  });
+
+  it("records a first win as the record", () => {
+    expect(store.recordBestScore(940)).toEqual({ best: 940, isRecord: true });
+    expect(store.loadBestScore()).toBe(940);
+  });
+
+  it("keeps the record when a later game scores less", () => {
+    store.recordBestScore(940);
+    expect(store.recordBestScore(500)).toEqual({ best: 940, isRecord: false });
+    expect(store.loadBestScore()).toBe(940);
+  });
+
+  it("treats matching the record as no record", () => {
+    store.recordBestScore(940);
+    expect(store.recordBestScore(940)).toEqual({ best: 940, isRecord: false });
+  });
+
+  it("beats the record and keeps the higher score", () => {
+    store.recordBestScore(940);
+    expect(store.recordBestScore(1200)).toEqual({ best: 1200, isRecord: true });
+    expect(store.loadBestScore()).toBe(1200);
+  });
+
+  it.each([["negative", "-40"], ["fractional", "12.5"], ["not a number", "loads"], ["empty", ""]])(
+    "reads a %s stored best as 0",
+    (_label, raw) => {
+      mem.setItem("solitaire-best", raw);
+      expect(store.loadBestScore()).toBe(0);
+      // ...so any real score still counts as a record.
+      expect(store.recordBestScore(10).isRecord).toBe(true);
+    },
+  );
 });
 
 describe("with localStorage that always throws", () => {
@@ -169,6 +205,11 @@ describe("with localStorage that always throws", () => {
 
   it("swallows clearGame", () => {
     expect(() => store.clearGame()).not.toThrow();
+  });
+
+  it("still reports the win as a record when the best score can't be stored", () => {
+    // The player did just win; a dead storage layer shouldn't tell them otherwise.
+    expect(store.recordBestScore(940)).toEqual({ best: 940, isRecord: true });
   });
 
   it("latches off after the first failed write and stops retrying", () => {

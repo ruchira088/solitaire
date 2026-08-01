@@ -180,6 +180,14 @@ under `prefers-reduced-motion`). A specific layout can be requested with
 it's the default, so `shareUrl()` emits `draw` for Draw 3 alone and strips it
 otherwise.
 
+The best score (`solitaire-best`) is a bare number, deliberately outside the game
+save: `recordBestScore` folds a finished game into it at win time — so the
+auto-complete sweep's points count — and nothing ever clears it, including New Game
+and winning. An unreadable value (hand-edited, negative, fractional) reads as 0, so
+the next win counts as a record rather than the comparison being poisoned. It's
+returned as `{ best, isRecord }` and reported honestly even when the write fails: the
+player did just win.
+
 **Easy mode is not a setting** — it's per-game. Every fresh deal starts with it
 off (`applyEasy(false)` in `newGame`, and `false` on a save-less boot); it only
 travels with a game through that game's save.

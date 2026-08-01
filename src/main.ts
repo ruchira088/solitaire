@@ -13,7 +13,7 @@ import { preloadFaceArt } from "./courtArt";
 import { preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
 import { isSoundEnabled, setSoundEnabled, playDeal, unlockAudio } from "./sound";
-import { clearGame, loadGame, readItem, saveGame, writeItem } from "./storage";
+import { clearGame, loadGame, readItem, recordBestScore, saveGame, writeItem } from "./storage";
 import { encodeSeed, parseSeed } from "./rng";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
@@ -48,6 +48,9 @@ let celebStarted = false;
 let resuming = false; // a saved game was restored; the overlay reveals it instead of dealing
 let started = false; // the start overlay has been dismissed
 let chromeHidden = false; // toolbar folded down to its toggle
+/** Set when a game is won: the best score to show on the banner, and whether this
+ *  game just set it. Null until then. */
+let winRecord: { best: number; isRecord: boolean } | null = null;
 
 // ---- DPI-aware sizing ------------------------------------------------------
 
@@ -259,6 +262,7 @@ function autoStep(): void {
 function startCelebration(): void {
   if (celebration.active) return;
   clearGame(); // a finished game shouldn't resume on the next load
+  winRecord = recordBestScore(game.score);
   if (timerStart !== null) {
     elapsedFrozen += performance.now() - timerStart;
     timerStart = null;
@@ -291,7 +295,7 @@ function drawWinBanner(): void {
   const cx = w / 2;
   const cy = layout.height * 0.18;
   const bw = Math.min(360, w * 0.7);
-  const bh = 76;
+  const bh = 104; // title, the score line, and the prompt
   ctx.save();
   ctx.globalAlpha = 0.92;
   ctx.fillStyle = "rgba(8,40,26,0.9)";
@@ -313,10 +317,22 @@ function drawWinBanner(): void {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = "700 30px 'Helvetica Neue', Arial, sans-serif";
-  ctx.fillText("You Win! 🎉", cx, cy - 6);
+  ctx.fillText("You Win! 🎉", cx, cy - 20);
+
+  // A record is worth its own colour; otherwise the score sits next to the one to beat.
+  ctx.font = "700 14px 'Helvetica Neue', Arial, sans-serif";
+  if (winRecord?.isRecord) {
+    ctx.fillStyle = "#ffd34e";
+    ctx.fillText(`🏆 New best score — ${game.score}`, cx, cy + 12);
+  } else {
+    ctx.fillStyle = "#eafff3";
+    const best = winRecord ? winRecord.best : game.score;
+    ctx.fillText(`Score ${game.score}  ·  Best ${best}`, cx, cy + 12);
+  }
+
   ctx.font = "500 13px 'Helvetica Neue', Arial, sans-serif";
   ctx.fillStyle = "#bfe8d2";
-  ctx.fillText("Press New Game to play again", cx, cy + 22);
+  ctx.fillText("Press New Game to play again", cx, cy + 36);
   ctx.restore();
 }
 
@@ -391,6 +407,7 @@ function onChange(): void {
 function beginGame(deal: () => void): void {
   celebration.stop();
   celebStarted = false;
+  winRecord = null;
   autoCompleting = false;
   resuming = false;
   animator.clear();

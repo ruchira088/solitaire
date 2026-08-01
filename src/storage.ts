@@ -5,6 +5,7 @@
 import { GameState, parseGameState } from "./game";
 
 const GAME_KEY = "solitaire-game";
+const BEST_KEY = "solitaire-best";
 
 /** Bumped whenever the meaning of `GameState` changes; older saves are discarded
  *  rather than migrated. */
@@ -72,4 +73,26 @@ export function clearGame(): void {
   } catch {
     /* storage may be unavailable */
   }
+}
+
+/** The best score so far, or 0 when there isn't a usable one. Anything unreadable —
+ *  hand-edited, negative, not a number — reads as "no record yet" rather than
+ *  poisoning the comparison. */
+export function loadBestScore(): number {
+  const raw = readItem(BEST_KEY);
+  if (raw === null) return 0;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+/** Fold a finished game's score into the record. Returns what the win screen needs:
+ *  the best score to show, and whether this game set it. Beating the record is
+ *  strictly greater, so matching it isn't announced as new. The answer holds even
+ *  when the write fails (full or unavailable storage) — the player still just won. */
+export function recordBestScore(score: number): { best: number; isRecord: boolean } {
+  const previous = loadBestScore();
+  const isRecord = score > previous;
+  if (!isRecord) return { best: previous, isRecord: false };
+  writeItem(BEST_KEY, String(score));
+  return { best: score, isRecord: true };
 }
