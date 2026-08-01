@@ -8,6 +8,10 @@
   --btn-bg-1: rgba(255, 255, 255, 0.16);
   --btn-bg-2: rgba(255, 255, 255, 0.05);
   --btn-border: rgba(255, 255, 255, 0.16);
+  /* The felt's top row, sampled at the edge and at mid-width — what the strip
+     left by a hidden toolbar fakes. Mirrors theme.ts's feltStops + vignette. */
+  --felt-top-edge: #0a1f15;
+  --felt-top-mid: #133626;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
 }
@@ -22,6 +26,8 @@ body.theme-light {
   --btn-bg-1: rgba(0, 0, 0, 0.06);
   --btn-bg-2: rgba(0, 0, 0, 0.02);
   --btn-border: rgba(0, 0, 0, 0.14);
+  --felt-top-edge: #148d52;
+  --felt-top-mid: #27b36f;
 }
 
 * {
@@ -51,6 +57,7 @@ body {
 
 #toolbar {
   --pad-x: 18px;
+  position: relative; /* contains the toggle while it's parked out of flow */
   display: flex;
   align-items: center;
   gap: 18px;
@@ -282,6 +289,76 @@ body {
   }
 }
 
+/* ---- Collapsible toolbar ------------------------------------------------- */
+
+/* Nothing to fold away while the bar fits on one row, so the toggle only appears
+   when `main.ts` measures a wrap. Parked out of flow rather than display:none, so
+   that measurement can still ask how much room the button itself needs;
+   visibility:hidden also drops it from the tab order and the a11y tree. */
+#toolbar .chrome-toggle {
+  position: absolute;
+  visibility: hidden;
+}
+
+#toolbar.needs-toggle .chrome-toggle,
+#toolbar.is-measuring .chrome-toggle {
+  position: static;
+  visibility: visible;
+}
+
+/* Collapsed, the buttons fold away — the clock, moves, score and deal code are
+   information, not chrome, so they stay — and the bar is painted as a
+   continuation of the felt instead of a thinner toolbar. The strip stays in
+   flow rather than floating over the canvas: a button over the felt would sit
+   on the stock in the phone-portrait layout and swallow its clicks. Hence the
+   fake felt — the canvas can't be seen through it. The three stops stand in for
+   the felt's radial gradient, which is symmetric about mid-width.
+   These beat the responsive blocks above on specificity, so order doesn't
+   matter. */
+body.chrome-hidden #toolbar {
+  gap: 10px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  background: linear-gradient(
+    90deg,
+    var(--felt-top-edge),
+    var(--felt-top-mid) 50%,
+    var(--felt-top-edge)
+  );
+  border-bottom-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.chrome-hidden .controls {
+  display: none;
+}
+
+/* The stat labels are muted for the near-white light-theme bar; on the felt
+   strip that shade washes out, so darken it while the bar is folded away. */
+body.chrome-hidden.theme-light #toolbar {
+  --muted: rgba(9, 43, 27, 0.85);
+}
+
+/* Smallest phones: the title won't fit beside the stats, and it's the one thing
+   on the strip nobody needs — a wrapped second row defeats the whole point of
+   folding the bar away. */
+@media (max-width: 380px) {
+  body.chrome-hidden .brand h1 {
+    display: none;
+  }
+}
+
+/* Unobtrusive while the board has the screen, but never invisible. */
+body.chrome-hidden .chrome-toggle {
+  opacity: 0.55;
+}
+
+body.chrome-hidden .chrome-toggle:hover,
+body.chrome-hidden .chrome-toggle:focus-visible {
+  opacity: 1;
+}
+
 /* ---- Click-to-start overlay --------------------------------------------- */
 
 #start-overlay {
@@ -381,28 +458,6 @@ body {
   font-weight: 600;
 }
 
-/* ---- Deal-code chip ------------------------------------------------------ */
-
-.stat-btn {
-  appearance: none;
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
-  text-align: inherit;
-}
-
-.stat-btn:hover .value {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.stat-btn.is-copied .value::after {
-  content: " ✓";
-  color: var(--accent);
-}
-
 /* ---- Motion & focus ------------------------------------------------------ */
 
 /* The JS side gates card animations, but these CSS transitions ran regardless. */
@@ -421,7 +476,6 @@ body {
    become focusable. Keyboard-only, so a click never paints a ring. */
 .btn:focus-visible,
 .seg-btn:focus-visible,
-.stat-btn:focus-visible,
 #start-btn:focus-visible,
 .start-alt:focus-visible {
   outline: 3px solid var(--accent);

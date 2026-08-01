@@ -43,7 +43,19 @@ const COLS = 7;
 // column fans, width for the phone-portrait row fans).
 const FACE_DOWN_STEP = 0.16;
 const FACE_UP_STEP = 0.29;
-const TOP_GAP = 0.34; // gap between the top row and the tableau
+const TOP_GAP = 0.26; // gap between the top row and the tableau
+
+// Fan room a column is sized to hold before `columnOffsets` has to compress it:
+// its 6 face-down cards plus this many face-up ones. Reserving the true worst
+// case (a full 13-card run) is what it looks like when the table is mostly empty
+// green — height binds at every ordinary aspect ratio, so every unused step goes
+// straight into shrinking the cards. Deeper columns still fit, compressed.
+const RESERVED_FACE_DOWN = 6;
+const RESERVED_FACE_UP = 4;
+
+/** Extra gutter, as a fraction of card width, that height-capped cards may spend
+ *  leftover width on rather than huddling in the middle of the table. */
+const MAX_EXTRA_GAP = 0.12;
 
 // Bottom spare row (compact landscape boards), as fractions of card height.
 const SPARE_ROW_FAN = 0.5; // fan room reserved below the spare row's cards
@@ -61,7 +73,7 @@ export function computeLayout(width: number, height: number, spareCount = 0): La
   const compact = width < 520;
   const margin = compact
     ? Math.max(8, Math.round(width * 0.02))
-    : Math.round(Math.min(width, height) * 0.03) + 10;
+    : Math.round(Math.min(width, height) * 0.022) + 8;
   const gapX = Math.max(compact ? 5 : 8, Math.round(width * 0.012));
 
   // Fit the columns across the available width (an extra one per live temp
@@ -71,12 +83,13 @@ export function computeLayout(width: number, height: number, spareCount = 0): La
   let cardW = (width - margin * 2 - gapX * (cols - 1)) / cols;
   let cardH = cardW * CARD_RATIO;
 
-  // Don't let cards get so tall that stacks run out of room: reserve space
-  // for the top row plus a deep column (6 face-down + ~8 face-up offsets +
-  // one full card) before offset compression has to kick in — plus the spare
+  // Don't let cards get so tall that stacks run out of room: reserve space for
+  // the top row plus a column deep enough to cover the common case (see
+  // RESERVED_FACE_UP) before offset compression has to kick in — plus the spare
   // row when it sits below the tableau.
   const deepColumnH =
-    1 + TOP_GAP + 1 + 6 * FACE_DOWN_STEP + 8 * FACE_UP_STEP +
+    1 + TOP_GAP + 1 +
+    RESERVED_FACE_DOWN * FACE_DOWN_STEP + RESERVED_FACE_UP * FACE_UP_STEP +
     (spareRow ? 1 + SPARE_ROW_FAN + SPARE_ROW_GAP : 0);
   const maxCardH = (height - margin * 2) / deepColumnH;
   if (cardH > maxCardH) {
@@ -84,9 +97,16 @@ export function computeLayout(width: number, height: number, spareCount = 0): La
     cardW = cardH / CARD_RATIO;
   }
 
-  const totalRowW = cardW * cols + gapX * (cols - 1);
+  // Cards capped by height leave width unspent — widen the gutters with some of
+  // it, so the row spreads over the table instead of clustering mid-screen. Only
+  // ever spends slack that's already there, so the row still fits.
+  const slack = width - margin * 2 - cardW * cols - gapX * (cols - 1);
+  const gap =
+    slack > 0 ? gapX + Math.min(cardW * MAX_EXTRA_GAP, slack / (cols - 1)) : gapX;
+
+  const totalRowW = cardW * cols + gap * (cols - 1);
   const originX = (width - totalRowW) / 2;
-  const colX = (i: number) => originX + i * (cardW + gapX);
+  const colX = (i: number) => originX + i * (cardW + gap);
 
   const topY = margin;
   const tableauY = topY + cardH + Math.round(cardH * TOP_GAP);
@@ -105,9 +125,9 @@ export function computeLayout(width: number, height: number, spareCount = 0): La
   let fanLimit = height - margin;
   if (spareRow) {
     const spareY = height - margin - cardH * (1 + SPARE_ROW_FAN);
-    const spareW = spareCount * cardW + (spareCount - 1) * gapX;
+    const spareW = spareCount * cardW + (spareCount - 1) * gap;
     const x0 = (width - spareW) / 2;
-    for (let i = 0; i < spareCount; i++) spares.push({ x: x0 + i * (cardW + gapX), y: spareY });
+    for (let i = 0; i < spareCount; i++) spares.push({ x: x0 + i * (cardW + gap), y: spareY });
     fanLimit = spareY - cardH * SPARE_ROW_GAP;
   } else {
     for (let i = 0; i < spareCount; i++) spares.push({ x: colX(COLS + i), y: tableauY });

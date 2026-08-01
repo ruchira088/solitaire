@@ -31,9 +31,14 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   ✦ **parking stacks** (50 points each) to break a stalemate.
 - 🌗 **Light & dark themes** — a toolbar toggle switches the felt and chrome
   between a bright table and a deep, low-light one; your choice is remembered.
-- 🔁 **Seeded deals** — every game has a short **deal code** shown in the stats
-  bar. **Restart** replays the same layout from scratch, and clicking the code
-  copies a link so someone else can play the identical game (`?deal=ABC123`).
+- 🙈 **Hideable toolbar** — when the window is too narrow to fit the buttons and
+  the stats on one row, a **☰** button (or `T`) folds the buttons away and gives
+  the height to the board; the clock, moves and score stay on screen. Wide
+  enough to fit, and the toggle isn't there at all. Remembered.
+- 🔁 **Seeded deals** — every game has a short **deal code**, kept in the address
+  bar (`?deal=ABC123`) rather than on the table. **Restart** replays the same
+  layout from scratch, and copying the URL lets someone else play the identical
+  game.
 - 💾 **Resumes where you left off** — the game in progress is saved to
   `localStorage`, so closing the tab or refreshing brings back the same board,
   score, moves and clock. The opening screen offers **Resume game**, or a fresh
@@ -42,9 +47,11 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   double-tap to auto-send a card to its foundation. While you drag, the pile
   you'd land on lights up, the cursor shows what's grabbable, and `Esc` puts
   the cards back.
-- 📐 **Responsive** — the board re-lays out to fit any window size, compressing
-  tall columns automatically. Phone-portrait screens get a dedicated vertical
-  layout where the piles are listed top-to-bottom and cards fan sideways.
+- 📐 **Responsive** — the board re-lays out to fit any window size. Cards are
+  sized to fill the table, with room for an ordinary column to fan; deeper
+  columns overlap tighter instead of shrinking every card. Phone-portrait
+  screens get a dedicated vertical layout where the piles are listed
+  top-to-bottom and cards fan sideways.
 
 ## Card art
 
@@ -62,6 +69,17 @@ and toolbar all adapt, and the preference is saved to `localStorage` (you can
 also deep-link a theme with `?theme=light` or `?theme=dark`).
 
 ![Light theme](screenshots/gameplay-light.png)
+
+## Hideable toolbar
+
+Narrow windows can't fit the buttons and the stats on one row, and that's exactly
+when the board can least afford the height — so a **☰** button appears (keyboard:
+`T`) that folds the buttons away and hands the space to the cards. The clock,
+moves and score stay put on a strip painted to match the felt, and the board
+re-lays out into whatever it gains. Wide enough for one row, and there's no
+toggle at all — there'd be nothing to fold. Your choice is remembered.
+
+![Toolbar folded away](screenshots/toolbar-hidden.png)
 
 ## Easy mode & temporary stacks
 
@@ -136,7 +154,8 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Hint** | The **Hint** button (or `H`) pulses a useful move. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
-| **Share a deal** | Click the **Deal** code in the stats bar to copy a link to it. |
+| **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…&draw=…`). |
+| **Hide the toolbar** | The **☰** button at the far left of the bar, or `T` — offered when the bar can't fit on one row. The board grows into the freed space, the stats stay visible, and everything stays playable with the buttons folded away. |
 
 **Tableau rules:** cards stack in descending rank and alternating colour
 (e.g. red 7 on black 8). **Foundation rules:** same suit, ascending from Ace.
@@ -151,6 +170,7 @@ When only foundation moves remain, the game auto-completes and celebrates.
 | `Esc` | Cancel a drag in progress |
 | `H` | Hint |
 | `N` | New game |
+| `T` | Show / hide the toolbar |
 
 ---
 
@@ -196,6 +216,12 @@ A few design notes:
   twelve — so they ship as 512 px WebP instead, which is indistinguishable at
   play size and cut the card payload from 8.2 MB to 1.1 MB. See
   `art/cards-src/README.md`.
+- **Card size is a choice about fan depth, not width.** At ordinary window
+  shapes it's the board's *height* that limits how big a card can be, so
+  `layout.ts` sizes them to let a typical column — six face-down cards plus a
+  four-card run — fan at full spacing, and compresses the offsets of anything
+  deeper rather than shrinking every card all game. Width left over goes into the
+  gutters so the tableau spreads across the table.
 - **Animations decouple model from view.** A move updates the model instantly;
   the `Animator` then flies the affected cards from their old screen positions
   to their new ones, so logic never waits on animation.

@@ -43,6 +43,17 @@ describe("computeLayout — desktop", () => {
     expect(two.spares[1].x).toBeGreaterThan(two.spares[0].x);
   });
 
+  it("spreads the tableau across most of the width", () => {
+    // Height caps the card size at every ordinary landscape aspect, so the
+    // leftover width has to go into the gutters — otherwise the board is a small
+    // huddle of cards mid-screen with empty felt either side.
+    for (const [w, h] of [[1280, 720], [1900, 790], [845, 415], [1400, 900]]) {
+      const l = computeLayout(w, h);
+      const row = l.tableau[6].x + l.cardW - l.tableau[0].x;
+      expect(row / w, `${w}x${h}`).toBeGreaterThan(0.55);
+    }
+  });
+
   it("narrows the cards when width is the binding constraint", () => {
     // At ordinary desktop aspect ratios the card size is capped by *height*, so
     // extra spare columns cost nothing. On a tall, narrow window width binds and
@@ -163,6 +174,18 @@ describe("columnOffsets", () => {
   it("increases monotonically", () => {
     const o = columnOffsets([...faceDown(4), ...faceUp(6)], l);
     for (let i = 1; i < o.length; i++) expect(o[i]).toBeGreaterThan(o[i - 1]);
+  });
+
+  it("sizes the cards so an ordinary column needs no compression", () => {
+    // What the fan reserve in computeLayout buys: 6 face-down cards plus a
+    // 4-card run always fan at full step. Anything deeper is compressed, which
+    // is the trade for cards that aren't tiny.
+    for (const [w, h] of [[1280, 720], [1400, 900], [1920, 1080], [845, 415]]) {
+      const l = computeLayout(w, h);
+      const o = columnOffsets([...faceDown(6), ...faceUp(4)], l);
+      expect(o[1], `${w}x${h}`).toBeCloseTo(l.faceDownStep, 5);
+      expect(o[o.length - 1] + l.cardH, `${w}x${h}`).toBeLessThanOrEqual(l.fanLimit + 0.5);
+    }
   });
 
   it("compresses a deep pile to stay inside the fan limit", () => {

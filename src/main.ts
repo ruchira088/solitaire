@@ -47,6 +47,7 @@ let elapsedFrozen = 0;
 let celebStarted = false;
 let resuming = false; // a saved game was restored; the overlay reveals it instead of dealing
 let started = false; // the start overlay has been dismissed
+let chromeHidden = false; // toolbar folded down to its toggle
 
 // ---- DPI-aware sizing ------------------------------------------------------
 
@@ -94,11 +95,12 @@ const el = {
   sound: document.getElementById("btn-sound") as HTMLButtonElement,
   startMute: document.getElementById("start-mute") as HTMLButtonElement,
   theme: document.getElementById("btn-theme") as HTMLButtonElement,
+  chrome: document.getElementById("btn-chrome") as HTMLButtonElement,
+  toolbar: document.getElementById("toolbar") as HTMLElement,
+  controls: document.querySelector(".controls") as HTMLElement,
   time: document.getElementById("stat-time") as HTMLElement,
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
-  deal: document.getElementById("stat-deal") as HTMLElement,
-  dealBtn: document.getElementById("deal-code") as HTMLButtonElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
 };
 
@@ -348,7 +350,7 @@ function beginGame(deal: () => void): void {
   timerStart = null;
   elapsedFrozen = 0;
   el.time.textContent = "0:00";
-  showDealCode();
+  syncDealUrl();
   updateStats();
   startDeal();
 }
@@ -371,31 +373,14 @@ function shareUrl(): string {
   return u.toString();
 }
 
-/** Show the current deal code, and keep it in the address bar so the page is always
- *  shareable and always reproducible. */
-function showDealCode(): void {
-  el.deal.textContent = encodeSeed(game.seed);
-  el.dealBtn.classList.remove("is-copied");
-  el.dealBtn.title = `Copy a link to deal ${encodeSeed(game.seed)}`;
+/** Keep the deal code in the address bar. The board doesn't show it — the URL *is*
+ *  the shareable thing — and this also keeps screenshots reproducible. */
+function syncDealUrl(): void {
   try {
     history.replaceState(null, "", shareUrl());
   } catch {
-    /* replaceState can throw on exotic origins; the chip still works */
+    /* replaceState can throw on exotic origins; the game plays on regardless */
   }
-}
-
-function copyDealLink(): void {
-  // Clipboard access is async and rejects outside a secure context, so fall back to
-  // putting the bare code in the tooltip rather than claiming success.
-  navigator.clipboard?.writeText(shareUrl()).then(
-    () => {
-      el.dealBtn.classList.add("is-copied");
-      window.setTimeout(() => el.dealBtn.classList.remove("is-copied"), 1600);
-    },
-    () => {
-      el.dealBtn.title = `Deal ${encodeSeed(game.seed)} — copy failed, note it down`;
-    },
-  );
 }
 
 function doUndo(): void {
@@ -470,6 +455,51 @@ function toggleSound(): void {
   applySound(!isSoundEnabled());
 }
 
+/** True when `box` lays its children out on one line: the content box is then no
+ *  taller than its tallest child. Reading the real layout means this doesn't have to
+ *  know which responsive rules are in play. */
+function isSingleRow(box: HTMLElement): boolean {
+  const kids = Array.from(box.children) as HTMLElement[];
+  const tallest = Math.max(...kids.map((k) => k.offsetHeight));
+  const cs = getComputedStyle(box);
+  const inner = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  return inner <= tallest + 1;
+}
+
+/** The ☰ only earns its place when the buttons and the stats can't share one row.
+ *  Measured with the button in flow, so its own width counts and the answer can't
+ *  oscillate: a bar that fits *with* the toggle still fits once it's out. While the
+ *  bar is folded away the toggle always shows — it's the only way back. */
+function updateChromeToggle(): void {
+  if (chromeHidden) {
+    el.toolbar.classList.add("needs-toggle");
+    return;
+  }
+  el.toolbar.classList.add("is-measuring");
+  const fits = isSingleRow(el.toolbar) && isSingleRow(el.controls);
+  el.toolbar.classList.remove("is-measuring");
+  el.toolbar.classList.toggle("needs-toggle", !fits);
+}
+
+/** Fold the buttons away, handing the reclaimed height to the board — the
+ *  ResizeObserver on the canvas re-lays the piles out by itself. The glyph stays a
+ *  hamburger in both states: an ✕ on a game reads as "quit", and the bar being there
+ *  or not is state enough (aria-expanded says so too). */
+function applyChrome(hidden: boolean): void {
+  chromeHidden = hidden;
+  document.body.classList.toggle("chrome-hidden", hidden);
+  const label = hidden ? "Show the toolbar" : "Hide the toolbar";
+  el.chrome.title = `${label} (T)`;
+  el.chrome.setAttribute("aria-label", label);
+  el.chrome.setAttribute("aria-expanded", hidden ? "false" : "true");
+  writeItem("solitaire-chrome", hidden ? "hidden" : "shown");
+  updateChromeToggle();
+}
+
+function toggleChrome(): void {
+  applyChrome(!chromeHidden);
+}
+
 /** Easy mode is per-game, not a saved preference: every new deal starts with it
  *  off, and it only travels with a game via that game's save. */
 function applyEasy(on: boolean): void {
@@ -504,13 +534,17 @@ const input = new Input(canvas, game, animator, {
 // on every platform.
 window.addEventListener("blur", () => input.cancelDrag());
 
+// Whether the bar fits on one row is a function of its width, so re-ask on resize
+// (and on orientation change, which fires the same event).
+window.addEventListener("resize", updateChromeToggle);
+
 el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
 el.restart.addEventListener("click", restartDeal);
-el.dealBtn.addEventListener("click", copyDealLink);
 el.hint.addEventListener("click", showHint);
 el.theme.addEventListener("click", toggleTheme);
+el.chrome.addEventListener("click", toggleChrome);
 el.sound.addEventListener("click", toggleSound);
 el.startMute.addEventListener("click", toggleSound);
 el.easy.addEventListener("click", toggleEasy);
@@ -544,6 +578,8 @@ window.addEventListener("keydown", (e) => {
     newGame();
   } else if (key === "h") {
     showHint();
+  } else if (key === "t") {
+    toggleChrome();
   }
 });
 
@@ -553,6 +589,8 @@ const urlTheme = new URLSearchParams(location.search).get("theme");
 const savedTheme = urlTheme === "light" || urlTheme === "dark" ? urlTheme : readItem("solitaire-theme");
 applyTheme(savedTheme === "light" ? "light" : "dark");
 applySound(readItem("solitaire-sound") !== "off");
+// Before resize(), so the board is measured against the bar the user left behind.
+applyChrome(readItem("solitaire-chrome") === "hidden");
 
 // Pick up a saved game if there is a valid one, replacing the constructor's fresh
 // deal. This has to run before resize(), which sizes the board from the number of
@@ -578,7 +616,7 @@ applyEasy(resumeSaved ? saved!.state.easy : false);
 setDrawCount(game.drawCount);
 resize();
 el.time.textContent = fmtTime(elapsedFrozen);
-showDealCode();
+syncDealUrl();
 updateStats();
 
 // Keep the board hidden behind the start overlay so a dealt (or restored) game
