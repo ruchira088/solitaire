@@ -176,7 +176,9 @@ Settings: theme (`solitaire-theme`), sound (`solitaire-sound`) and whether the
 toolbar is folded away (`solitaire-chrome`). Theme also accepts
 `?theme=light|dark`; animations can be disabled with `?animate=off` (also off
 under `prefers-reduced-motion`). A specific layout can be requested with
-`?deal=<code>` and `?draw=1|3`.
+`?deal=<code>` and `?draw=1|3` — though `draw=1` is only ever *read*, never written:
+it's the default, so `shareUrl()` emits `draw` for Draw 3 alone and strips it
+otherwise.
 
 **Easy mode is not a setting** — it's per-game. Every fresh deal starts with it
 off (`applyEasy(false)` in `newGame`, and `false` on a save-less boot); it only
@@ -212,8 +214,9 @@ the first values of the stream for exactly this reason.
 
 Boot rule: a saved game resumes unless `?deal=` names a *different* layout, so
 reloading a shared link mid-game keeps your board instead of wiping it. The current
-code is kept in the address bar via `replaceState`, which also makes screenshots
-reproducible — `?deal=N&animate=off` is fully deterministic.
+code is kept in the address bar via `replaceState` — on every deal *and* when the
+draw toggle changes, since the mode is part of what a shared link means — which also
+makes screenshots reproducible: `?deal=N&animate=off` is fully deterministic.
 
 Note `parseGameState` deliberately does **not** check that the seed actually deals
 the saved board; verifying would mean re-running the deal on every load, and the

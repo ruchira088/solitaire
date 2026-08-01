@@ -156,7 +156,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Hint** | The **Hint** button (or `H`) pulses a useful move. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
-| **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…&draw=…`). |
+| **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…`), plus `&draw=3` when you're playing Draw 3. |
 | **Hide the toolbar** | The **☰** button at the far left of the bar, or `T` — offered when the bar can't fit on one row. The board grows into the freed space, the stats stay visible, and everything stays playable with the buttons folded away. |
 
 **Tableau rules:** cards stack in descending rank and alternating colour

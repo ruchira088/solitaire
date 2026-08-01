@@ -421,7 +421,11 @@ function restartDeal(): void {
 function shareUrl(): string {
   const u = new URL(location.href);
   u.searchParams.set("deal", encodeSeed(game.seed));
-  u.searchParams.set("draw", String(game.drawCount));
+  // Draw 1 is what you get with no parameter at all, so saying it adds nothing. The
+  // delete branch earns its keep: it strips an inbound `?draw=1`, and clears `draw=3`
+  // when the player switches back.
+  if (game.drawCount === 3) u.searchParams.set("draw", "3");
+  else u.searchParams.delete("draw");
   return u.toString();
 }
 
@@ -614,6 +618,7 @@ el.drawToggle.addEventListener("click", (e) => {
   if (btn) {
     setDrawCount(Number(btn.dataset.draw) as DrawCount);
     persist();
+    syncDealUrl(); // the mode is part of what a shared link means
   }
 });
 
