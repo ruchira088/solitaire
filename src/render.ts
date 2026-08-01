@@ -545,8 +545,9 @@ export class Renderer {
     for (let i = 0; i < wasteFan; i++) {
       const card = game.waste[startFan + i];
       if (hidden(card)) continue;
-      const wx = layout.waste.x + i * layout.wasteFanDX;
-      this.drawCard(ctx, card, wx, layout.waste.y, layout);
+      const wx = layout.waste.x + i * layout.wasteFan.x;
+      const wy = layout.waste.y + i * layout.wasteFan.y;
+      this.drawCard(ctx, card, wx, wy, layout);
     }
 
     // Temp parking stacks: each renders like an extra tableau pile.
@@ -648,7 +649,10 @@ export class Renderer {
         return layout.stock;
       case "waste": {
         const fan = Math.min(game.drawCount - 1, Math.max(0, game.waste.length - 1));
-        return { x: layout.waste.x + fan * layout.wasteFanDX, y: layout.waste.y };
+        return {
+          x: layout.waste.x + fan * layout.wasteFan.x,
+          y: layout.waste.y + fan * layout.wasteFan.y,
+        };
       }
       case "foundation":
         return layout.foundations[id.index];

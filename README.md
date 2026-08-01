@@ -101,10 +101,12 @@ Two independent assists live in the toolbar:
 ## Phone layout
 
 On phone-sized portrait screens the board transposes to fit the tall, narrow
-viewport: the stock and waste form a header, the foundations run down the left
-edge (anchored to the bottom), and the tableau piles become rows that fan
-rightward — with larger, easier-to-tap cards than squeezing seven columns
-side-by-side. Rotating the phone switches back to the classic column layout.
+viewport — it's the landscape board rotated. Stock, waste and the four
+foundations run down a **rail** on the left, where landscape puts them in a top
+row, and the seven tableau piles become rows beside it that fan rightward. The
+rows own the full height rather than sitting under a header, which is what keeps
+the cards large and easy to tap instead of squeezing seven columns side-by-side.
+Rotating the phone switches back to the classic column layout.
 
 <img src="screenshots/iphone.png" alt="Phone-portrait layout" width="340">
 

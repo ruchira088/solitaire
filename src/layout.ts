@@ -27,8 +27,10 @@ export interface Layout {
   /** Spacing between fanned tableau cards, along the fan axis. */
   faceDownStep: number;
   faceUpStep: number;
-  /** Horizontal fan spacing for the waste pile (draw-3). */
-  wasteFanDX: number;
+  /** Per-card offset for the draw-3 waste fan. Follows the board's fan axis: right
+   *  on the landscape board, down the phone-portrait rail (where fanning right would
+   *  run over the tableau rows). */
+  wasteFan: Point;
   /** Max coordinate (y, or x when fanX) a tableau fan may reach before the
    *  steps are compressed. */
   fanLimit: number;
@@ -44,6 +46,12 @@ const COLS = 7;
 const FACE_DOWN_STEP = 0.16;
 const FACE_UP_STEP = 0.29;
 const TOP_GAP = 0.26; // gap between the top row and the tableau
+
+// The portrait board fans along the card's *width*, the narrow dimension, so the
+// same fractions would reveal ~30% less of each card than a column fan does. These
+// match what landscape shows; the rail layout has the room for them.
+const ROW_FACE_DOWN_STEP = 0.2;
+const ROW_FACE_UP_STEP = 0.36;
 
 // Fan room a column is sized to hold before `columnOffsets` has to compress it:
 // its 6 face-down cards plus this many face-up ones. Reserving the true worst
@@ -61,8 +69,17 @@ const MAX_EXTRA_GAP = 0.12;
 const SPARE_ROW_FAN = 0.5; // fan room reserved below the spare row's cards
 const SPARE_ROW_GAP = 0.12; // gap between the tableau limit and the spare row
 
-// Clearance under the stock for the drawn/total counter (fanX header).
+// Clearance under the stock for the drawn/total counter, as a fraction of card
+// height: how far down the portrait rail the waste sits below the stock, so
+// `render.ts`'s drawStockCounter has somewhere to put the tally.
 const COUNTER_GAP = 0.18;
+
+/** Per-card offset of the draw-3 waste fan down the portrait rail. */
+const RAIL_WASTE_FAN = 0.22;
+
+/** Cap on the breathing room a width-bound portrait board adds between rows, as a
+ *  fraction of card height; the rest is centred. */
+const MAX_ROW_GAP = 0.18;
 
 export function computeLayout(width: number, height: number, spareCount = 0): Layout {
   if (width < 520 && height > width) return verticalLayout(width, height, spareCount);
@@ -147,25 +164,26 @@ export function computeLayout(width: number, height: number, spareCount = 0): La
     spares,
     faceDownStep: cardH * FACE_DOWN_STEP,
     faceUpStep: cardH * FACE_UP_STEP,
-    wasteFanDX: cardW * 0.28,
+    wasteFan: { x: cardW * 0.28, y: 0 },
     fanLimit,
     spareFanLimit: height - margin,
   };
 }
 
-/** Phone-portrait board: piles are listed vertically and cards fan to the
- *  right — stock + waste header on top, foundations down the left edge, and
- *  the tableau (plus any spare stacks) as rows beside them. */
+/** Phone-portrait board: the transpose of the landscape one. Stock, waste and the
+ *  four foundations run down a rail on the left — where landscape puts them in a top
+ *  row — and the tableau (plus any spare stacks) are rows beside it, fanning right.
+ *  The rows own the full height: a header above them would divide the height one more
+ *  way and shrink every card, and leave a void in the rail beside the top rows. */
 function verticalLayout(width: number, height: number, spareCount: number): Layout {
   const margin = Math.max(8, Math.round(height * 0.012));
   const gapX = Math.max(5, Math.round(width * 0.012));
-  const gapY = Math.max(5, Math.round(height * 0.008));
+  let gapY = Math.max(5, Math.round(height * 0.008));
 
-  // The header (one card + counter clearance) and the pile rows must fit the
-  // height; very squat screens fall back to a width cap that keeps a couple
-  // of card-widths of fan room per row.
+  // One slot per row, filling the height. Narrow-tall screens fall back to a width
+  // cap that keeps a couple of card-widths of fan room per row.
   const rows = COLS + spareCount;
-  let cardH = (height - margin * 2 - rows * gapY) / (rows + 1 + COUNTER_GAP);
+  let cardH = (height - margin * 2 - (rows - 1) * gapY) / rows;
   let cardW = cardH / CARD_RATIO;
   const maxCardW = (width - margin * 2 - gapX * 2) / 4.6;
   if (cardW > maxCardW) {
@@ -173,12 +191,23 @@ function verticalLayout(width: number, height: number, spareCount: number): Layo
     cardH = cardW * CARD_RATIO;
   }
 
-  const topY = margin;
-  const rowY0 = topY + cardH * (1 + COUNTER_GAP) + gapY;
-  const rowY = (i: number) => rowY0 + i * (cardH + gapY);
+  // A width-bound board has height to spare: spread it into the row gaps, up to a
+  // point, and centre whatever is left over. Either way there's no void at the
+  // bottom, and on a height-bound board there's no slack to begin with.
+  let slack = height - margin * 2 - rows * cardH - (rows - 1) * gapY;
+  if (slack > 0) {
+    const extra = Math.min(slack / (rows - 1), cardH * MAX_ROW_GAP);
+    gapY += extra;
+    slack -= extra * (rows - 1);
+  }
+
+  const topY = margin + Math.max(0, slack / 2);
+  const rowY = (i: number) => topY + i * (cardH + gapY);
   const rowX = margin + cardW + gapX * 2;
 
-  // Foundations sit beside the bottom four rows, flush with the board's end.
+  // The rail: stock, waste, then the foundations flush with the board's end. Six
+  // piles in seven-plus slots, so the slack sits between the waste and the
+  // foundations — which is also where the waste's draw-3 fan hangs.
   const foundations: Point[] = [];
   for (let i = 0; i < 4; i++) foundations.push({ x: margin, y: rowY(rows - 4 + i) });
   const tableau: Point[] = [];
@@ -193,14 +222,15 @@ function verticalLayout(width: number, height: number, spareCount: number): Layo
     cardH,
     radius: Math.max(6, cardW * 0.075),
     fanX: true,
-    stock: { x: margin, y: topY },
-    waste: { x: margin + cardW + gapX, y: topY },
+    stock: { x: margin, y: rowY(0) },
+    // Pushed clear of the drawn/total tally under the stock.
+    waste: { x: margin, y: rowY(1) + cardH * COUNTER_GAP },
     foundations,
     tableau,
     spares,
-    faceDownStep: cardW * FACE_DOWN_STEP,
-    faceUpStep: cardW * FACE_UP_STEP,
-    wasteFanDX: cardW * 0.28,
+    faceDownStep: cardW * ROW_FACE_DOWN_STEP,
+    faceUpStep: cardW * ROW_FACE_UP_STEP,
+    wasteFan: { x: 0, y: cardH * RAIL_WASTE_FAN },
     fanLimit: width - margin,
     spareFanLimit: width - margin,
   };

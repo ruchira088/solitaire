@@ -26,7 +26,10 @@ export function cardPos(
       const len = game.waste.length;
       const fanStart = Math.max(0, len - game.drawCount);
       const fanIndex = Math.max(0, index - fanStart);
-      return { x: layout.waste.x + fanIndex * layout.wasteFanDX, y: layout.waste.y };
+      return {
+        x: layout.waste.x + fanIndex * layout.wasteFan.x,
+        y: layout.waste.y + fanIndex * layout.wasteFan.y,
+      };
     }
     case "foundation":
       return { ...layout.foundations[id.index] };

@@ -115,6 +115,16 @@ logic, rendering, animation, and input kept cleanly separated.
   Leftover width goes into the gutters (`MAX_EXTRA_GAP`) so the row spreads over
   the table. Raising the reserve shrinks the cards *everywhere* — that's what
   made the board a small huddle of cards in the middle of empty felt.
+- **The portrait board is the landscape one transposed.** `verticalLayout` runs
+  stock, waste and the foundations down a **rail** at the left — landscape's top
+  row — and gives the tableau rows the full height, one slot each. A header above
+  the rows would divide the height one more way (shrinking every card ~18%) and
+  leave a void in the rail beside the top rows. Consequences to keep: the waste sits
+  `COUNTER_GAP` below the stock so `drawStockCounter` has room; `wasteFan` runs
+  *down* the rail, since fanning right would cross the rows; the row fan steps are
+  their own constants (`ROW_FACE_*`), because a fraction of the card's *width*
+  reveals less than the same fraction of its height; and width-bound boards spread
+  leftover height into the row gaps up to `MAX_ROW_GAP`, then centre the rest.
 - **The ☰ toggle only exists when the bar wraps.** `updateChromeToggle` measures
   the real layout — a box is on one row exactly when it's no taller than its
   tallest child — and adds `#toolbar.needs-toggle`. It measures with the button

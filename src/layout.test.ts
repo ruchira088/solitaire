@@ -85,6 +85,37 @@ describe("computeLayout — phone portrait", () => {
     expect(l.foundations[0].x).toBeLessThan(l.tableau[0].x);
   });
 
+  it("runs stock, waste and foundations down one rail", () => {
+    const l = PHONE();
+    expect(new Set([l.stock.x, l.waste.x, ...l.foundations.map((p) => p.x)]).size).toBe(1);
+    expect(l.stock.y).toBeLessThan(l.waste.y);
+    expect(l.waste.y).toBeLessThan(l.foundations[0].y);
+  });
+
+  it("gives the rows the full height, with no header above them", () => {
+    for (const [w, h] of [[390, 844], [360, 780], [320, 568], [320, 900]] as [number, number][]) {
+      const l = computeLayout(w, h);
+      // The first row starts level with the stock: no header row to sit under.
+      expect(l.tableau[0].y, `${w}x${h}`).toBeCloseTo(l.stock.y, 5);
+      // Any leftover height is split top and bottom, never dumped at the end.
+      const bottom = l.tableau[6].y + l.cardH;
+      expect(h - bottom, `${w}x${h}`).toBeCloseTo(l.tableau[0].y, 0);
+    }
+  });
+
+  it("leaves room under the stock for the drawn/total tally", () => {
+    const l = PHONE();
+    expect(l.waste.y).toBeGreaterThanOrEqual(l.stock.y + l.cardH);
+  });
+
+  it("fans the waste down the rail, not across the rows", () => {
+    const l = PHONE();
+    expect(l.wasteFan.x).toBe(0);
+    expect(l.wasteFan.y).toBeGreaterThan(0);
+    // Three drawn cards must stay clear of the first foundation below them.
+    expect(l.waste.y + 2 * l.wasteFan.y + l.cardH).toBeLessThanOrEqual(l.foundations[0].y);
+  });
+
   it("stays on the vertical board only while narrow and taller than wide", () => {
     expect(computeLayout(519, 900).fanX).toBe(true);
     expect(computeLayout(520, 900).fanX).toBe(false); // wide enough for columns
