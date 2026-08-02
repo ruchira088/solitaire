@@ -52,6 +52,11 @@ const MAX_HISTORY = 200;
 /** Maximum number of temp parking stacks alive at once. */
 export const MAX_SPARES = 3;
 
+/** What every move costs, so winning in fewer moves scores better. Small enough that
+ *  a productive move still pays (a card to a foundation nets +9), big enough that
+ *  shuffling cards about pointlessly bleeds points. */
+const MOVE_COST = 1;
+
 function cloneCard(c: Card): Card {
   return { id: c.id, suit: c.suit, rank: c.rank, faceUp: c.faceUp };
 }
@@ -332,7 +337,7 @@ export class Game {
       }
     }
 
-    this.moves++;
+    this.countMove();
     this.applyScore(from, to, !!flipped);
     return { moved: moving, from, to: adjTo, flipped };
   }
@@ -342,7 +347,7 @@ export class Game {
     if (this.spares.length >= MAX_SPARES) return false;
     this.pushHistory();
     this.spares.push([]);
-    this.moves++;
+    this.countMove();
     this.score = Math.max(0, this.score - 50);
     return true;
   }
@@ -375,7 +380,7 @@ export class Game {
         c.faceUp = false;
         this.stock.push(c);
       }
-      this.moves++;
+      this.countMove();
       return { moved: [], from: { kind: "waste" }, to: { kind: "stock" }, flipped: null };
     }
     const n = Math.min(this.drawCount, this.stock.length);
@@ -386,7 +391,7 @@ export class Game {
       this.waste.push(c);
       moved.push(c);
     }
-    this.moves++;
+    this.countMove();
     return { moved, from: { kind: "stock" }, to: { kind: "waste" }, flipped: null };
   }
 
@@ -581,6 +586,15 @@ export class Game {
     this.future.length = 0;
     this.history.push(this.snapshot());
     if (this.history.length > MAX_HISTORY) this.history.shift();
+  }
+
+  /** The single place the move counter advances, so the per-move cost can't be
+   *  forgotten on a new kind of move. Every move — a card, a draw, a recycle, buying a
+   *  stack — costs `MOVE_COST`, which is what makes a short win worth more than a long
+   *  one. Undo refunds it by restoring the pre-move snapshot (less its own penalty). */
+  private countMove(): void {
+    this.moves++;
+    this.score = Math.max(0, this.score - MOVE_COST);
   }
 
   private applyScore(from: PileId, to: PileId, flipped: boolean): void {

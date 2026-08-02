@@ -252,10 +252,10 @@ describe("moveCards", () => {
 });
 
 describe("addTempStack", () => {
-  it("costs 50 points", () => {
+  it("costs 50 points, plus the point every move costs", () => {
     const g = boardOf({ score: 120 });
     expect(g.addTempStack()).toBe(true);
-    expect(g.score).toBe(70);
+    expect(g.score).toBe(69); // 120 - 50 - 1
     expect(g.spares).toHaveLength(1);
   });
 
@@ -327,7 +327,7 @@ describe("scoring", () => {
   it("takes 15 for pulling a card back down to the tableau", () => {
     const g = boardOf({ score: 100, foundations: [[up(S, 1)], [], [], []], tableau: [[up(H, 2)], [], [], [], [], [], []] });
     g.moveCards(FOUNDATION(0), 0, TABLEAU(0));
-    expect(g.score).toBe(85);
+    expect(g.score).toBe(84); // 100 - 15 - 1
   });
 
   it("gives 5 for waste to tableau", () => {
@@ -340,6 +340,32 @@ describe("scoring", () => {
     const g = boardOf({ tableau: [[dn(C, 4), up(S, 1)], [], [], [], [], [], []] });
     g.moveCards(TABLEAU(0), 1, FOUNDATION(0));
     expect(g.score).toBe(15); // 10 foundation + 5 flip
+  });
+
+  it("charges a point for every move, whatever kind", () => {
+    const g = boardOf({ score: 100, stock: [dn(S, 5), dn(S, 6)] });
+    g.drawFromStock();
+    expect(g.score).toBe(99);
+    g.drawFromStock();
+    expect(g.score).toBe(98);
+  });
+
+  it("charges for recycling the waste as well", () => {
+    const g = boardOf({ score: 100, waste: [up(S, 5)] });
+    g.drawFromStock(); // stock empty: recycles
+    expect(g.score).toBe(99);
+  });
+
+  it("nets 9 for a foundation move, once the move has paid for itself", () => {
+    const g = boardOf({ score: 100, tableau: [[up(S, 1)], [], [], [], [], [], []] });
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0));
+    expect(g.score).toBe(109);
+  });
+
+  it("moves are free at zero, since the score never goes negative", () => {
+    const g = boardOf({ score: 0, stock: [dn(S, 5)] });
+    g.drawFromStock();
+    expect(g.score).toBe(0);
   });
 
   it("never drops below zero", () => {
@@ -364,20 +390,20 @@ describe("undo", () => {
     // Start high enough that the zero-clamp can't hide the penalty.
     const g = boardOf({ score: 100, tableau: [[up(S, 1)], [], [], [], [], [], []] });
     g.moveCards(TABLEAU(0), 0, FOUNDATION(0));
-    expect(g.score).toBe(110);
+    expect(g.score).toBe(109); // +10, less the move's own point
     g.undo();
     expect(g.score).toBe(95); // restored 100, less the 5-point undo penalty
   });
 
   it("charges the penalty on each undo, against that snapshot's score", () => {
     // The penalty applies to the *restored* score, it doesn't compound off the
-    // current one — so stepping back through two scoring moves gives 105 then 95.
+    // current one — so stepping back through two scoring moves gives 104 then 95.
     const g = boardOf({ score: 100, tableau: [[up(S, 1)], [up(H, 1)], [], [], [], [], []] });
-    g.moveCards(TABLEAU(0), 0, FOUNDATION(0)); // +10 -> 110
-    g.moveCards(TABLEAU(1), 0, FOUNDATION(1)); // +10 -> 120
-    expect(g.score).toBe(120);
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0)); // +10 -1 -> 109
+    g.moveCards(TABLEAU(1), 0, FOUNDATION(1)); // +10 -1 -> 118
+    expect(g.score).toBe(118);
     g.undo();
-    expect(g.score).toBe(105); // restored 110, less 5
+    expect(g.score).toBe(104); // restored 109, less 5
     g.undo();
     expect(g.score).toBe(95); // restored 100, less 5
   });
@@ -451,11 +477,11 @@ describe("redo", () => {
 
   it("refunds the undo penalty, so a round trip costs nothing", () => {
     const g = boardOf({ score: 100, tableau: [[up(S, 1)], [], [], [], [], [], []] });
-    g.moveCards(TABLEAU(0), 0, FOUNDATION(0)); // -> 110
+    g.moveCards(TABLEAU(0), 0, FOUNDATION(0)); // -> 109
     g.undo();
     expect(g.score).toBe(95);
     g.redo();
-    expect(g.score).toBe(110);
+    expect(g.score).toBe(109);
   });
 
   it("is invalidated by a new move", () => {

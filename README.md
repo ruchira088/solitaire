@@ -25,7 +25,8 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   moves, lift-and-drop drag feedback, animated snap-back on illegal moves,
   auto-complete sweep, and a classic bouncing-card **win celebration**.
 - 🃏 **Full Klondike rules** — Draw 1 / Draw 3 toggle, multi-card run dragging,
-  waste recycling, undo/redo history, hints, scoring, move counter and timer.
+  waste recycling, undo/redo history, hints, move counter and timer, and scoring
+  that charges a point per move so a tidy win beats a long one.
 - 🏆 **Lifetime statistics** — games played, games won, win rate, current and best
   streak, best score, fastest win, fewest moves and total time played, all kept in
   `localStorage`. The win dialog calls out a new best score, and the stats can be
@@ -180,6 +181,22 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 **Tableau rules:** cards stack in descending rank and alternating colour
 (e.g. red 7 on black 8). **Foundation rules:** same suit, ascending from Ace.
 When only foundation moves remain, the game auto-completes and celebrates.
+
+### Scoring
+
+| | |
+| --- | --- |
+| Card to a foundation | **+10** |
+| Waste to a tableau column | **+5** |
+| Turning a face-down card up | **+5** |
+| Foundation back down to the tableau | **−15** |
+| **Every move** — a card, a draw, a recycle | **−1** |
+| Undo | **−5** |
+| Buying a ✦ parking stack | **−50** |
+
+The per-move point is what makes a *short* win beat a long one: sending a card home
+nets +9, while shuffling cards about for no reason just bleeds. The score never goes
+below zero, so a game that's already at 0 can't be dug deeper.
 
 ### Keyboard shortcuts
 

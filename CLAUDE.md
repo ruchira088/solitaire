@@ -88,6 +88,11 @@ logic, rendering, animation, and input kept cleanly separated.
 
 ### Key design invariants
 
+- **`countMove()` is the only place `moves` advances.** Every move costs
+  `MOVE_COST` (1 point), which is what makes winning in fewer moves score better — so
+  the counter and the charge live together and a new kind of move can't quietly get in
+  free. A foundation move nets +9 after it, and the score's floor at 0 means moves are
+  effectively free while a game sits at zero.
 - **`game.ts` stays pure.** Rules, move validation, scoring, and undo snapshots
   have no DOM/canvas dependencies. Keep new rules logic here and testable in
   isolation.
