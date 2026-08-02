@@ -163,6 +163,11 @@ logic, rendering, animation, and input kept cleanly separated.
   Before the overlay is dismissed it must *not* clear, or `hideCards` stops hiding
   the board. `syncSpareLayout` stays synchronous — its caller needs the new layout
   on the next line.
+- **Two dialogs, two behaviours.** The win panel is *not* modal — no backdrop, wrapper
+  `pointer-events: none` — because the cascade is the reward. The stats dialog
+  (`#stats-overlay`) is: it dims the board, and a backdrop click or Escape closes it.
+  Escape is checked in the keydown handler *before* the drag cancel. Both share the
+  card look, the `.dialog-actions` row, and the re-declared dark palette.
 - **The win dialog is DOM, not canvas.** `#win-overlay` / `#win-panel` in
   `index.html` replaced a banner painted into the canvas, so New Game and Restart are
   real buttons — focusable, keyboard-reachable, styled by the same `.btn` rules. Three
@@ -190,13 +195,26 @@ under `prefers-reduced-motion`). A specific layout can be requested with
 it's the default, so `shareUrl()` emits `draw` for Draw 3 alone and strips it
 otherwise.
 
-The best score (`solitaire-best`) is a bare number, deliberately outside the game
-save: `recordBestScore` folds a finished game into it at win time — so the
-auto-complete sweep's points count — and nothing ever clears it, including New Game
-and winning. An unreadable value (hand-edited, negative, fractional) reads as 0, so
-the next win counts as a record rather than the comparison being poisoned. It's
-returned as `{ best, isRecord }` and reported honestly even when the write fails: the
-player did just win.
+Lifetime statistics (`solitaire-stats`, schema-versioned like the game save) sit
+deliberately outside it, so nothing routine clears them — only the Reset button does.
+The shape of the bookkeeping is where the thinking is:
+
+- **A deal becomes a *played* game on its first move** (`recordGameStart` from
+  `onChange`), not when it's dealt — otherwise cycling through deals looking for a
+  friendly one would tank the win rate. `countedPlayed` in `main.ts` guards the
+  counting, not `game.moves`, because undo can take the move count back to 0.
+- **`pending` is persisted** so a game left unfinished — including by closing the tab —
+  still breaks the streak when the next game starts. `recordAbandon` covers the
+  in-session case (New Game or Restart over a game with moves in it) and banks its
+  time; the `pending` check in `recordGameStart` covers the across-sessions one.
+- **Every field is sanitised on read** and `won` is clamped to `played`, so a
+  hand-edited record can't show a win rate over 100%. A 0 for a "best" means *never*,
+  which is why the dialog shows a dash rather than 0:00 or 0 moves.
+- **`recordWin` returns `{ stats, isRecord }` honestly even when the write fails** —
+  the player did just win. Beating the best score is strictly greater, so matching it
+  isn't announced as new.
+- `solitaire-best`, the pre-stats best score, is read once to seed `bestScore` and
+  cleared by `resetStats` — otherwise resetting would resurrect the old record.
 
 **Easy mode is not a setting** — it's per-game. Every fresh deal starts with it
 off (`applyEasy(false)` in `newGame`, and `false` on a save-less boot); it only

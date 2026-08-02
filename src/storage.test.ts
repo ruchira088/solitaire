@@ -142,41 +142,142 @@ describe("with working storage", () => {
     },
   );
 
-  it("has no best score before the first win", () => {
-    expect(store.loadBestScore()).toBe(0);
+  it("starts with an empty record", () => {
+    expect(store.loadStats()).toEqual({
+      played: 0,
+      won: 0,
+      streak: 0,
+      bestStreak: 0,
+      bestScore: 0,
+      fastestMs: 0,
+      fewestMoves: 0,
+      totalMs: 0,
+      pending: false,
+    });
   });
 
-  it("records a first win as the record", () => {
-    expect(store.recordBestScore(940)).toEqual({ best: 940, isRecord: true });
-    expect(store.loadBestScore()).toBe(940);
+  /** One whole game, from first move to win. */
+  const playAndWin = (store: Store, score: number, elapsedMs = 60_000, moves = 100): void => {
+    store.recordGameStart();
+    store.recordWin({ score, elapsedMs, moves });
+  };
+
+  it("counts a game from its first move, not from the deal", () => {
+    expect(store.loadStats().played).toBe(0);
+    store.recordGameStart();
+    expect(store.loadStats()).toMatchObject({ played: 1, won: 0, pending: true });
   });
 
-  it("keeps the record when a later game scores less", () => {
-    store.recordBestScore(940);
-    expect(store.recordBestScore(500)).toEqual({ best: 940, isRecord: false });
-    expect(store.loadBestScore()).toBe(940);
+  it("records a win against the game it belongs to", () => {
+    store.recordGameStart();
+    const { stats, isRecord } = store.recordWin({ score: 940, elapsedMs: 402_000, moves: 118 });
+    expect(isRecord).toBe(true);
+    expect(stats).toMatchObject({
+      played: 1,
+      won: 1,
+      streak: 1,
+      bestStreak: 1,
+      bestScore: 940,
+      fastestMs: 402_000,
+      fewestMoves: 118,
+      totalMs: 402_000,
+      pending: false,
+    });
   });
 
-  it("treats matching the record as no record", () => {
-    store.recordBestScore(940);
-    expect(store.recordBestScore(940)).toEqual({ best: 940, isRecord: false });
+  it("keeps the best score, fastest time and fewest moves independently", () => {
+    playAndWin(store, 940, 402_000, 118);
+    playAndWin(store, 500, 120_000, 200); // quicker, worse score, more moves
+    expect(store.loadStats()).toMatchObject({
+      bestScore: 940,
+      fastestMs: 120_000,
+      fewestMoves: 118,
+      totalMs: 522_000,
+      won: 2,
+    });
   });
 
-  it("beats the record and keeps the higher score", () => {
-    store.recordBestScore(940);
-    expect(store.recordBestScore(1200)).toEqual({ best: 1200, isRecord: true });
-    expect(store.loadBestScore()).toBe(1200);
+  it("only calls a strictly higher score a record", () => {
+    playAndWin(store, 940);
+    store.recordGameStart();
+    expect(store.recordWin({ score: 940, elapsedMs: 1, moves: 1 }).isRecord).toBe(false);
+    store.recordGameStart();
+    expect(store.recordWin({ score: 941, elapsedMs: 1, moves: 1 }).isRecord).toBe(true);
   });
 
-  it.each([["negative", "-40"], ["fractional", "12.5"], ["not a number", "loads"], ["empty", ""]])(
-    "reads a %s stored best as 0",
-    (_label, raw) => {
-      mem.setItem("solitaire-best", raw);
-      expect(store.loadBestScore()).toBe(0);
-      // ...so any real score still counts as a record.
-      expect(store.recordBestScore(10).isRecord).toBe(true);
-    },
-  );
+  it("builds a streak over consecutive wins and remembers the best run", () => {
+    playAndWin(store, 100);
+    playAndWin(store, 100);
+    expect(store.loadStats()).toMatchObject({ streak: 2, bestStreak: 2 });
+    store.recordGameStart();
+    store.recordAbandon(30_000); // gave up on the third
+    expect(store.loadStats()).toMatchObject({ streak: 0, bestStreak: 2, played: 3, won: 2 });
+    playAndWin(store, 100);
+    expect(store.loadStats()).toMatchObject({ streak: 1, bestStreak: 2 });
+  });
+
+  it("banks the time of a game given up on, and counts it as played", () => {
+    store.recordGameStart();
+    store.recordAbandon(45_000);
+    expect(store.loadStats()).toMatchObject({ played: 1, won: 0, totalMs: 45_000, pending: false });
+  });
+
+  it("ignores an abandon with no game under way", () => {
+    expect(store.recordAbandon(45_000)).toMatchObject({ played: 0, totalMs: 0 });
+  });
+
+  it("breaks the streak when a game was left unfinished in an earlier session", () => {
+    playAndWin(store, 100);
+    store.recordGameStart(); // left pending, e.g. the tab was closed
+    store.recordGameStart(); // ...and a fresh game started later
+    expect(store.loadStats()).toMatchObject({ streak: 0, played: 3 });
+  });
+
+  it("counts a win with no recorded start, so the win rate can't exceed 100%", () => {
+    const { stats } = store.recordWin({ score: 10, elapsedMs: 1000, moves: 5 });
+    expect(stats).toMatchObject({ played: 1, won: 1 });
+  });
+
+  it("inherits a best score saved before stats existed", () => {
+    mem.setItem("solitaire-best", "1200");
+    expect(store.loadStats().bestScore).toBe(1200);
+    // ...and beating it is measured against the inherited value.
+    store.recordGameStart();
+    expect(store.recordWin({ score: 900, elapsedMs: 1, moves: 1 }).isRecord).toBe(false);
+  });
+
+  it("resets everything, including the pre-stats best score", () => {
+    mem.setItem("solitaire-best", "1200");
+    playAndWin(store, 1500);
+    store.resetStats();
+    expect(store.loadStats()).toMatchObject({ played: 0, won: 0, bestScore: 0, totalMs: 0 });
+  });
+
+  it.each([
+    ["not JSON", "{nope"],
+    ["an array", "[1,2,3]"],
+    ["a bare number", "42"],
+    ["null", "null"],
+    ["a future schema", JSON.stringify({ v: 99, played: 5, won: 5 })],
+  ])("reads %s as an empty record", (_label, raw) => {
+    mem.setItem("solitaire-stats", raw);
+    expect(store.loadStats()).toMatchObject({ played: 0, won: 0, bestScore: 0 });
+  });
+
+  it("sanitises individual fields without dropping the rest", () => {
+    mem.setItem(
+      "solitaire-stats",
+      JSON.stringify({ v: 1, played: 10, won: 99, streak: -2, bestScore: 12.5, totalMs: 5000 }),
+    );
+    expect(store.loadStats()).toMatchObject({
+      played: 10,
+      won: 10, // clamped: a hand-edited record can't win more games than it played
+      streak: 0,
+      bestScore: 0,
+      totalMs: 5000,
+    });
+  });
+
 });
 
 describe("with localStorage that always throws", () => {
@@ -207,9 +308,15 @@ describe("with localStorage that always throws", () => {
     expect(() => store.clearGame()).not.toThrow();
   });
 
-  it("still reports the win as a record when the best score can't be stored", () => {
+  it("still reports the win as a record when the stats can't be stored", () => {
     // The player did just win; a dead storage layer shouldn't tell them otherwise.
-    expect(store.recordBestScore(940)).toEqual({ best: 940, isRecord: true });
+    const { stats, isRecord } = store.recordWin({ score: 940, elapsedMs: 1000, moves: 20 });
+    expect(isRecord).toBe(true);
+    expect(stats).toMatchObject({ won: 1, bestScore: 940 });
+  });
+
+  it("swallows resetStats", () => {
+    expect(() => store.resetStats()).not.toThrow();
   });
 
   it("latches off after the first failed write and stops retrying", () => {

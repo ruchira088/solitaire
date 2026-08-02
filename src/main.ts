@@ -13,7 +13,19 @@ import { preloadFaceArt } from "./courtArt";
 import { preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
 import { isSoundEnabled, setSoundEnabled, playDeal, unlockAudio } from "./sound";
-import { clearGame, loadGame, readItem, recordBestScore, saveGame, writeItem } from "./storage";
+import {
+  clearGame,
+  loadGame,
+  loadStats,
+  readItem,
+  recordAbandon,
+  recordGameStart,
+  recordWin,
+  resetStats,
+  saveGame,
+  Stats,
+  writeItem,
+} from "./storage";
 import { encodeSeed, parseSeed } from "./rng";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
@@ -48,9 +60,14 @@ let celebStarted = false;
 let resuming = false; // a saved game was restored; the overlay reveals it instead of dealing
 let started = false; // the start overlay has been dismissed
 let chromeHidden = false; // toolbar folded down to its toggle
-/** Set when a game is won: the best score to show on the win panel, and whether this
- *  game just set it. Null until then. */
-let winRecord: { best: number; isRecord: boolean } | null = null;
+/** Set when a game is won: the lifetime stats to show on the win panel, and whether
+ *  this game beat the best score. Null until then. */
+let winRecord: { stats: Stats; isRecord: boolean } | null = null;
+/** This deal has been counted in `played`. Undo can take the move count back to 0, so
+ *  the flag — not `game.moves` — is what stops a game being counted twice. */
+let countedPlayed = false;
+let resetArmed = false; // the stats reset button is waiting for a confirming click
+let resetTimer = 0;
 
 // ---- DPI-aware sizing ------------------------------------------------------
 
@@ -157,6 +174,12 @@ const el = {
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
+  stats: document.getElementById("btn-stats") as HTMLButtonElement,
+  statsOverlay: document.getElementById("stats-overlay") as HTMLElement,
+  statsList: document.getElementById("stats-list") as HTMLElement,
+  statsReset: document.getElementById("stats-reset") as HTMLButtonElement,
+  statsResetLabel: document.getElementById("stats-reset-label") as HTMLElement,
+  statsClose: document.getElementById("stats-close") as HTMLButtonElement,
   winOverlay: document.getElementById("win-overlay") as HTMLElement,
   winScore: document.getElementById("win-score") as HTMLElement,
   winNew: document.getElementById("win-new") as HTMLButtonElement,
@@ -266,7 +289,7 @@ function autoStep(): void {
 function startCelebration(): void {
   if (celebration.active) return;
   clearGame(); // a finished game shouldn't resume on the next load
-  winRecord = recordBestScore(game.score);
+  winRecord = recordWin({ score: game.score, elapsedMs: elapsedNow(), moves: game.moves });
   if (timerStart !== null) {
     elapsedFrozen += performance.now() - timerStart;
     timerStart = null;
@@ -300,7 +323,7 @@ function showWinPanel(): void {
   const record = winRecord?.isRecord ?? false;
   el.winScore.textContent = record
     ? `🏆 New best score — ${game.score}`
-    : `Score ${game.score}  ·  Best ${winRecord ? winRecord.best : game.score}`;
+    : `Score ${game.score}  ·  Best ${winRecord ? winRecord.stats.bestScore : game.score}`;
   el.winScore.classList.toggle("is-record", record);
   syncBarHeight();
   el.winOverlay.hidden = false;
@@ -309,6 +332,81 @@ function showWinPanel(): void {
 
 function hideWinPanel(): void {
   el.winOverlay.hidden = true;
+}
+
+// ---- Statistics dialog -----------------------------------------------------
+
+/** Durations for the stats list: minutes and seconds up to an hour, then hours and
+ *  minutes, since a lifetime total runs long. A zero means it never happened. */
+function fmtDuration(ms: number): string {
+  if (ms <= 0) return "—";
+  const total = Math.round(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function statRows(s: Stats): [string, string][] {
+  const dash = (n: number): string => (n > 0 ? String(n) : "—");
+  return [
+    ["Games played", String(s.played)],
+    ["Games won", String(s.won)],
+    ["Win rate", s.played === 0 ? "—" : `${Math.round((s.won / s.played) * 100)}%`],
+    ["Current streak", String(s.streak)],
+    ["Best streak", String(s.bestStreak)],
+    ["Best score", dash(s.bestScore)],
+    ["Fastest win", fmtDuration(s.fastestMs)],
+    ["Fewest moves", dash(s.fewestMoves)],
+    ["Time played", fmtDuration(s.totalMs)],
+  ];
+}
+
+function renderStats(): void {
+  el.statsList.replaceChildren(
+    ...statRows(loadStats()).flatMap(([label, value]) => {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = value;
+      return [dt, dd];
+    }),
+  );
+}
+
+function openStats(): void {
+  renderStats();
+  disarmReset(); // a freshly opened dialog never opens half-way through a confirmation
+  el.statsOverlay.hidden = false;
+  el.statsClose.focus();
+}
+
+function closeStats(): void {
+  el.statsOverlay.hidden = true;
+  disarmReset();
+  el.stats.focus(); // back to the button that opened it
+}
+
+/** Wiping the record is destructive and unundoable, so the button asks first and
+ *  forgets the question after a few seconds. */
+function armOrResetStats(): void {
+  if (!resetArmed) {
+    resetArmed = true;
+    el.statsReset.classList.add("is-confirming");
+    el.statsResetLabel.textContent = "Confirm reset";
+    resetTimer = window.setTimeout(disarmReset, 4000);
+    return;
+  }
+  disarmReset();
+  resetStats();
+  renderStats();
+}
+
+function disarmReset(): void {
+  window.clearTimeout(resetTimer);
+  resetArmed = false;
+  el.statsReset.classList.remove("is-confirming");
+  el.statsResetLabel.textContent = "Reset stats";
 }
 
 // ---- Deal animation --------------------------------------------------------
@@ -367,6 +465,10 @@ function persist(): void {
 function onChange(): void {
   clearHint();
   syncSpareLayout();
+  if (!countedPlayed && game.moves > 0) {
+    countedPlayed = true;
+    recordGameStart();
+  }
   // Restart the clock on the first move, and after a resume (where elapsedFrozen
   // carries the saved time, so it can't be the "not started yet" signal).
   if (timerStart === null && !game.isWon() && game.moves > 0) {
@@ -380,6 +482,9 @@ function onChange(): void {
 /** Shared by New Game and Restart, so the two can't drift. `deal` either shuffles a
  *  fresh layout or replays the current seed. */
 function beginGame(deal: () => void): void {
+  // Walking away from a game in progress is a loss, and its time still counts.
+  if (countedPlayed && !game.isWon()) recordAbandon(elapsedNow());
+  countedPlayed = false;
   celebration.stop();
   celebStarted = false;
   hideWinPanel();
@@ -607,6 +712,13 @@ el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
 el.restart.addEventListener("click", restartDeal);
+el.stats.addEventListener("click", openStats);
+el.statsClose.addEventListener("click", closeStats);
+el.statsReset.addEventListener("click", armOrResetStats);
+// A click on the backdrop — not the panel — dismisses it, as a modal should.
+el.statsOverlay.addEventListener("click", (e) => {
+  if (e.target === el.statsOverlay) closeStats();
+});
 el.winNew.addEventListener("click", newGame);
 el.winRestart.addEventListener("click", restartDeal);
 el.hint.addEventListener("click", showHint);
@@ -630,7 +742,8 @@ window.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
   if (e.key === "Escape") {
-    input.cancelDrag();
+    if (!el.statsOverlay.hidden) closeStats();
+    else input.cancelDrag();
     return;
   }
   if (mod && key === "z") {
@@ -674,6 +787,8 @@ if (resumeSaved) {
   game.restore(saved!.state);
   elapsedFrozen = saved!.elapsed;
   resuming = true;
+  // It was counted as played when it started, possibly in an earlier session.
+  countedPlayed = loadStats().pending;
 } else if (urlSeed !== null) {
   game.deal(urlSeed);
 }

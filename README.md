@@ -26,8 +26,10 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   auto-complete sweep, and a classic bouncing-card **win celebration**.
 - 🃏 **Full Klondike rules** — Draw 1 / Draw 3 toggle, multi-card run dragging,
   waste recycling, undo/redo history, hints, scoring, move counter and timer.
-- 🏆 **Best score remembered** — your highest score is kept in `localStorage` and
-  shown on the win banner, which calls it out when you've just beaten it.
+- 🏆 **Lifetime statistics** — games played, games won, win rate, current and best
+  streak, best score, fastest win, fewest moves and total time played, all kept in
+  `localStorage`. The win dialog calls out a new best score, and the stats can be
+  reset whenever you want a clean slate.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
@@ -111,6 +113,17 @@ the cards large and easy to tap instead of squeezing seven columns side-by-side.
 Rotating the phone switches back to the classic column layout.
 
 <img src="screenshots/iphone.png" alt="Phone-portrait layout" width="340">
+
+## Statistics
+
+The **📊** button in the toolbar opens your record: games played and won, win rate,
+current and best streak, best score, fastest win, fewest moves, and total time
+played. A deal counts as *played* from its first move — so flicking through deals
+looking for a friendly one doesn't dent your win rate — and walking away from a game
+in progress counts as a loss and breaks the streak. **Reset stats** wipes the lot,
+and asks once before it does.
+
+![Statistics](screenshots/stats.png)
 
 ## Win celebration
 
