@@ -511,6 +511,31 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   display: none;
 }
 
+/* Confirmation that the result reached the clipboard. Green rather than the yellow
+   accent, which on this panel already means "new record". */
+#win-share.is-copied {
+  background: #1f7a4d;
+  border-color: #2fa268;
+  color: #eafff3;
+}
+
+/* Only shown when the clipboard API refused, so there is still a way to copy. */
+.share-fallback {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--btn-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  resize: none;
+  field-sizing: content;
+}
+
 .dialog-actions {
   display: flex;
   flex-wrap: wrap;
