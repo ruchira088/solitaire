@@ -46,8 +46,8 @@ visual or behavioural, run the app and look at it (see Verifying).
 Vitest, colocated as `src/*.test.ts`. `npm test`, `npm run typecheck` and
 `npm run smoke` all gate CI ahead of every deploy — see the `build-and-typecheck` job.
 
-Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts` and
-`storage.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
+Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts`,
+`storage.ts` and `share.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
 and mocking one only buys assertions about the mock.
 
 **`npm run smoke` is what covers those instead** (`scripts/smoke.mjs`). It serves the
@@ -103,6 +103,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/theme.ts` | Light / dark felt + placeholder palettes |
 | `src/sound.ts` | WebAudio sound effects (deal tick, etc.) |
 | `src/storage.ts` | `localStorage`: UI preferences + the in-progress game save |
+| `src/share.ts` | The result text the win dialog copies — **pure**, no DOM |
 
 ### Key design invariants
 
@@ -114,6 +115,21 @@ logic, rendering, animation, and input kept cleanly separated.
 - **`game.ts` stays pure.** Rules, move validation, scoring, and undo snapshots
   have no DOM/canvas dependencies. Keep new rules logic here and testable in
   isolation.
+- **The board is painted only when it changes.** Solitaire spends most of its life
+  as a static picture while the player thinks, and repainting it at 120 Hz to produce
+  an identical frame is pure battery — measured at ~750 card-face `drawImage` calls a
+  second on an idle board before this. `frame` paints when `dirty` is set, while the
+  animator is running, while a drag is live, or during the celebration; `invalidate()`
+  sets the flag. **Anything that changes what the canvas should show must call it** —
+  a missed one leaves a stale board, which is far worse than the frames it saves.
+  Three subtleties: `wasAnimating` is read *before* `animator.update()`, because the
+  frame that finishes the last flight still has to paint or the card never appears at
+  rest; the `pendingCheck` sweep sits outside the paint gate, since a win has to be
+  noticed precisely when the board is idle; and `cardFaces.ts` gained
+  `onCardFaceLoad` because a court WebP decoding after the board settles is a change
+  with no other trigger — without it a late face would never replace the procedural
+  fallback. `rAF` itself keeps running (an empty callback is nearly free); stopping it
+  outright would save a little more and risk a frozen board for it.
 - **Model updates instantly; the view catches up.** A move mutates the game
   model immediately, then `Animator.flyCard` animates the affected cards from
   their old screen positions to the new ones. Logic never waits on animation.

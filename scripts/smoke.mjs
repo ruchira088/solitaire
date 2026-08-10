@@ -129,12 +129,29 @@ try {
   check("a fresh game starts at zero moves", (await moves()) === "0");
   check("undo starts disabled", await disabled("#btn-undo"));
 
+  // Hash of sampled canvas pixels: enough to tell "the picture moved" from "the
+  // picture is stale", which is the failure mode main.ts's paint gate can cause.
+  const canvasSig = () => page.evaluate(() => {
+    const c = document.getElementById("board");
+    const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    let h = 2166136261;
+    for (let i = 0; i < d.length; i += 4 * 31) {
+      h ^= d[i] + d[i + 1] * 3 + d[i + 2] * 7;
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  });
+
   // A full round trip through game -> layout -> render, driven from the toolbar so no
   // canvas coordinates are involved: buying a ✦ stack is a counted move and adds a
   // board column.
+  const sigBefore = await canvasSig();
   await page.click("#btn-add-stack");
   await page.waitForTimeout(500);
   check("buying a ✦ stack counts a move", (await moves()) === "1", `moves = ${await moves()}`);
+  // main.ts only repaints when something marked the board dirty. A missed invalidate
+  // leaves the player looking at a board that no longer matches the game.
+  check("the board repaints after a move", (await canvasSig()) !== sigBefore);
   check("undo is enabled after a move", !(await disabled("#btn-undo")));
 
   await page.click("#btn-undo");
@@ -162,6 +179,21 @@ try {
   await page.click("#btn-theme");
   await page.waitForTimeout(300);
   check("the theme toggle switches the page", await page.evaluate(() => document.body.classList.contains("theme-light")));
+
+  // ...and the other half of that bargain: once nothing is happening, it must stop
+  // drawing. Counting real drawImage calls, since an idle loop that repaints an
+  // identical frame is invisible to a pixel hash. Update this deliberately if the
+  // board ever gains something that animates continuously.
+  const idleDraws = await page.evaluate(async () => {
+    const ctx = document.getElementById("board").getContext("2d");
+    const orig = ctx.drawImage.bind(ctx);
+    let n = 0;
+    ctx.drawImage = (...a) => { n++; return orig(...a); };
+    await new Promise((r) => setTimeout(r, 1000));
+    ctx.drawImage = orig;
+    return n;
+  });
+  check("an idle board stops drawing entirely", idleDraws === 0, `${idleDraws} card draws in 1s while idle`);
 
   check("no console errors on desktop", logged.length === 0, logged.join(" | "));
   await page.close();

@@ -37,12 +37,25 @@ const BASE = import.meta.env.BASE_URL;
 
 const cache = new Map<string, HTMLImageElement>();
 
+/** Notified whenever a face finishes decoding. The renderer only draws when something
+ *  has changed, and a face arriving *is* a change: until it lands the card is drawn
+ *  with the procedural fallback, so without this a court card that decodes after the
+ *  board goes idle would never be replaced by its real art. */
+const listeners = new Set<() => void>();
+
+export function onCardFaceLoad(fn: () => void): void {
+  listeners.add(fn);
+}
+
 /** The loaded SVG face for a card, or null while it is still decoding. */
 export function getCardFace(card: Card): HTMLImageElement | null {
   const name = fileName(card);
   let img = cache.get(name);
   if (!img) {
     img = new Image();
+    img.addEventListener("load", () => {
+      for (const fn of listeners) fn();
+    });
     img.src = `${BASE}cards/${name}`;
     cache.set(name, img);
   }

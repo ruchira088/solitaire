@@ -10,7 +10,7 @@ import { Renderer } from "./render";
 import { Input } from "./input";
 import { cardPos } from "./positions";
 import { preloadFaceArt } from "./courtArt";
-import { preloadCardFaces } from "./cardFaces";
+import { onCardFaceLoad, preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
 import { isSoundEnabled, setSoundEnabled, playDeal, unlockAudio } from "./sound";
 import {
@@ -28,6 +28,7 @@ import {
   writeItem,
 } from "./storage";
 import { dailyKey, dailySeed, encodeSeed, parseSeed } from "./rng";
+import { formatClock, shareText } from "./share";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -67,6 +68,12 @@ let winRecord: { stats: Stats; isRecord: boolean } | null = null;
 let countedPlayed = false;
 let resetArmed = false; // the stats reset button is waiting for a confirming click
 let resetTimer = 0;
+let shareTimer = 0; // the Share button's "Copied!" label, reverted after a moment
+/** The board needs repainting. Solitaire spends most of its life as a completely
+ *  static picture while the player thinks, and redrawing it 120 times a second to
+ *  produce an identical frame is pure battery. So the loop paints only when something
+ *  can have changed — see `frame`. Starts true for the first paint. */
+let dirty = true;
 
 // ---- DPI-aware sizing ------------------------------------------------------
 
@@ -91,6 +98,7 @@ function resize(): void {
   layout = computeLayout(rect.width, rect.height, sparesShown);
   appliedW = rect.width;
   appliedH = rect.height;
+  invalidate();
 }
 
 function scheduleResize(): void {
@@ -115,6 +123,7 @@ function applyResize(): void {
 function refreshAfterResize(): void {
   input.cancelDrag(); // its offsets and snap-back targets are in old-layout space
   celebStarted = false; // resizing the canvas cleared the celebration's base frame
+  invalidate();
 
   // Before the overlay is dismissed, the animator is holding the board hidden
   // (hideCards); clearing it would reveal a dealt board through the overlay.
@@ -181,16 +190,11 @@ const el = {
   winOverlay: document.getElementById("win-overlay") as HTMLElement,
   winScore: document.getElementById("win-score") as HTMLElement,
   winDaily: document.getElementById("win-daily") as HTMLElement,
+  winShare: document.getElementById("win-share") as HTMLButtonElement,
+  winShareLabel: document.getElementById("win-share-label") as HTMLElement,
   winNew: document.getElementById("win-new") as HTMLButtonElement,
   winRestart: document.getElementById("win-restart") as HTMLButtonElement,
 };
-
-function fmtTime(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 function updateStats(): void {
   el.moves.textContent = String(game.moves);
@@ -202,23 +206,39 @@ function updateStats(): void {
 
 // ---- Game loop -------------------------------------------------------------
 
+/** Mark the board as needing a repaint. Anything that changes what the canvas should
+ *  show has to call this — a missed one leaves a stale board, which is a worse bug
+ *  than the wasted frames this avoids. Things that animate (flights, a live drag, the
+ *  celebration) don't need it: `frame` keeps painting while they run. */
+function invalidate(): void {
+  dirty = true;
+}
+
 function frame(now: number): void {
+  // Read before update(): the frame that *finishes* the last flight still has to
+  // paint, or the card never appears at rest where the flight left it.
+  const wasAnimating = animator.isAnimating();
   animator.update(now);
 
   if (celebration.active) {
     runCelebrationFrame();
   } else {
     input.updateDropTarget();
-    renderer.drawScene(ctx, game, layout, animator, input.drag);
+    if (dirty || wasAnimating || animator.isAnimating() || input.drag) {
+      renderer.drawScene(ctx, game, layout, animator, input.drag);
+      dirty = false;
+    }
+    // Outside the paint gate on purpose: the win and auto-complete sweep have to be
+    // noticed on an idle board, which is exactly when nothing is being painted.
     if (pendingCheck && !animator.isAnimating() && !input.drag) {
       pendingCheck = false;
       evaluateBoard();
     }
   }
 
-  // Live timer.
+  // Live timer. DOM text, not canvas, so it costs nothing to keep current.
   if (timerStart !== null && !game.isWon()) {
-    el.time.textContent = fmtTime(elapsedFrozen + (now - timerStart));
+    el.time.textContent = formatClock(elapsedFrozen + (now - timerStart));
   }
 
   requestAnimationFrame(frame);
@@ -254,6 +274,7 @@ function nextAutoSource(): { from: PileId; index: number } | null {
 }
 
 function autoStep(): void {
+  invalidate();
   const next = nextAutoSource();
   if (!next) {
     autoCompleting = false;
@@ -335,6 +356,7 @@ function showWinPanel(): void {
   const streak = winRecord && isDailyGame() ? currentDailyStreak(winRecord.stats, todayKey()) : 0;
   el.winDaily.hidden = streak === 0;
   el.winDaily.textContent = `📅 Daily deal · ${streak}-day streak`;
+  resetShareLabel();
   syncBarHeight();
   el.winOverlay.hidden = false;
   el.winNew.focus(); // so Enter/Space plays again without reaching for the mouse
@@ -342,6 +364,63 @@ function showWinPanel(): void {
 
 function hideWinPanel(): void {
   el.winOverlay.hidden = true;
+  resetShareLabel();
+}
+
+/** Copy the result and the deal link. Reads the daily streak back out of the record
+ *  written at win time, so a replayed daily reports the streak it actually holds
+ *  rather than claiming another day. */
+function currentWinText(): string {
+  const daily =
+    winRecord && isDailyGame()
+      ? { key: todayKey(), streak: currentDailyStreak(winRecord.stats, todayKey()) }
+      : undefined;
+  return shareText({
+    score: game.score,
+    moves: game.moves,
+    elapsedMs: elapsedNow(),
+    url: shareUrl(),
+    code: encodeSeed(game.seed),
+    daily,
+  });
+}
+
+/** The label is the only feedback there is, so a failure has to say so rather than
+ *  silently reading as success — clipboard writes are refused outside a secure
+ *  context and can be denied by permission policy. */
+async function copyWinResult(): Promise<void> {
+  window.clearTimeout(shareTimer);
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(currentWinText());
+    ok = true;
+  } catch {
+    ok = false;
+  }
+  el.winShareLabel.textContent = ok ? "Copied!" : "Press ⌘C";
+  el.winShare.classList.toggle("is-copied", ok);
+  if (!ok) selectFallbackText();
+  shareTimer = window.setTimeout(resetShareLabel, 2400);
+}
+
+/** When the clipboard API is unavailable, put the text somewhere the player can copy
+ *  it by hand instead of leaving them with a button that does nothing. */
+function selectFallbackText(): void {
+  const area = document.createElement("textarea");
+  area.value = currentWinText();
+  area.setAttribute("aria-label", "Your result — copy this");
+  area.className = "share-fallback";
+  el.winShare.parentElement?.appendChild(area);
+  area.focus();
+  area.select();
+  window.setTimeout(() => area.remove(), 8000);
+}
+
+function resetShareLabel(): void {
+  window.clearTimeout(shareTimer);
+  el.winShareLabel.textContent = "Share";
+  el.winShare.classList.remove("is-copied");
+  el.winOverlay.querySelector(".share-fallback")?.remove();
 }
 
 // ---- Statistics dialog -----------------------------------------------------
@@ -429,6 +508,7 @@ function disarmReset(): void {
 
 function startDeal(): void {
   busy = true;
+  invalidate();
   animator.clear();
   animator.setNow(performance.now());
 
@@ -479,6 +559,7 @@ function persist(): void {
 }
 
 function onChange(): void {
+  invalidate();
   syncSpareLayout();
   if (!countedPlayed && game.moves > 0) {
     countedPlayed = true;
@@ -507,6 +588,7 @@ function beginGame(deal: () => void): void {
   autoCompleting = false;
   resuming = false;
   animator.clear();
+  invalidate();
   deal();
   applyEasy(false); // the assist doesn't carry over to the next game
   clearGame();
@@ -607,6 +689,7 @@ function doRedo(): void {
 }
 
 function afterTimeTravel(): void {
+  invalidate();
   animator.clear();
   syncSpareLayout();
   updateStats();
@@ -622,6 +705,7 @@ function setDrawCount(n: DrawCount): void {
 
 function applyTheme(name: ThemeName): void {
   setTheme(name);
+  invalidate(); // the felt, vignette and placeholders are all repainted
   document.body.classList.toggle("theme-light", name === "light");
   el.theme.textContent = name === "light" ? "☀️" : "🌙";
   el.theme.title = name === "light" ? "Switch to dark theme" : "Switch to light theme";
@@ -761,6 +845,7 @@ el.statsOverlay.addEventListener("click", (e) => {
 });
 el.winNew.addEventListener("click", newGame);
 el.winRestart.addEventListener("click", restartDeal);
+el.winShare.addEventListener("click", copyWinResult);
 el.theme.addEventListener("click", toggleTheme);
 el.chrome.addEventListener("click", toggleChrome);
 el.sound.addEventListener("click", toggleSound);
@@ -803,6 +888,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+onCardFaceLoad(invalidate);
 preloadCardFaces();
 preloadFaceArt();
 const urlTheme = new URLSearchParams(location.search).get("theme");
@@ -837,7 +923,7 @@ if (urlDraw !== null && !resumeSaved) game.drawCount = urlDraw;
 applyEasy(resumeSaved ? saved!.state.easy : false);
 setDrawCount(game.drawCount);
 resize();
-el.time.textContent = fmtTime(elapsedFrozen);
+el.time.textContent = formatClock(elapsedFrozen);
 syncDealUrl();
 syncDailyButton();
 updateStats();
@@ -876,6 +962,7 @@ function dismissStartOverlay(resume: boolean): void {
   }
   resuming = false;
   animator.clear(); // reveals the restored board; startDeal() assumes a fresh pyramid
+  invalidate();
   if (game.moves > 0 && !game.isWon()) timerStart = performance.now();
   updateStats();
   pendingCheck = true; // a restored board may already be won or auto-completable
