@@ -317,6 +317,11 @@ build-and-typecheck ─▶ upload-bundle ─┬─▶ deploy-to-dev          (fe
 | feature branch | dev | `<branch>.solitaire.ruchij.com` |
 | `main` | staging → production | `staging.solitaire.ruchij.com` → `solitaire.ruchij.com` |
 
+`build-and-typecheck` gates everything downstream: `npm run typecheck`, `npm test`,
+a production build, and then `npm run smoke` — which boots that build in the runner's
+Chrome and checks the board actually paints, the toolbar stays on one row, and the
+controls still drive the game. Nothing deploys if any of those fail.
+
 `upload-bundle` runs `playbooks/s3-upload.yml`, which builds the Vite bundle,
 zips `dist/` to `client.zip`, and uploads it to
 `solitaire-bundles.ruchij.com/<branch>/<commit>/client.zip`. The deploy jobs then
@@ -376,11 +381,13 @@ ENVIRONMENT=production npm run deploy   # production → solitaire.ruchij.com
 - **TypeScript 7** (strict mode)
 - **HTML5 Canvas 2D** for all rendering
 - **Vite 8** for the dev server and production bundling
-- **Vitest** for the pure-logic unit tests
+- **Vitest** for the pure-logic unit tests, plus a Playwright smoke test that boots
+  the built bundle in real Chrome (`npm run smoke`) to cover the canvas, input and
+  toolbar that unit tests can't reach
 - **No runtime dependencies** — the shipped bundle is pure vanilla JS/Canvas, and
   `package.json` has no `dependencies` block at all. Everything installed
-  (TypeScript, Vite, Vitest, plus SVGO and `playwright-core` for the one-off card-art
-  and screenshot tooling) is build-time only.
+  (TypeScript, Vite, Vitest, plus SVGO and `playwright-core` for the smoke test and
+  the one-off card-art and screenshot tooling) is build-time only.
 
 ## Credits
 

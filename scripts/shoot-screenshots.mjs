@@ -15,6 +15,11 @@
 // first and it can't collide with `npm run dev`. Chrome is the renderer because
 // Chrome is what draws these for real users.
 //
+// It also produces public/og.png, the link-preview image index.html points social
+// scrapers at — same board, shot at the 1200x630 they show uncropped. Keeping it in
+// this script is the point: a preview generated from the real app can't drift into
+// advertising a version of the game that no longer exists.
+//
 // cards.png is card art, produced by cards:rasterize, and is not touched here.
 //
 // Three things make a run reproducible rather than fiddly, and all three have gone
@@ -42,6 +47,7 @@ import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(root, "screenshots");
+const PUBLIC = join(root, "public");
 
 const CHROME =
   process.env.CHROME_PATH ??
@@ -83,6 +89,8 @@ const SHOTS = {
   stats: { w: 1000, h: 700, board: "mid", prefs: { "solitaire-stats": STATS }, dialog: "#btn-stats" },
   win: { w: 1280, h: 706, board: "won", elapsed: WIN_ELAPSED, prefs: { "solitaire-stats": STATS_PRE_WIN }, settle: 9000 },
   iphone: { w: 390, h: 844, dpr: 2, mobile: true, board: "mid", draw: true },
+  // Not a README shot: the og:image, so it lands in public/ to be served at /og.png.
+  og: { w: 1200, h: 630, board: "mid", draw: true, dir: PUBLIC, prefs: { "solitaire-chrome": "hidden" } },
 };
 
 const only = process.env.ONLY?.split(",").map((s) => s.trim()).filter(Boolean);
@@ -245,12 +253,13 @@ try {
       await page.waitForTimeout(400);
     }
 
-    await page.screenshot({ path: join(OUT, `${name}.png`) });
+    await page.screenshot({ path: join(spec.dir ?? OUT, `${name}.png`) });
     const s = await page.evaluate(() => ({
       moves: document.getElementById("stat-moves").textContent,
       score: document.getElementById("stat-score").textContent,
     }));
-    console.log(`  ${`${name}.png`.padEnd(22)} ${`${spec.w}x${spec.h}`.padEnd(10)} ${s.moves} moves, ${s.score} points`);
+    const where = spec.dir === PUBLIC ? "public/" : "screenshots/";
+    console.log(`  ${`${where}${name}.png`.padEnd(30)} ${`${spec.w}x${spec.h}`.padEnd(10)} ${s.moves} moves, ${s.score} points`);
     await page.close();
   }
 } finally {
@@ -263,5 +272,5 @@ if (problems.length) {
   for (const p of problems) console.error(`  ${p}`);
   process.exitCode = 1;
 } else {
-  console.log(`\n${names.length} screenshot(s) written to screenshots/, no console errors.`);
+  console.log(`\n${names.length} image(s) written, no console errors.`);
 }

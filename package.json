@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "smoke": "node scripts/smoke.mjs",
     "screenshots": "node scripts/shoot-screenshots.mjs",
     "cards:rasterize": "node scripts/rasterize-cards.mjs",
     "cards:optimize": "svgo -f public/cards --config svgo.config.mjs"

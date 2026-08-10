@@ -14,10 +14,10 @@ Everything installed is dev/build tooling:
 | Package | Range | Used for |
 | --- | --- | --- |
 | `typescript` | `^7.0.2` | strict-mode checking (`npm run typecheck`) and the `tsc` step ahead of `vite build` |
-| `vite` | `^8.1.5` | dev server + production bundle, and `createServer` is what the screenshot script serves the app from. Its `engines` field is what sets the **Node 20.19+ / 22.12+** floor (`.nvmrc` pins 24) |
+| `vite` | `^8.1.5` | dev server + production bundle; `createServer` serves the app for the screenshot script and `preview` serves `dist/` for the smoke test. Its `engines` field is what sets the **Node 20.19+ / 22.12+** floor (`.nvmrc` pins 24) |
 | `vitest` | `^4.1.10` | the pure-logic suite (`npm test`), configured separately in `vitest.config.ts` |
 | `svgo` | `^4.0.2` | one-off pip/ace face optimisation (`npm run cards:optimize`) |
-| `playwright-core` | `^1.62.0` | drives *system* Chrome — `scripts/rasterize-cards.mjs`, `scripts/shoot-screenshots.mjs` and the visual checks below. `-core` on purpose: no browser binaries are downloaded |
+| `playwright-core` | `^1.62.0` | drives *system* Chrome — `scripts/smoke.mjs` (which runs in CI), `scripts/rasterize-cards.mjs`, `scripts/shoot-screenshots.mjs` and the visual checks below. `-core` on purpose: no browser binaries are downloaded, so CI uses the runner's preinstalled Chrome |
 
 **When any of this changes — a package added, removed, or moved across a major
 version — update the table above *and* the matching spots in `README.md`:** the
@@ -34,6 +34,7 @@ npm test            # vitest run — the pure-logic suite
 npm run test:watch  # vitest in watch mode
 npm run build       # tsc + vite build → dist/
 npm run preview     # serve the production build
+npm run smoke       # boot dist/ in Chrome and check the game works (needs a build)
 npm run screenshots # reshoot screenshots/*.png (one-off; output is committed)
 ```
 
@@ -42,13 +43,29 @@ visual or behavioural, run the app and look at it (see Verifying).
 
 ### Tests
 
-Vitest, colocated as `src/*.test.ts`. Both `npm test` and `npm run typecheck` gate
-CI ahead of every deploy — see the `build-and-typecheck` job.
+Vitest, colocated as `src/*.test.ts`. `npm test`, `npm run typecheck` and
+`npm run smoke` all gate CI ahead of every deploy — see the `build-and-typecheck` job.
 
 Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts` and
 `storage.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
-and mocking one only buys assertions about the mock — those are covered by the
-Playwright procedure under "Verifying visual changes" instead.
+and mocking one only buys assertions about the mock.
+
+**`npm run smoke` is what covers those instead** (`scripts/smoke.mjs`). It serves the
+*built* `dist/` with Vite's preview server and drives real Chrome, so it exercises the
+bundle that deploys rather than the dev module graph — which is also why every
+assertion goes through the DOM and every interaction through a toolbar button: there
+is no `/src/*.ts` to import in a production build, and canvas coordinates would be
+fragile across viewports. It is kept out of vitest deliberately, so `npm test` stays
+the fast pure suite and doesn't drag Chrome onto its path.
+
+The load-bearing check is that **the canvas actually painted**: card faces are the
+only near-white thing on a green table, so the fraction of light pixels separates
+"dealt a board" from "drew nothing", which is what a broken render path looks like and
+what `tsc` cannot see. The rest — the toolbar not wrapping at 1280, a ✦ stack counting
+a move, undo taking it back, the daily dealing and stamping the URL, Escape closing
+the stats dialog, no console errors on desktop or phone — is wiring that only breaks
+in a browser. Both headline checks were verified by mutation: breaking the media query
+so the bar wraps at 1280, and deleting the `drawScene` call, each fail the run.
 
 Conventions worth keeping:
 
@@ -329,6 +346,14 @@ Each shot keeps the pixel size it has always had: 1280×820 for `gameplay`,
 `gameplay-light` and `spare-pile`, 1280×706 for `win`, 1000×700 for `stats` and
 `toolbar-hidden` (narrow enough that the ☰ is offered), and 390×844 at DPR 2 for
 `iphone`. `cards.png` is card art from `cards:rasterize` and is not touched here.
+
+The same run also writes **`public/og.png`** (1200×630, the ratio scrapers show
+uncropped), which `index.html` points `og:image` at. It lives in this script on
+purpose: a link preview built from the real app can't drift into advertising a version
+of the game that no longer exists. It is shot with the toolbar folded — at that height
+the cards come out far more legible, and a preview is rendered small. The `og:` tags
+and `canonical` are deliberately static even for a `?deal=` link, since every deal is
+the same page and would get the same picture.
 
 The script's header comment carries the reasoning and is worth reading before
 changing it. The short version, each point having gone wrong at least once:

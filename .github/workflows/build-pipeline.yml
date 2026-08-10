@@ -42,6 +42,15 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      # `npm test` is the pure-logic suite by design, which leaves render/input/
+      # animation/main -- over half the source -- checked by nothing but tsc. This
+      # boots the bundle just built in the runner's preinstalled Chrome and asserts
+      # the board actually paints, the toolbar doesn't wrap, and the toolbar controls
+      # still drive the game. playwright-core downloads no browser of its own;
+      # scripts/smoke.mjs finds the system one, or CHROME_PATH overrides it.
+      - name: Smoke test the production bundle
+        run: npm run smoke
+
   upload-bundle:
     name: Upload bundle to S3
     runs-on: ubuntu-latest
