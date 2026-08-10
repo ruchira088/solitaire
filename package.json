@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "description": "A high-quality Klondike Solitaire clone (TypeScript + Canvas)",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",

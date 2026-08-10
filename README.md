@@ -31,6 +31,9 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   date itself. Win it on consecutive days to build a **daily streak**; miss a day and
   the run starts over. The **📅** button (or `D`) deals it and shows whether today's
   is unplayed, under way, or already won.
+- 🔗 **Share your result** — winning offers a **Share** button that copies your
+  score, time, moves and daily streak, with a link to the exact deal, ready to paste
+  into a chat.
 - 🏆 **Lifetime statistics** — games played, games won, win rate, current and best
   streak, best score, fastest win, fewest moves, total time played, and your daily
   streak, all kept in `localStorage`. The win dialog calls out a new best score, and
@@ -56,6 +59,9 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   double-tap to auto-send a card to its foundation. While you drag, the pile
   you'd land on lights up, the cursor shows what's grabbable, and `Esc` puts
   the cards back.
+- 🔋 **Idles properly** — the canvas is repainted only when something actually
+  changes, so a board you're staring at while you think costs nothing rather than
+  redrawing itself a hundred times a second.
 - 📐 **Responsive** — the board re-lays out to fit any window size. Cards are
   sized to fill the table, with room for an ordinary column to fan; deeper
   columns overlap tighter instead of shrinking every card. Phone-portrait
@@ -155,8 +161,9 @@ does.
 Finish a game — or let the **auto-complete** finish it for you — and the cards
 cascade and bounce across the table in the classic Solitaire victory animation. A
 dialog shows what you scored against your **best score so far** — kept in
-`localStorage` and announced when you beat it — with **New Game** and **Restart**
-right there. The cascade keeps running behind it, and the toolbar stays usable:
+`localStorage` and announced when you beat it — with **New Game**, **Restart** and
+**Share** right there. Share copies your result and the deal link to the clipboard,
+so a daily win can be pasted straight into a chat. The cascade keeps running behind it, and the toolbar stays usable:
 
 ![Win celebration](screenshots/win.png)
 
@@ -196,6 +203,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Send to a foundation** | Drag an Ace (or the next card in sequence) onto a foundation, or **double-click** (double-tap on touch) a card to auto-send it. |
 | **Park a stack** | Click **+ Stack** in the toolbar (−50 points, up to 3), then drag a card or run onto the ✦ pile to set it aside and reveal the card underneath. The pile disappears once you empty it. |
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
+| **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
 | **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…`), plus `&draw=3` when you're playing Draw 3. |
@@ -397,5 +405,6 @@ released into the **public domain**.
 
 ## License
 
-MIT — free to use, modify and share. (Card-face SVGs are public domain; see
-Credits.)
+MIT — free to use, modify and share; the full text is in [`LICENSE`](LICENSE).
+The card-face artwork is public domain and is not covered by that copyright — see
+Credits.
