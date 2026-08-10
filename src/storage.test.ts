@@ -153,6 +153,10 @@ describe("with working storage", () => {
       fewestMoves: 0,
       totalMs: 0,
       pending: false,
+      dailyWins: 0,
+      dailyStreak: 0,
+      bestDailyStreak: 0,
+      lastDailyWin: "",
     });
   });
 
@@ -278,6 +282,158 @@ describe("with working storage", () => {
     });
   });
 
+  // ---- The daily deal ------------------------------------------------------
+
+  /** Win the daily for `day`, as one whole game. */
+  const winDaily = (day: string, score = 100): void => {
+    store.recordGameStart();
+    store.recordWin({ score, elapsedMs: 60_000, moves: 100, daily: day });
+  };
+
+  it("leaves the daily fields alone for an ordinary win", () => {
+    playAndWin(store, 500);
+    expect(store.loadStats()).toMatchObject({
+      won: 1,
+      dailyWins: 0,
+      dailyStreak: 0,
+      lastDailyWin: "",
+    });
+  });
+
+  it("records a daily win and starts the streak at 1", () => {
+    winDaily("2026-08-10");
+    expect(store.loadStats()).toMatchObject({
+      won: 1,
+      dailyWins: 1,
+      dailyStreak: 1,
+      bestDailyStreak: 1,
+      lastDailyWin: "2026-08-10",
+    });
+  });
+
+  it("extends the streak across consecutive days", () => {
+    winDaily("2026-08-10");
+    winDaily("2026-08-11");
+    winDaily("2026-08-12");
+    expect(store.loadStats()).toMatchObject({
+      dailyWins: 3,
+      dailyStreak: 3,
+      bestDailyStreak: 3,
+      lastDailyWin: "2026-08-12",
+    });
+  });
+
+  it("carries the streak over a month and a year boundary", () => {
+    winDaily("2026-08-31");
+    winDaily("2026-09-01");
+    expect(store.loadStats().dailyStreak).toBe(2);
+    winDaily("2026-12-31");
+    winDaily("2027-01-01");
+    expect(store.loadStats()).toMatchObject({ dailyStreak: 2, bestDailyStreak: 2 });
+  });
+
+  it("starts a new run after a missed day, keeping the best", () => {
+    winDaily("2026-08-10");
+    winDaily("2026-08-11");
+    winDaily("2026-08-14"); // two days skipped
+    expect(store.loadStats()).toMatchObject({
+      dailyWins: 3,
+      dailyStreak: 1,
+      bestDailyStreak: 2,
+    });
+  });
+
+  it("counts a day once, however many times it's replayed and re-won", () => {
+    winDaily("2026-08-10");
+    winDaily("2026-08-10");
+    winDaily("2026-08-10");
+    expect(store.loadStats()).toMatchObject({
+      won: 3, // three real wins...
+      dailyWins: 1, // ...of one day's deal
+      dailyStreak: 1,
+    });
+  });
+
+  it("ignores a malformed daily key rather than recording a phantom day", () => {
+    store.recordGameStart();
+    store.recordWin({ score: 100, elapsedMs: 1, moves: 1, daily: "10 August" });
+    expect(store.loadStats()).toMatchObject({ won: 1, dailyWins: 0, lastDailyWin: "" });
+  });
+
+  it("clamps dailyWins to the number of games won", () => {
+    mem.setItem("solitaire-stats", JSON.stringify({ v: 1, played: 3, won: 2, dailyWins: 99 }));
+    expect(store.loadStats().dailyWins).toBe(2);
+  });
+
+  it.each([["2026-8-1"], [""], ["nope"], [42], [null]])(
+    "reads a stored lastDailyWin of %p as never",
+    (v) => {
+      mem.setItem("solitaire-stats", JSON.stringify({ v: 1, lastDailyWin: v, dailyStreak: 5 }));
+      expect(store.loadStats().lastDailyWin).toBe("");
+    },
+  );
+
+  it("resets the daily record along with everything else", () => {
+    winDaily("2026-08-10");
+    store.resetStats();
+    expect(store.loadStats()).toMatchObject({
+      dailyWins: 0,
+      dailyStreak: 0,
+      bestDailyStreak: 0,
+      lastDailyWin: "",
+    });
+  });
+
+  describe("currentDailyStreak", () => {
+    /** The stored run, as left by winning `day`. */
+    const after = (day: string, run: number): ReturnType<Store["loadStats"]> => {
+      for (let i = run; i > 0; i--) {
+        const d = new Date(`${day}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - (i - 1));
+        winDaily(d.toISOString().slice(0, 10));
+      }
+      return store.loadStats();
+    };
+
+    it("is 0 before any daily has been won", () => {
+      expect(store.currentDailyStreak(store.loadStats(), "2026-08-10")).toBe(0);
+    });
+
+    it("stands while today's is already won", () => {
+      const s = after("2026-08-10", 3);
+      expect(s.dailyStreak).toBe(3);
+      expect(store.currentDailyStreak(s, "2026-08-10")).toBe(3);
+    });
+
+    it("stands the day after, with today's deal still there to extend it", () => {
+      const s = after("2026-08-10", 3);
+      expect(store.currentDailyStreak(s, "2026-08-11")).toBe(3);
+    });
+
+    it("has lapsed by the day after that", () => {
+      const s = after("2026-08-10", 3);
+      expect(store.currentDailyStreak(s, "2026-08-12")).toBe(0);
+      expect(store.currentDailyStreak(s, "2027-01-01")).toBe(0);
+      // ...though the record of it survives, and a new run starts at 1.
+      expect(s.bestDailyStreak).toBe(3);
+    });
+
+    it("reads a clock that has gone backwards as lapsed rather than negative", () => {
+      const s = after("2026-08-10", 2);
+      expect(store.currentDailyStreak(s, "2026-08-01")).toBe(0);
+    });
+
+    it("is unaffected by daylight saving, where a local day isn't 24 hours", () => {
+      // 2026-03-29 is the European spring-forward (a 23-hour local day) and
+      // 2026-10-25 the autumn one (25 hours). Both must still read as one day apart.
+      winDaily("2026-03-28");
+      winDaily("2026-03-29");
+      expect(store.loadStats().dailyStreak).toBe(2);
+      winDaily("2026-10-25");
+      winDaily("2026-10-26");
+      expect(store.loadStats().dailyStreak).toBe(2);
+    });
+  });
 });
 
 describe("with localStorage that always throws", () => {

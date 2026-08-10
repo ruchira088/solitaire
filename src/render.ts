@@ -23,15 +23,6 @@ export interface DragState {
   target: PileId | null;
 }
 
-type HighlightStyle = "hint-source" | "hint-target" | "drop";
-
-export interface HintHighlight {
-  from: PileId;
-  to: PileId;
-  /** ms timestamp when the hint was issued, for the pulse animation. */
-  since: number;
-}
-
 // Normalised pip positions (x,y in 0..1 of the inner face region) per rank.
 const PIPS: Record<number, [number, number][]> = {
   2: [[0.5, 0.14], [0.5, 0.86]],
@@ -513,8 +504,6 @@ export class Renderer {
     layout: Layout,
     animator: Animator,
     drag: DragState | null,
-    hint: HintHighlight | null,
-    now: number,
   ): void {
     this.drawBoard(ctx, layout);
 
@@ -583,17 +572,10 @@ export class Renderer {
       }
     }
 
-    // Hint highlight (pulsing outline on source + destination).
-    if (hint) {
-      const pulse = 0.5 + 0.5 * Math.sin((now - hint.since) / 220);
-      this.highlightPile(ctx, game, layout, hint.from, pulse, "hint-source");
-      this.highlightPile(ctx, game, layout, hint.to, pulse, "hint-target");
-    }
-
     // Where the live drag would land. Drawn under the dragged stack, hence the
-    // wider ring and glow in "drop".
+    // wide ring and glow.
     if (drag?.target) {
-      this.highlightPile(ctx, game, layout, drag.target, 0, "drop");
+      this.highlightPile(ctx, game, layout, drag.target);
     }
 
     // Cards in flight (above the static piles).
@@ -669,47 +651,25 @@ export class Renderer {
     }
   }
 
-  /** Ring a pile. The hint styles pulse; the drop-target ring is deliberately steady
-   *  and white, so the two are never confused even when both are on screen — and the
-   *  distinction survives colour blindness. */
+  /** Ring the pile a live drag would land on. Steady and white on purpose — it reads
+   *  as "here", not as an animation demanding attention. */
   private highlightPile(
     ctx: CanvasRenderingContext2D,
     game: Game,
     layout: Layout,
     id: PileId,
-    pulse: number,
-    style: HighlightStyle,
   ): void {
     const p = this.pileAnchor(game, layout, id);
-    // The dragged stack is drawn on top at 1.04 scale, so the drop ring sits further
-    // out and glows harder to stay visible around it.
-    const inset = style === "drop" ? -8 : -2;
-    const grow = style === "drop" ? 16 : 4;
+    // The dragged stack is drawn on top at 1.04 scale, so the ring sits well out and
+    // glows hard to stay visible around it.
     ctx.save();
-    roundRectPath(
-      ctx,
-      p.x + inset,
-      p.y + inset,
-      layout.cardW + grow,
-      layout.cardH + grow,
-      layout.radius,
-    );
-    if (style === "drop") {
-      ctx.fillStyle = "rgba(255,255,255,0.12)";
-      ctx.fill();
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = "rgba(255,255,255,0.95)";
-      ctx.shadowColor = "rgba(255,255,255,0.85)";
-      ctx.shadowBlur = 22;
-    } else {
-      ctx.lineWidth = 3 + pulse * 2;
-      ctx.strokeStyle =
-        style === "hint-source"
-          ? `rgba(255,211,78,${0.55 + pulse * 0.4})`
-          : `rgba(120,230,170,${0.55 + pulse * 0.4})`;
-      ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = 12 + pulse * 12;
-    }
+    roundRectPath(ctx, p.x - 8, p.y - 8, layout.cardW + 16, layout.cardH + 16, layout.radius);
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fill();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.shadowColor = "rgba(255,255,255,0.85)";
+    ctx.shadowBlur = 22;
     ctx.stroke();
     ctx.restore();
   }

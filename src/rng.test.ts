@@ -2,7 +2,15 @@
 // bookmarked — so the tests pin exact output, not just "it looks random".
 
 import { describe, expect, it } from "vitest";
-import { encodeSeed, mulberry32, parseSeed, randomSeed } from "./rng";
+import {
+  dailyKey,
+  dailySeed,
+  encodeSeed,
+  isDailyKey,
+  mulberry32,
+  parseSeed,
+  randomSeed,
+} from "./rng";
 import { buildDeck, shuffle } from "./cards";
 import { Game } from "./game";
 
@@ -114,6 +122,86 @@ describe("randomSeed", () => {
   it("rarely repeats", () => {
     const seen = new Set(Array.from({ length: 1000 }, randomSeed));
     expect(seen.size).toBeGreaterThan(990);
+  });
+});
+
+describe("dailyKey", () => {
+  it("formats as YYYY-MM-DD with both parts padded", () => {
+    expect(dailyKey(new Date(2026, 7, 10))).toBe("2026-08-10");
+    expect(dailyKey(new Date(2026, 0, 1))).toBe("2026-01-01");
+    expect(dailyKey(new Date(2026, 11, 31))).toBe("2026-12-31");
+  });
+
+  it("reads the local date, not UTC", () => {
+    // 23:30 local on the 10th is already the 11th in UTC for anything east of the
+    // meridian. The player's own day is what "today's deal" means, so this is the
+    // local components — the assertion holds in whatever zone the tests run in.
+    const d = new Date(2026, 7, 10, 23, 30);
+    expect(dailyKey(d)).toBe("2026-08-10");
+  });
+
+  it("accepts what it produces", () => {
+    expect(isDailyKey(dailyKey(new Date(2026, 7, 10)))).toBe(true);
+  });
+
+  it.each(["", "2026-8-10", "2026/08/10", "20260810", "not a date", null, undefined, 42, {}])(
+    "rejects %p as a key",
+    (v) => {
+      expect(isDailyKey(v)).toBe(false);
+    },
+  );
+});
+
+describe("dailySeed", () => {
+  it("pins the date-to-board mapping — changing this rewrites recorded streaks", () => {
+    const seeds = ["2026-08-10", "2026-08-11", "2026-01-01", "2030-12-31"].map(dailySeed);
+    expect(seeds).toMatchInlineSnapshot(`
+      [
+        1830916629,
+        638710691,
+        2231550793,
+        1607914341,
+      ]
+    `);
+  });
+
+  it("is stable for a given day", () => {
+    expect(dailySeed("2026-08-10")).toBe(dailySeed("2026-08-10"));
+  });
+
+  it("stays inside the 32-bit range", () => {
+    for (let y = 2024; y < 2035; y++) {
+      for (let m = 1; m <= 12; m++) {
+        const s = dailySeed(`${y}-${String(m).padStart(2, "0")}-15`);
+        expect(Number.isInteger(s)).toBe(true);
+        expect(s).toBeGreaterThanOrEqual(0);
+        expect(s).toBeLessThanOrEqual(0xffffffff);
+      }
+    }
+  });
+
+  it("gives consecutive days unrelated boards", () => {
+    // The point of hashing the date rather than seeding with it: neighbouring days
+    // differ by one low digit, and the boards must not resemble each other.
+    const a = new Game(1, dailySeed("2026-08-10")).serialize().tableau;
+    const b = new Game(1, dailySeed("2026-08-11")).serialize().tableau;
+    expect(a).not.toEqual(b);
+  });
+
+  it("collides rarely across a decade of days", () => {
+    const seeds = new Set<number>();
+    let days = 0;
+    for (const d = new Date(2026, 0, 1); d.getFullYear() < 2036; d.setDate(d.getDate() + 1)) {
+      seeds.add(dailySeed(dailyKey(d)));
+      days++;
+    }
+    expect(days).toBeGreaterThan(3600);
+    expect(seeds.size).toBe(days); // no two days share a board
+  });
+
+  it("round-trips through a shareable deal code, like any other deal", () => {
+    const s = dailySeed("2026-08-10");
+    expect(parseSeed(encodeSeed(s))).toBe(s);
   });
 });
 

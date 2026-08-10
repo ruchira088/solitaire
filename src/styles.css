@@ -139,6 +139,27 @@ body {
   font-size: 15px;
   line-height: 1;
 }
+
+/* 📅 carries today's state, since the glyph itself can't: a ring while you're on
+   today's deal, a ✓ once it's won. Both ride on the button rather than changing the
+   emoji, so the icon stays recognisable at a glance on a bar full of them. */
+#btn-daily {
+  position: relative;
+}
+#btn-daily.is-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+#btn-daily.is-done::after {
+  content: "✓";
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
 .btn:active {
   transform: translateY(1px);
 }
@@ -221,7 +242,9 @@ body {
 
 /* Laptop widths: the button icons cost ~140px, enough to push a 1280px window onto
    a second row. Tighten just the button padding here so a common laptop still gets
-   the whole bar on one line, and wide windows keep their roomier buttons. */
+   the whole bar on one line, and wide windows keep their roomier buttons. The
+   ceiling has to clear the widest window that would otherwise wrap. Re-measure it
+   when a control is added or removed: every button eats into the margin. */
 @media (max-width: 1340px) {
   #toolbar {
     gap: 14px;
@@ -475,6 +498,17 @@ body.chrome-hidden .chrome-toggle:focus-visible {
 /* Gold, and only when the game just beat the record. */
 #win-score.is-record {
   color: var(--accent);
+}
+
+#win-daily {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+#win-daily[hidden] {
+  display: none;
 }
 
 .dialog-actions {

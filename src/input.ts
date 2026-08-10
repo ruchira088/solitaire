@@ -25,9 +25,6 @@ export interface InputCallbacks {
   layout: () => Layout;
   busy: () => boolean; // ignore input while true (dealing / celebrating)
   onChange: () => void; // a successful state change occurred
-  /** A card was picked up — used to clear a live hint so its ring can't be
-   *  mistaken for the drop-target ring. */
-  onPickUp?: () => void;
 }
 
 export class Input {
@@ -106,7 +103,6 @@ export class Input {
         cardPos(this.game, layout, pick.from, pick.index + i),
       );
       this.setCursor("grabbing");
-      this.cb.onPickUp?.();
     }
   };
 

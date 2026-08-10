@@ -25,12 +25,16 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   moves, lift-and-drop drag feedback, animated snap-back on illegal moves,
   auto-complete sweep, and a classic bouncing-card **win celebration**.
 - 🃏 **Full Klondike rules** — Draw 1 / Draw 3 toggle, multi-card run dragging,
-  waste recycling, undo/redo history, hints, move counter and timer, and scoring
+  waste recycling, undo/redo history, move counter and timer, and scoring
   that charges a point per move so a tidy win beats a long one.
+- 📅 **Daily deal** — one board a day, the same one for everybody, derived from the
+  date itself. Win it on consecutive days to build a **daily streak**; miss a day and
+  the run starts over. The **📅** button (or `D`) deals it and shows whether today's
+  is unplayed, under way, or already won.
 - 🏆 **Lifetime statistics** — games played, games won, win rate, current and best
-  streak, best score, fastest win, fewest moves and total time played, all kept in
-  `localStorage`. The win dialog calls out a new best score, and the stats can be
-  reset whenever you want a clean slate.
+  streak, best score, fastest win, fewest moves, total time played, and your daily
+  streak, all kept in `localStorage`. The win dialog calls out a new best score, and
+  the stats can be reset whenever you want a clean slate.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
@@ -115,14 +119,34 @@ Rotating the phone switches back to the classic column layout.
 
 <img src="screenshots/iphone.png" alt="Phone-portrait layout" width="340">
 
+## The daily deal
+
+The **📅** button (or `D`) deals **today's board** — the same one for every player,
+worked out from the date alone, so a score on it is worth comparing. It's an ordinary
+seeded deal underneath: **Restart** replays it, and its `?deal=` URL shares like any
+other.
+
+Win it and you start a **daily streak**. Win the next day's too and the run grows;
+skip a day and the next win starts again at 1, though your best run is kept. Replaying
+a day you've already won is fine — it just doesn't count twice.
+
+The button says where today stands: plain when it's unplayed, ringed while you're
+playing it, and marked ✓ once it's won. If you're already part-way through today's
+deal, pressing it again does nothing rather than throwing that progress away — use
+**New Game** or **Restart** for that.
+
+The day turns over at *your* midnight, not UTC, so the puzzle never changes in the
+middle of your afternoon.
+
 ## Statistics
 
 The **📊** button in the toolbar opens your record: games played and won, win rate,
-current and best streak, best score, fastest win, fewest moves, and total time
-played. A deal counts as *played* from its first move — so flicking through deals
-looking for a friendly one doesn't dent your win rate — and walking away from a game
-in progress counts as a loss and breaks the streak. **Reset stats** wipes the lot,
-and asks once before it does.
+current and best streak, best score, fastest win, fewest moves, total time
+played, and your daily streak, best daily streak and dailies won. A deal counts as
+*played* from its first move — so flicking through deals looking for a friendly one
+doesn't dent your win rate — and walking away from a game in progress counts as a
+loss and breaks the streak. **Reset stats** wipes the lot, and asks once before it
+does.
 
 ![Statistics](screenshots/stats.png)
 
@@ -172,7 +196,6 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Send to a foundation** | Drag an Ace (or the next card in sequence) onto a foundation, or **double-click** (double-tap on touch) a card to auto-send it. |
 | **Park a stack** | Click **+ Stack** in the toolbar (−50 points, up to 3), then drag a card or run onto the ✦ pile to set it aside and reveal the card underneath. The pile disappears once you empty it. |
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
-| **Hint** | The **Hint** button (or `H`) pulses a useful move. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
 | **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…`), plus `&draw=3` when you're playing Draw 3. |
@@ -205,8 +228,8 @@ below zero, so a game that's already at 0 can't be dug deeper.
 | `Ctrl/Cmd + Z` | Undo |
 | `Ctrl/Cmd + Shift + Z` or `Ctrl + Y` | Redo |
 | `Esc` | Cancel a drag in progress |
-| `H` | Hint |
 | `N` | New game |
+| `D` | Today's daily deal |
 | `T` | Show / hide the toolbar |
 
 ---

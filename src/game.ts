@@ -434,65 +434,6 @@ export class Game {
     return null;
   }
 
-  /** Suggest a legal, useful move for the Hint button. */
-  findHint(): { from: PileId; fromIndex: number; to: PileId } | null {
-    // 1) Anything that can go to a foundation.
-    const singleSources: PileId[] = [
-      { kind: "waste" },
-      ...Array.from({ length: this.spares.length }, (_, i): PileId => ({ kind: "spare", index: i })),
-      ...Array.from({ length: 7 }, (_, i): PileId => ({ kind: "tableau", index: i })),
-    ];
-    for (const src of singleSources) {
-      const pile = this.getPile(src);
-      if (pile.length === 0) continue;
-      const card = pile[pile.length - 1];
-      const f = this.foundationTargetFor(card);
-      if (f >= 0) return { from: src, fromIndex: pile.length - 1, to: { kind: "foundation", index: f } };
-    }
-    // 2) Tableau → tableau runs that reveal a face-down card or empty a column.
-    for (let c = 0; c < 7; c++) {
-      const col = this.tableau[c];
-      const firstFaceUp = col.findIndex((card) => card.faceUp);
-      if (firstFaceUp < 0) continue;
-      const run = col.slice(firstFaceUp);
-      if (!this.isValidRun(run)) continue;
-      for (let d = 0; d < 7; d++) {
-        if (d === c) continue;
-        if (this.canMoveToTableau(run[0], d)) {
-          const revealing = firstFaceUp > 0; // moving exposes a face-down card
-          const fromEmpty = firstFaceUp === 0 && this.tableau[d].length > 0;
-          if (revealing || (run[0].rank === 13 && !fromEmpty)) {
-            return { from: { kind: "tableau", index: c }, fromIndex: firstFaceUp, to: { kind: "tableau", index: d } };
-          }
-        }
-      }
-    }
-    // 3) Spare → tableau (frees a temp stack).
-    for (let s = 0; s < this.spares.length; s++) {
-      const spare = this.spares[s];
-      if (spare.length === 0 || !this.isValidRun(spare)) continue;
-      for (let d = 0; d < 7; d++) {
-        if (this.canMoveToTableau(spare[0], d)) {
-          return { from: { kind: "spare", index: s }, fromIndex: 0, to: { kind: "tableau", index: d } };
-        }
-      }
-    }
-    // 4) Waste → tableau.
-    if (this.waste.length > 0) {
-      const card = this.waste[this.waste.length - 1];
-      for (let d = 0; d < 7; d++) {
-        if (this.canMoveToTableau(card, d)) {
-          return { from: { kind: "waste" }, fromIndex: this.waste.length - 1, to: { kind: "tableau", index: d } };
-        }
-      }
-    }
-    // 5) Otherwise a draw is the move.
-    if (this.stock.length > 0 || this.waste.length > 0) {
-      return { from: { kind: "stock" }, fromIndex: 0, to: { kind: "waste" } };
-    }
-    return null;
-  }
-
   // ---- Persistence -------------------------------------------------------
 
   serialize(): GameState {

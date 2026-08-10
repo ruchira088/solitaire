@@ -601,49 +601,6 @@ describe("isWon / canAutoComplete", () => {
   });
 });
 
-describe("findHint", () => {
-  it("prefers a foundation move", () => {
-    const g = boardOf({ tableau: [[up(S, 1)], [up(H, 9)], [], [], [], [], []] });
-    expect(g.findHint()?.to).toEqual(FOUNDATION(0));
-  });
-
-  it("suggests a tableau move that reveals a face-down card", () => {
-    const g = boardOf({ tableau: [[dn(C, 4), up(H, 7)], [up(S, 8)], [], [], [], [], []] });
-    const h = g.findHint()!;
-    expect(h.from).toEqual(TABLEAU(0));
-    expect(h.to).toEqual(TABLEAU(1));
-  });
-
-  it("falls back to drawing when nothing else is available", () => {
-    const g = boardOf({ stock: [1, 2, 3], tableau: [[up(S, 5)], [], [], [], [], [], []] });
-    expect(g.findHint()?.from).toEqual(STOCK);
-  });
-
-  it("returns null on a dead board", () => {
-    const g = boardOf({ tableau: [[up(S, 5)], [], [], [], [], [], []] });
-    expect(g.findHint()).toBeNull();
-  });
-
-  it("only ever suggests a legal move, across many random deals", () => {
-    const g = new Game(1);
-    for (let i = 0; i < 200; i++) {
-      g.deal();
-      for (let step = 0; step < 5; step++) {
-        const h = g.findHint();
-        if (!h) break;
-        if (h.from.kind === "stock") {
-          expect(g.drawFromStock(), `deal ${i} step ${step}: hinted draw failed`).not.toBeNull();
-        } else {
-          expect(
-            g.moveCards(h.from, h.fromIndex, h.to),
-            `deal ${i} step ${step}: hinted move ${JSON.stringify(h)} was illegal`,
-          ).not.toBeNull();
-        }
-      }
-    }
-  });
-});
-
 describe("serialize / restore", () => {
   it("round-trips a board exactly", () => {
     const g = new Game(3);

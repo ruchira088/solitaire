@@ -6,7 +6,7 @@ import { Card } from "./cards";
 import { DrawCount, Game, MAX_SPARES, PileId } from "./game";
 import { computeLayout, Layout } from "./layout";
 import { Animator, Celebration, Easings } from "./animation";
-import { HintHighlight, Renderer } from "./render";
+import { Renderer } from "./render";
 import { Input } from "./input";
 import { cardPos } from "./positions";
 import { preloadFaceArt } from "./courtArt";
@@ -15,6 +15,7 @@ import { getThemeName, setTheme, ThemeName } from "./theme";
 import { isSoundEnabled, setSoundEnabled, playDeal, unlockAudio } from "./sound";
 import {
   clearGame,
+  currentDailyStreak,
   loadGame,
   loadStats,
   readItem,
@@ -26,7 +27,7 @@ import {
   Stats,
   writeItem,
 } from "./storage";
-import { encodeSeed, parseSeed } from "./rng";
+import { dailyKey, dailySeed, encodeSeed, parseSeed } from "./rng";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -52,8 +53,6 @@ let dpr = 1;
 let busy = false; // block input during the deal & celebration
 let pendingCheck = false; // re-evaluate win / auto-complete once idle
 let autoCompleting = false;
-let hint: HintHighlight | null = null;
-let hintTimer = 0;
 let timerStart: number | null = null;
 let elapsedFrozen = 0;
 let celebStarted = false;
@@ -115,7 +114,6 @@ function applyResize(): void {
  *  model rather than half-inherited from the old one. */
 function refreshAfterResize(): void {
   input.cancelDrag(); // its offsets and snap-back targets are in old-layout space
-  clearHint();
   celebStarted = false; // resizing the canvas cleared the celebration's base frame
 
   // Before the overlay is dismissed, the animator is holding the board hidden
@@ -160,7 +158,6 @@ const el = {
   newGame: document.getElementById("btn-new") as HTMLButtonElement,
   undo: document.getElementById("btn-undo") as HTMLButtonElement,
   redo: document.getElementById("btn-redo") as HTMLButtonElement,
-  hint: document.getElementById("btn-hint") as HTMLButtonElement,
   drawToggle: document.getElementById("draw-toggle") as HTMLElement,
   easy: document.getElementById("btn-easy") as HTMLButtonElement,
   addStack: document.getElementById("btn-add-stack") as HTMLButtonElement,
@@ -174,6 +171,7 @@ const el = {
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
+  daily: document.getElementById("btn-daily") as HTMLButtonElement,
   stats: document.getElementById("btn-stats") as HTMLButtonElement,
   statsOverlay: document.getElementById("stats-overlay") as HTMLElement,
   statsList: document.getElementById("stats-list") as HTMLElement,
@@ -182,6 +180,7 @@ const el = {
   statsClose: document.getElementById("stats-close") as HTMLButtonElement,
   winOverlay: document.getElementById("win-overlay") as HTMLElement,
   winScore: document.getElementById("win-score") as HTMLElement,
+  winDaily: document.getElementById("win-daily") as HTMLElement,
   winNew: document.getElementById("win-new") as HTMLButtonElement,
   winRestart: document.getElementById("win-restart") as HTMLButtonElement,
 };
@@ -207,10 +206,10 @@ function frame(now: number): void {
   animator.update(now);
 
   if (celebration.active) {
-    runCelebrationFrame(now);
+    runCelebrationFrame();
   } else {
     input.updateDropTarget();
-    renderer.drawScene(ctx, game, layout, animator, input.drag, hint, now);
+    renderer.drawScene(ctx, game, layout, animator, input.drag);
     if (pendingCheck && !animator.isAnimating() && !input.drag) {
       pendingCheck = false;
       evaluateBoard();
@@ -289,7 +288,13 @@ function autoStep(): void {
 function startCelebration(): void {
   if (celebration.active) return;
   clearGame(); // a finished game shouldn't resume on the next load
-  winRecord = recordWin({ score: game.score, elapsedMs: elapsedNow(), moves: game.moves });
+  winRecord = recordWin({
+    score: game.score,
+    elapsedMs: elapsedNow(),
+    moves: game.moves,
+    daily: isDailyGame() ? todayKey() : undefined,
+  });
+  syncDailyButton();
   if (timerStart !== null) {
     elapsedFrozen += performance.now() - timerStart;
     timerStart = null;
@@ -304,10 +309,10 @@ function startCelebration(): void {
   showWinPanel();
 }
 
-function runCelebrationFrame(now: number): void {
+function runCelebrationFrame(): void {
   if (!celebStarted) {
     // Draw the completed board once; subsequent frames leave trails.
-    renderer.drawScene(ctx, game, layout, animator, null, null, now);
+    renderer.drawScene(ctx, game, layout, animator, null);
     celebStarted = true;
   }
   const falling = celebration.step(layout.width, layout.height, layout.cardW, layout.cardH);
@@ -325,6 +330,11 @@ function showWinPanel(): void {
     ? `🏆 New best score — ${game.score}`
     : `Score ${game.score}  ·  Best ${winRecord ? winRecord.stats.bestScore : game.score}`;
   el.winScore.classList.toggle("is-record", record);
+  // The daily line only appears for the daily, and reads the streak back out of the
+  // record just written, so a replayed daily correctly doesn't claim another day.
+  const streak = winRecord && isDailyGame() ? currentDailyStreak(winRecord.stats, todayKey()) : 0;
+  el.winDaily.hidden = streak === 0;
+  el.winDaily.textContent = `📅 Daily deal · ${streak}-day streak`;
   syncBarHeight();
   el.winOverlay.hidden = false;
   el.winNew.focus(); // so Enter/Space plays again without reaching for the mouse
@@ -359,6 +369,11 @@ function statRows(s: Stats): [string, string][] {
     ["Fastest win", fmtDuration(s.fastestMs)],
     ["Fewest moves", dash(s.fewestMoves)],
     ["Time played", fmtDuration(s.totalMs)],
+    // The live streak, not the stored one: a run that lapsed reads as 0 here without
+    // anything having to run at midnight to expire it.
+    ["Daily streak", String(currentDailyStreak(s, todayKey()))],
+    ["Best daily streak", String(s.bestDailyStreak)],
+    ["Dailies won", String(s.dailyWins)],
   ];
 }
 
@@ -400,6 +415,7 @@ function armOrResetStats(): void {
   disarmReset();
   resetStats();
   renderStats();
+  syncDailyButton(); // the ✓ was drawn from the record just wiped
 }
 
 function disarmReset(): void {
@@ -463,7 +479,6 @@ function persist(): void {
 }
 
 function onChange(): void {
-  clearHint();
   syncSpareLayout();
   if (!countedPlayed && game.moves > 0) {
     countedPlayed = true;
@@ -492,7 +507,6 @@ function beginGame(deal: () => void): void {
   autoCompleting = false;
   resuming = false;
   animator.clear();
-  clearHint();
   deal();
   applyEasy(false); // the assist doesn't carry over to the next game
   clearGame();
@@ -501,6 +515,7 @@ function beginGame(deal: () => void): void {
   elapsedFrozen = 0;
   el.time.textContent = "0:00";
   syncDealUrl();
+  syncDailyButton();
   updateStats();
   startDeal();
 }
@@ -514,6 +529,46 @@ function newGame(): void {
 function restartDeal(): void {
   if (busy || autoCompleting || input.drag) return;
   beginGame(() => game.restartDeal());
+}
+
+// ---- The daily deal --------------------------------------------------------
+
+function todayKey(): string {
+  return dailyKey(new Date());
+}
+
+/** Whether the board on screen is today's deal. Derived from the seed rather than
+ *  stored, so it costs no save-format change and a *resumed* game is still recognised
+ *  as the daily. The edge is midnight: a daily won a minute after it stops being
+ *  today's banks as an ordinary win, which is the harmless direction to fail in. */
+function isDailyGame(): boolean {
+  return game.seed === dailySeed(todayKey());
+}
+
+function playDaily(): void {
+  if (busy || autoCompleting || input.drag) return;
+  // Already on it and part-way through: the button's job is done, and re-dealing
+  // here would silently throw the progress away. New Game and Restart both remain.
+  if (isDailyGame() && !game.isWon() && game.moves > 0) return;
+  beginGame(() => game.deal(dailySeed(todayKey())));
+}
+
+/** Reflect today's state on the 📅 button. Called at the four points that can change
+ *  it — boot, a new deal, a win, and a stats reset — rather than from `updateStats`,
+ *  which runs on every move and would re-read storage each time. */
+function syncDailyButton(): void {
+  const key = todayKey();
+  const won = loadStats().lastDailyWin === key;
+  const playing = isDailyGame();
+  el.daily.classList.toggle("is-done", won);
+  el.daily.classList.toggle("is-active", playing);
+  const label = won
+    ? `Today's deal — won (${key})`
+    : playing
+      ? `Today's deal — in progress (${key})`
+      : `Play today's deal (${key})`;
+  el.daily.title = label;
+  el.daily.setAttribute("aria-label", label);
 }
 
 function shareUrl(): string {
@@ -553,24 +608,9 @@ function doRedo(): void {
 
 function afterTimeTravel(): void {
   animator.clear();
-  clearHint();
   syncSpareLayout();
   updateStats();
   persist();
-}
-
-function showHint(): void {
-  if (busy || celebration.active) return;
-  const h = game.findHint();
-  if (!h) return;
-  hint = { from: h.from, to: h.to, since: performance.now() };
-  window.clearTimeout(hintTimer);
-  hintTimer = window.setTimeout(() => (hint = null), 2600);
-}
-
-function clearHint(): void {
-  hint = null;
-  window.clearTimeout(hintTimer);
 }
 
 function setDrawCount(n: DrawCount): void {
@@ -689,7 +729,6 @@ const input = new Input(canvas, game, animator, {
   layout: () => layout,
   busy: () => busy || celebration.active || autoCompleting,
   onChange,
-  onPickUp: clearHint,
 });
 
 // A drag left mid-air when the tab loses focus: pointercancel usually fires, but not
@@ -712,6 +751,7 @@ el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
 el.restart.addEventListener("click", restartDeal);
+el.daily.addEventListener("click", playDaily);
 el.stats.addEventListener("click", openStats);
 el.statsClose.addEventListener("click", closeStats);
 el.statsReset.addEventListener("click", armOrResetStats);
@@ -721,7 +761,6 @@ el.statsOverlay.addEventListener("click", (e) => {
 });
 el.winNew.addEventListener("click", newGame);
 el.winRestart.addEventListener("click", restartDeal);
-el.hint.addEventListener("click", showHint);
 el.theme.addEventListener("click", toggleTheme);
 el.chrome.addEventListener("click", toggleChrome);
 el.sound.addEventListener("click", toggleSound);
@@ -757,8 +796,8 @@ window.addEventListener("keydown", (e) => {
     // Leave browser shortcuts alone — Cmd+N used to also deal a new game.
   } else if (key === "n") {
     newGame();
-  } else if (key === "h") {
-    showHint();
+  } else if (key === "d") {
+    playDaily();
   } else if (key === "t") {
     toggleChrome();
   }
@@ -800,6 +839,7 @@ setDrawCount(game.drawCount);
 resize();
 el.time.textContent = fmtTime(elapsedFrozen);
 syncDealUrl();
+syncDailyButton();
 updateStats();
 
 // Keep the board hidden behind the start overlay so a dealt (or restored) game

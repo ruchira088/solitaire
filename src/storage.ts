@@ -3,6 +3,7 @@
 // game simply runs without persistence.
 
 import { GameState, parseGameState } from "./game";
+import { isDailyKey } from "./rng";
 
 const GAME_KEY = "solitaire-game";
 const STATS_KEY = "solitaire-stats";
@@ -95,8 +96,20 @@ export interface Stats {
   /** A game is under way and unwon. Persisted so that closing the tab mid-game and
    *  starting a fresh one later still breaks the streak. */
   pending: boolean;
+  /** Daily deals won, and the run of consecutive days. `lastDailyWin` is the
+   *  YYYY-MM-DD of the most recent one, `""` for never — it's what makes the streak
+   *  answerable, since the stored count alone can't say whether the run is still
+   *  live. Read it through `currentDailyStreak`, never directly. */
+  dailyWins: number;
+  dailyStreak: number;
+  bestDailyStreak: number;
+  lastDailyWin: string;
 }
 
+/** Bumped only when an existing field changes *meaning* — a mismatch wipes the
+ *  lifetime record, which is a real loss, so it isn't a version-stamp for every
+ *  edit. Purely additive fields don't need it: each is sanitised independently
+ *  below, so an older record simply reads its new fields as "nothing recorded". */
 const STATS_SCHEMA = 1;
 
 const EMPTY_STATS: Stats = {
@@ -109,7 +122,30 @@ const EMPTY_STATS: Stats = {
   fewestMoves: 0,
   totalMs: 0,
   pending: false,
+  dailyWins: 0,
+  dailyStreak: 0,
+  bestDailyStreak: 0,
+  lastDailyWin: "",
 };
+
+/** Whole days from `a` to `b`, both YYYY-MM-DD. Parsed at UTC midnight so that a
+ *  daylight-saving change — where a local day is 23 or 25 hours long — can't make
+ *  two adjacent dates round to a gap of 0 or 2. */
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+}
+
+/** The daily streak as it stands on `today`, which is not always the stored number:
+ *  a run keeps its value while it's still live and reads as 0 once it has lapsed.
+ *  Won today, it's intact; won yesterday, it's intact *and* today's deal is still
+ *  there to extend it. Anything older is a broken run, and `recordWin` will start
+ *  the next one at 1. Left lazy rather than zeroed on read, so nothing has to run at
+ *  midnight for the number to be right. */
+export function currentDailyStreak(s: Stats, today: string): number {
+  if (s.lastDailyWin === "") return 0;
+  const gap = daysBetween(s.lastDailyWin, today);
+  return gap === 0 || gap === 1 ? s.dailyStreak : 0;
+}
 
 /** Non-negative integer, or 0. Every stat is a count or a duration, so anything else —
  *  hand-edited, negative, fractional, missing — reads as "nothing recorded". */
@@ -137,10 +173,11 @@ export function loadStats(): Stats {
   const d = data as Record<string, unknown>;
   if (d.v !== STATS_SCHEMA) return { ...EMPTY_STATS };
   const played = count(d.played);
+  // Clamped, so a hand-edited record can't show a win rate over 100%.
+  const won = Math.min(count(d.won), played);
   return {
     played,
-    // Clamped, so a hand-edited record can't show a win rate over 100%.
-    won: Math.min(count(d.won), played),
+    won,
     streak: count(d.streak),
     bestStreak: count(d.bestStreak),
     bestScore: count(d.bestScore),
@@ -148,6 +185,10 @@ export function loadStats(): Stats {
     fewestMoves: count(d.fewestMoves),
     totalMs: count(d.totalMs),
     pending: d.pending === true,
+    dailyWins: Math.min(count(d.dailyWins), won), // a daily win is also a win
+    dailyStreak: count(d.dailyStreak),
+    bestDailyStreak: count(d.bestDailyStreak),
+    lastDailyWin: isDailyKey(d.lastDailyWin) ? d.lastDailyWin : "",
   };
 }
 
@@ -195,6 +236,8 @@ export function recordWin(game: {
   score: number;
   elapsedMs: number;
   moves: number;
+  /** The YYYY-MM-DD key when this game was that day's daily deal, else absent. */
+  daily?: string;
 }): { stats: Stats; isRecord: boolean } {
   const s = loadStats();
   const isRecord = game.score > s.bestScore;
@@ -209,6 +252,18 @@ export function recordWin(game: {
   if (ms > 0 && (s.fastestMs === 0 || ms < s.fastestMs)) s.fastestMs = ms;
   if (game.moves > 0 && (s.fewestMoves === 0 || game.moves < s.fewestMoves)) {
     s.fewestMoves = game.moves;
+  }
+  // A day's deal counts once: restarting and re-winning it doesn't extend the run,
+  // which is why this keys off the date and not the win. Only an unbroken
+  // yesterday-to-today step continues a streak; any other gap starts a fresh one.
+  if (isDailyKey(game.daily) && game.daily !== s.lastDailyWin) {
+    s.dailyWins += 1;
+    s.dailyStreak =
+      s.lastDailyWin !== "" && daysBetween(s.lastDailyWin, game.daily) === 1
+        ? s.dailyStreak + 1
+        : 1;
+    s.bestDailyStreak = Math.max(s.bestDailyStreak, s.dailyStreak);
+    s.lastDailyWin = game.daily;
   }
   saveStats(s);
   return { stats: s, isRecord };

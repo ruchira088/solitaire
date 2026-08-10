@@ -43,3 +43,46 @@ export function parseSeed(code: string | null | undefined): number | null {
   const n = parseInt(t, 36);
   return Number.isInteger(n) && n >= 0 && n <= MAX_SEED ? n : null;
 }
+
+// ---- The daily deal --------------------------------------------------------
+//
+// One board per calendar day, derived from the date alone, so everyone playing on
+// the same day gets the same layout and a score is worth comparing. It needs no new
+// state anywhere: a daily *is* an ordinary seeded deal, and "am I on today's?" is
+// `game.seed === dailySeed(dailyKey(new Date()))`.
+
+const DAILY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A day's identity: YYYY-MM-DD in the player's **own** timezone, not UTC, so the
+ *  deal turns over at their midnight rather than in the middle of their afternoon.
+ *  The cost is that two people in different zones briefly disagree about which deal
+ *  is "today's" — which matters far less than the puzzle changing at lunchtime. */
+export function dailyKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function isDailyKey(v: unknown): v is string {
+  return typeof v === "string" && DAILY_KEY_RE.test(v);
+}
+
+/** The seed for a given day. Like the generator above, this is a WIRE FORMAT the
+ *  moment anyone plays one: it decides which board "the daily for 2026-08-10" is,
+ *  and every streak already recorded assumes that answer never changes. Pinned in
+ *  rng.test.ts for exactly that reason.
+ *
+ *  The date is hashed rather than used as a seed directly (FNV-1a, then an avalanche
+ *  step). Consecutive days differ in one low digit, and mixing here means their
+ *  boards are unrelated without leaning on the PRNG to do that job. */
+export function dailySeed(key: string): number {
+  let h = 0x811c9dc5; // FNV-1a offset basis
+  for (let i = 0; i < key.length; i++) {
+    h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x7feb352d);
+  h ^= h >>> 15;
+  return h >>> 0;
+}
