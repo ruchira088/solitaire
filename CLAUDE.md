@@ -47,7 +47,7 @@ Vitest, colocated as `src/*.test.ts`. `npm test`, `npm run typecheck` and
 `npm run smoke` all gate CI ahead of every deploy — see the `build-and-typecheck` job.
 
 Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts`,
-`storage.ts` and `share.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
+`storage.ts`, `share.ts` and `cursor.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
 and mocking one only buys assertions about the mock.
 
 **`npm run smoke` is what covers those instead** (`scripts/smoke.mjs`). It serves the
@@ -104,6 +104,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/sound.ts` | WebAudio sound effects (deal tick, etc.) |
 | `src/storage.ts` | `localStorage`: UI preferences + the in-progress game save |
 | `src/share.ts` | The result text the win dialog copies — **pure**, no DOM |
+| `src/cursor.ts` | Keyboard cursor: navigation and the spoken descriptions — **pure**, no DOM |
 
 ### Key design invariants
 
@@ -143,11 +144,30 @@ logic, rendering, animation, and input kept cleanly separated.
   from the game loop instead and stores the result on `drag.target`, which the
   renderer rings. `dropDrag` still recomputes from the pointer-*up* position, because
   on touch that can land several px from the last move.
-- **The drop ring is the only pile highlight.** `render.ts`'s `highlightPile` draws
-  exactly one thing — steady and white, deliberately not animated. It used to take a
-  style so the Hint feature could pulse a second ring in a different colour; hints are
-  gone, and anything new that rings a pile should think hard before reintroducing a
-  second visual language for it.
+- **The board is playable without a pointer.** `cursor.ts` holds a `{pile, depth}`
+  cursor and the words for it; `main.ts` binds the keys and `render.ts` rings it. Two
+  things make it work rather than merely exist. First, **`depth` is the bottom of the
+  run you'd pick up**, not just "which card" — `minDepth` walks down while the run
+  stays valid and the cards stay face up, so Shift+Up can only ever select something
+  legal to move. Second, **the cursor is re-seated after every change** (`clampCursor`
+  from `onChange`): piles shrink, runs move away and a ✦ stack disappears the moment
+  it empties, so a stored index cannot be trusted between frames.
+  The cursor is drawn only while `keyboardActive`, which a `pointerdown` clears —
+  a mouse player never sees a cursor they didn't ask for, and the two never compete
+  to answer "what am I about to move".
+- **Foundations are not suit-locked, whatever the placeholders suggest.**
+  `canMoveToFoundation` lets *any* ace start *any* foundation, and the suit is then
+  whatever landed there. The empty-pile glyphs (♠♥♦♣) are decoration. `pileName`
+  therefore numbers an empty foundation and names a filled one after its actual
+  cards — announcing "the spades foundation" for an empty pile would promise a rule
+  the game doesn't have.
+- **Two pile highlights, and they answer different questions.** `highlightPile` is
+  the drop target — steady, white, wide, drawn under the dragged stack.
+  `highlightRun` is the keyboard cursor — yellow, tight to the cards, and covering the
+  whole run rather than the pile, because the outline *is* the cards that would move;
+  the held version fills and glows. They have to stay tellable apart when both are on
+  screen, which is why they differ in colour, weight and extent rather than just one
+  of the three. A third would want the same scrutiny.
 - **Card size is set by the fan reserve, not by the width.** Height binds at
   every ordinary landscape aspect, so `computeLayout` sizing the cards is really
   a choice about how deep a column may fan before `columnOffsets` compresses it:

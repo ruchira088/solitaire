@@ -66,7 +66,17 @@
           <div class="stat"><span class="label">Score</span><span id="stat-score" class="value">0</span></div>
         </div>
       </header>
-      <canvas id="board"></canvas>
+      <!-- role="application" so a screen reader hands the arrow keys to the game
+           rather than eating them for browse mode; the live region below is what
+           speaks the board, since a canvas has nothing to read. -->
+      <canvas
+        id="board"
+        tabindex="0"
+        role="application"
+        aria-label="Solitaire board. Arrow keys move between piles, Shift with up or down takes more or fewer cards, Space picks up and drops, F sends a card to its foundation, keys 1 to 7 jump to a column."
+        aria-describedby="a11y-status"
+      ></canvas>
+      <div id="a11y-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
       <!-- Sits over the board while the cards cascade. No backdrop, and the wrapper
            passes pointer events through, so the celebration keeps running and the
            toolbar stays usable behind it. -->

@@ -59,6 +59,11 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   double-tap to auto-send a card to its foundation. While you drag, the pile
   you'd land on lights up, the cursor shows what's grabbable, and `Esc` puts
   the cards back.
+- ⌨️ **Playable without a mouse** — arrow keys move a cursor around the board,
+  `Space` picks up and drops, `Shift` + `↑`/`↓` takes more or fewer cards, and `F`
+  sends a card home. Every move is announced to screen readers through a live region,
+  so the game is playable without seeing it. The cursor only appears once you use the
+  keyboard, and goes away the moment you touch the mouse.
 - 🔋 **Idles properly** — the canvas is repainted only when something actually
   changes, so a board you're staring at while you think costs nothing rather than
   redrawing itself a hundred times a second.
@@ -203,6 +208,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Send to a foundation** | Drag an Ace (or the next card in sequence) onto a foundation, or **double-click** (double-tap on touch) a card to auto-send it. |
 | **Park a stack** | Click **+ Stack** in the toolbar (−50 points, up to 3), then drag a card or run onto the ✦ pile to set it aside and reveal the card underneath. The pile disappears once you empty it. |
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
+| **Play from the keyboard** | Arrow keys move the cursor, `Space` picks up and drops, `Shift` + `↑`/`↓` changes how many cards you take, `F` sends one home, `1`–`7` jump to a column, `Esc` puts the cards back down. |
 | **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
@@ -235,7 +241,12 @@ below zero, so a game that's already at 0 can't be dug deeper.
 | --- | --- |
 | `Ctrl/Cmd + Z` | Undo |
 | `Ctrl/Cmd + Shift + Z` or `Ctrl + Y` | Redo |
-| `Esc` | Cancel a drag in progress |
+| `←` `→` `↑` `↓` | Move the keyboard cursor between piles |
+| `Shift` + `↑` / `↓` | Take more / fewer cards with you |
+| `Space` / `Enter` | Draw, pick up, or drop |
+| `F` | Send the card to its foundation |
+| `1`–`7` | Jump to a tableau column |
+| `Esc` | Put down the cards, or cancel a drag |
 | `N` | New game |
 | `D` | Today's daily deal |
 | `T` | Show / hide the toolbar |

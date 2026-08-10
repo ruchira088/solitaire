@@ -180,6 +180,39 @@ try {
   await page.waitForTimeout(300);
   check("the theme toggle switches the page", await page.evaluate(() => document.body.classList.contains("theme-light")));
 
+  // ---- keyboard play ----
+  // Focus the canvas rather than clicking it: a click would put the keyboard cursor
+  // away again, and might land on the stock.
+  await page.focus("#board");
+  const spoken = () => page.textContent("#a11y-status");
+  check("the live region exists for screen readers", await page.evaluate(() =>
+    document.getElementById("a11y-status")?.getAttribute("aria-live") === "polite"));
+  check("nothing is announced before a key is pressed", (await spoken()) === "");
+
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(200);
+  check("an arrow key wakes the cursor and announces where it is", (await spoken()).length > 0, await spoken());
+
+  // A whole move played from the keyboard: column 1 up to the stock, then draw.
+  await page.keyboard.press("1");
+  await page.waitForTimeout(150);
+  await page.keyboard.press("ArrowUp"); // column 1 sits under the stock
+  await page.waitForTimeout(150);
+  const beforeDraw = await moves();
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(400);
+  check("space draws from the stock", (await spoken()).startsWith("drew"), await spoken());
+  check("the keyboard draw counted as a move", (await moves()) !== beforeDraw, `${beforeDraw} -> ${await moves()}`);
+
+  await page.keyboard.press("1");
+  await page.waitForTimeout(150);
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(200);
+  check("space picks a card up", (await spoken()).startsWith("picked up"), await spoken());
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  check("escape puts it back down", (await spoken()) === "put down", await spoken());
+
   // ...and the other half of that bargain: once nothing is happening, it must stop
   // drawing. Counting real drawImage calls, since an idle loop that repaints an
   // identical frame is invisible to a pixel hash. Update this deliberately if the

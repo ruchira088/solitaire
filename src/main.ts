@@ -6,13 +6,13 @@ import { Card } from "./cards";
 import { DrawCount, Game, MAX_SPARES, PileId } from "./game";
 import { computeLayout, Layout } from "./layout";
 import { Animator, Celebration, Easings } from "./animation";
-import { Renderer } from "./render";
+import { CursorView, Renderer } from "./render";
 import { Input } from "./input";
 import { cardPos } from "./positions";
 import { preloadFaceArt } from "./courtArt";
 import { onCardFaceLoad, preloadCardFaces } from "./cardFaces";
 import { getThemeName, setTheme, ThemeName } from "./theme";
-import { isSoundEnabled, setSoundEnabled, playDeal, unlockAudio } from "./sound";
+import { isSoundEnabled, setSoundEnabled, playDeal, playDraw, playFlip, playPlace, unlockAudio } from "./sound";
 import {
   clearGame,
   currentDailyStreak,
@@ -29,6 +29,18 @@ import {
 } from "./storage";
 import { dailyKey, dailySeed, encodeSeed, parseSeed } from "./rng";
 import { formatClock, shareText } from "./share";
+import {
+  clampCursor,
+  Cursor,
+  cardName,
+  describe as describeCursor,
+  describeMove,
+  Move as CursorMove,
+  moveCursor,
+  pileName,
+  runName,
+  samePile,
+} from "./cursor";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -74,6 +86,14 @@ let shareTimer = 0; // the Share button's "Copied!" label, reverted after a mome
  *  produce an identical frame is pure battery. So the loop paints only when something
  *  can have changed — see `frame`. Starts true for the first paint. */
 let dirty = true;
+
+// ---- Keyboard play ---------------------------------------------------------
+/** Where the keyboard cursor sits, and what it has lifted. Null until the first
+ *  cursor key: a mouse player should never see a cursor they didn't ask for. */
+let cursor: Cursor | null = null;
+let held: Cursor | null = null;
+/** Cleared on any pointer press, so picking the mouse back up puts the ring away. */
+let keyboardActive = false;
 
 // ---- DPI-aware sizing ------------------------------------------------------
 
@@ -225,7 +245,7 @@ function frame(now: number): void {
   } else {
     input.updateDropTarget();
     if (dirty || wasAnimating || animator.isAnimating() || input.drag) {
-      renderer.drawScene(ctx, game, layout, animator, input.drag);
+      renderer.drawScene(ctx, game, layout, animator, input.drag, cursorView());
       dirty = false;
     }
     // Outside the paint gate on purpose: the win and auto-complete sweep have to be
@@ -333,7 +353,7 @@ function startCelebration(): void {
 function runCelebrationFrame(): void {
   if (!celebStarted) {
     // Draw the completed board once; subsequent frames leave trails.
-    renderer.drawScene(ctx, game, layout, animator, null);
+    renderer.drawScene(ctx, game, layout, animator, null, null);
     celebStarted = true;
   }
   const falling = celebration.step(layout.width, layout.height, layout.cardW, layout.cardH);
@@ -560,6 +580,7 @@ function persist(): void {
 
 function onChange(): void {
   invalidate();
+  if (cursor) cursor = clampCursor(game, cursor);
   syncSpareLayout();
   if (!countedPlayed && game.moves > 0) {
     countedPlayed = true;
@@ -589,6 +610,8 @@ function beginGame(deal: () => void): void {
   resuming = false;
   animator.clear();
   invalidate();
+  cursor = null;
+  held = null;
   deal();
   applyEasy(false); // the assist doesn't carry over to the next game
   clearGame();
@@ -690,6 +713,8 @@ function doRedo(): void {
 
 function afterTimeTravel(): void {
   invalidate();
+  held = null; // the run it referred to may not exist in this position
+  if (cursor) cursor = clampCursor(game, cursor);
   animator.clear();
   syncSpareLayout();
   updateStats();
@@ -807,12 +832,159 @@ function addTempStack(): void {
   if (game.addTempStack()) onChange();
 }
 
+// ---- Keyboard play ---------------------------------------------------------
+
+const live = document.getElementById("a11y-status") as HTMLElement;
+
+/** Speak to the screen reader. Re-announcing the same string is a no-op in some
+ *  readers, so a zero-width space forces it through — moving between two identical
+ *  empty columns still has to say something. */
+function announce(message: string): void {
+  live.textContent = live.textContent === message ? `${message}\u200b` : message;
+}
+
+function cursorView(): CursorView | null {
+  if (!keyboardActive || !cursor) return null;
+  return { pile: cursor.pile, depth: cursor.depth, held: held };
+}
+
+/** Put the cursor somewhere sensible the first time a key asks for it. */
+function ensureCursor(): Cursor {
+  keyboardActive = true;
+  if (!cursor) cursor = clampCursor(game, { pile: { kind: "tableau", index: 0 }, depth: 0 });
+  else cursor = clampCursor(game, cursor);
+  return cursor;
+}
+
+function navigate(move: CursorMove): void {
+  const from = ensureCursor();
+  cursor = moveCursor(game, from, move);
+  invalidate();
+  announce(describeCursor(game, cursor));
+}
+
+/** Jump straight at a column — much faster than walking there, and the numbers match
+ *  what's on screen left to right. */
+function jumpToColumn(index: number): void {
+  keyboardActive = true;
+  cursor = clampCursor(game, { pile: { kind: "tableau", index }, depth: Number.MAX_SAFE_INTEGER });
+  invalidate();
+  announce(describeCursor(game, cursor));
+}
+
+/** Play a move the same way a drag does — model first, cards fly after — so keyboard
+ *  play looks and sounds identical to mouse play rather than teleporting cards. */
+function playMove(from: PileId, fromIndex: number, to: PileId): boolean {
+  const origins = game
+    .getPile(from)
+    .slice(fromIndex)
+    .map((_, i) => cardPos(game, layout, from, fromIndex + i));
+  const landing = game.getPile(to).length;
+  const result = game.moveCards(from, fromIndex, to);
+  if (!result) return false;
+  syncSpareLayout(); // emptying a ✦ stack drops a column before we aim the flights
+  result.moved.forEach((card, i) => {
+    animator.flyCard(card, origins[i], cardPos(game, layout, to, landing + i), {
+      duration: 160,
+      easing: Easings.easeOutCubic,
+    });
+  });
+  playPlace();
+  if (result.flipped) playFlip();
+  announce(describeMove(game, result.moved, to, result.flipped));
+  onChange();
+  return true;
+}
+
+/** Space / Enter: draw, pick up, or drop, depending on where the cursor is. */
+function activateCursor(): void {
+  if (busy || celebration.active || autoCompleting) return;
+  const c = ensureCursor();
+
+  if (c.pile.kind === "stock") {
+    const before = game.waste.length;
+    if (!game.drawFromStock()) return;
+    playDraw();
+    const top = game.waste[game.waste.length - 1];
+    const drawn = game.waste.length - before;
+    // Draw 3 turns several at once, but only the top one is playable, so that is the
+    // one worth naming.
+    announce(
+      drawn <= 0 || !top
+        ? "stock recycled"
+        : drawn === 1
+          ? `drew ${cardName(top)}`
+          : `drew ${drawn}, ${cardName(top)} on top`,
+    );
+    onChange();
+    return;
+  }
+
+  if (!held) {
+    const cards = game.getPile(c.pile);
+    const card = cards[c.depth];
+    if (!card || !card.faceUp) {
+      announce("nothing to pick up there");
+      return;
+    }
+    held = { ...c };
+    invalidate();
+    announce(`picked up ${runName(cards.slice(c.depth))}, choose a destination`);
+    return;
+  }
+
+  if (samePile(held.pile, c.pile)) {
+    releaseHeld("put down");
+    return;
+  }
+  if (!playMove(held.pile, held.depth, c.pile)) {
+    announce(`can't move there — ${pileName(game, c.pile)}`);
+    return;
+  }
+  held = null;
+  cursor = clampCursor(game, cursor ?? c);
+}
+
+function releaseHeld(why: string): void {
+  if (!held) return;
+  held = null;
+  invalidate();
+  announce(why);
+}
+
+/** F: send the focused (or held) card straight home, the keyboard's double-click. */
+function sendToFoundation(): void {
+  if (busy || celebration.active || autoCompleting) return;
+  const c = held ?? ensureCursor();
+  const pile = game.getPile(c.pile);
+  if (pile.length === 0) return;
+  const card = pile[pile.length - 1];
+  const target = game.foundationTargetFor(card);
+  if (target < 0) {
+    announce("no foundation for that card");
+    return;
+  }
+  if (playMove(c.pile, pile.length - 1, { kind: "foundation", index: target })) {
+    held = null;
+    cursor = clampCursor(game, cursor ?? c);
+  }
+}
+
 // ---- Wire up ---------------------------------------------------------------
 
 const input = new Input(canvas, game, animator, {
   layout: () => layout,
   busy: () => busy || celebration.active || autoCompleting,
   onChange,
+});
+
+// Reaching for the mouse puts the keyboard cursor away — showing both at once would
+// be two competing answers to "what am I about to move".
+canvas.addEventListener("pointerdown", () => {
+  if (!keyboardActive) return;
+  keyboardActive = false;
+  held = null;
+  invalidate();
 });
 
 // A drag left mid-air when the tab loses focus: pointercancel usually fires, but not
@@ -861,14 +1033,55 @@ el.drawToggle.addEventListener("click", (e) => {
   }
 });
 
+/** Arrow keys, Space and Enter belong to the board — but not while a dialog is up,
+ *  where they are the browser's for moving between and pressing buttons. */
+function boardHasKeys(): boolean {
+  return !!el.statsOverlay.hidden && !!el.winOverlay.hidden;
+}
+
+const ARROWS: Record<string, CursorMove> = {
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  ArrowUp: "up",
+  ArrowDown: "down",
+};
+
 window.addEventListener("keydown", (e) => {
   if (!started) return; // the start overlay owns the board until it's dismissed
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
   if (e.key === "Escape") {
     if (!el.statsOverlay.hidden) closeStats();
+    else if (held) releaseHeld("put down");
     else input.cancelDrag();
     return;
+  }
+
+  // ---- keyboard play ----
+  if (!mod && !e.altKey && boardHasKeys()) {
+    const arrow = ARROWS[e.key];
+    if (arrow) {
+      e.preventDefault();
+      // Shift turns up/down into "take more / fewer cards with me", which is a
+      // different question from "which pile", and needs its own gesture.
+      navigate(e.shiftKey && (arrow === "up" || arrow === "down")
+        ? (arrow === "up" ? "deeper" : "shallower")
+        : arrow);
+      return;
+    }
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      activateCursor();
+      return;
+    }
+    if (key === "f") {
+      sendToFoundation();
+      return;
+    }
+    if (key >= "1" && key <= "7") {
+      jumpToColumn(Number(key) - 1);
+      return;
+    }
   }
   if (mod && key === "z") {
     e.preventDefault();

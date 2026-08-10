@@ -9,9 +9,23 @@ import { Animator } from "./animation";
 import { getFaceArt } from "./courtArt";
 import { getCardFace } from "./cardFaces";
 import { getFelt, ThemeName } from "./theme";
+import { cardPos } from "./positions";
+import { samePile } from "./cursor";
 
 const RED = "#d4233a";
 const BLACK = "#1b1f27";
+
+/** Where the keyboard cursor is, and what it has picked up. Drawn only while the
+ *  keyboard is actually in use — see `keyboardActive` in main.ts — so a mouse player
+ *  never sees it. */
+export interface CursorView {
+  pile: PileId;
+  /** Index of the card the cursor points at; the ring covers it and everything on
+   *  top of it, which is exactly what would be picked up. */
+  depth: number;
+  /** The lifted run waiting for a destination, if any. */
+  held: { pile: PileId; depth: number } | null;
+}
 
 export interface DragState {
   cards: Card[];
@@ -504,6 +518,7 @@ export class Renderer {
     layout: Layout,
     animator: Animator,
     drag: DragState | null,
+    cursor: CursorView | null,
   ): void {
     this.drawBoard(ctx, layout);
 
@@ -570,6 +585,15 @@ export class Renderer {
         const d = offsets[i];
         this.drawCard(ctx, card, base.x + (layout.fanX ? d : 0), base.y + (layout.fanX ? 0 : d), layout);
       }
+    }
+
+    // The keyboard cursor. Yellow and tight to the cards, against the drop ring's
+    // wide steady white — two different questions ("where am I" vs "where will this
+    // land"), so they have to stay tellable apart when both are on screen.
+    if (cursor) {
+      if (cursor.held) this.highlightRun(ctx, game, layout, cursor.held.pile, cursor.held.depth, true);
+      const onHeld = cursor.held && samePile(cursor.held.pile, cursor.pile);
+      if (!onHeld) this.highlightRun(ctx, game, layout, cursor.pile, cursor.depth, false);
     }
 
     // Where the live drag would land. Drawn under the dragged stack, hence the
@@ -649,6 +673,42 @@ export class Renderer {
         return layout.fanX ? { x: base.x + d, y: base.y } : { x: base.x, y: base.y + d };
       }
     }
+  }
+
+  /** Ring the run the keyboard cursor covers: from the focused card to the bottom of
+   *  the fan, so the outline is literally the cards that would move. `held` cards get
+   *  a heavier, glowing version — they are lifted, waiting for somewhere to go. */
+  private highlightRun(
+    ctx: CanvasRenderingContext2D,
+    game: Game,
+    layout: Layout,
+    id: PileId,
+    depth: number,
+    held: boolean,
+  ): void {
+    const cards = game.getPile(id);
+    const top = cards.length ? cardPos(game, layout, id, Math.min(depth, cards.length - 1)) : this.pileAnchor(game, layout, id);
+    const end = cards.length ? cardPos(game, layout, id, cards.length - 1) : top;
+    const pad = 4;
+    const x = Math.min(top.x, end.x) - pad;
+    const y = Math.min(top.y, end.y) - pad;
+    const w = Math.abs(end.x - top.x) + layout.cardW + pad * 2;
+    const h = Math.abs(end.y - top.y) + layout.cardH + pad * 2;
+
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, layout.radius);
+    if (held) {
+      ctx.fillStyle = "rgba(255,211,78,0.16)";
+      ctx.fill();
+      ctx.lineWidth = 4;
+      ctx.shadowColor = "rgba(255,211,78,0.8)";
+      ctx.shadowBlur = 16;
+    } else {
+      ctx.lineWidth = 3;
+    }
+    ctx.strokeStyle = "#ffd34e";
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** Ring the pile a live drag would land on. Steady and white on purpose — it reads
