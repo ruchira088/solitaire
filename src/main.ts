@@ -456,36 +456,57 @@ function fmtDuration(ms: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function statRows(s: Stats): [string, string][] {
+/** The record, in two groups. Twelve rows in one list read as a wall, and the daily
+ *  counters answer a different question from the lifetime ones — so they get their own
+ *  heading rather than trailing off the bottom of the same column. */
+function statGroups(s: Stats): { title: string; rows: [string, string][] }[] {
   const dash = (n: number): string => (n > 0 ? String(n) : "—");
   return [
-    ["Games played", String(s.played)],
-    ["Games won", String(s.won)],
-    ["Win rate", s.played === 0 ? "—" : `${Math.round((s.won / s.played) * 100)}%`],
-    ["Current streak", String(s.streak)],
-    ["Best streak", String(s.bestStreak)],
-    ["Best score", dash(s.bestScore)],
-    ["Fastest win", fmtDuration(s.fastestMs)],
-    ["Fewest moves", dash(s.fewestMoves)],
-    ["Time played", fmtDuration(s.totalMs)],
-    // The live streak, not the stored one: a run that lapsed reads as 0 here without
-    // anything having to run at midnight to expire it.
-    ["Daily streak", String(currentDailyStreak(s, todayKey()))],
-    ["Best daily streak", String(s.bestDailyStreak)],
-    ["Dailies won", String(s.dailyWins)],
+    {
+      title: "Games",
+      rows: [
+        ["Played", String(s.played)],
+        ["Won", String(s.won)],
+        ["Win rate", s.played === 0 ? "—" : `${Math.round((s.won / s.played) * 100)}%`],
+        ["Current streak", String(s.streak)],
+        ["Best streak", String(s.bestStreak)],
+        ["Best score", dash(s.bestScore)],
+        ["Fastest win", fmtDuration(s.fastestMs)],
+        ["Fewest moves", dash(s.fewestMoves)],
+        ["Time played", fmtDuration(s.totalMs)],
+      ],
+    },
+    {
+      title: "Daily deal",
+      rows: [
+        // The live streak, not the stored one: a run that lapsed reads as 0 here
+        // without anything having to run at midnight to expire it.
+        ["Current streak", String(currentDailyStreak(s, todayKey()))],
+        ["Best streak", String(s.bestDailyStreak)],
+        ["Dailies won", String(s.dailyWins)],
+      ],
+    },
   ];
 }
 
 function renderStats(): void {
-  el.statsList.replaceChildren(
-    ...statRows(loadStats()).flatMap(([label, value]) => {
+  const nodes: HTMLElement[] = [];
+  for (const group of statGroups(loadStats())) {
+    // A <dt> spanning both columns: still a definition list, still one grid, and the
+    // heading can't drift out of step with the rows under it.
+    const head = document.createElement("dt");
+    head.className = "stats-group";
+    head.textContent = group.title;
+    nodes.push(head);
+    for (const [label, value] of group.rows) {
       const dt = document.createElement("dt");
       dt.textContent = label;
       const dd = document.createElement("dd");
       dd.textContent = value;
-      return [dt, dd];
-    }),
-  );
+      nodes.push(dt, dd);
+    }
+  }
+  el.statsList.replaceChildren(...nodes);
 }
 
 function openStats(): void {
