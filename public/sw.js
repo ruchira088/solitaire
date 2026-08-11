@@ -81,8 +81,13 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         try {
           const fresh = await fetch(request);
-          const cache = await caches.open(CACHE);
-          cache.put("./index.html", fresh.clone());
+          // Only bank a *good* page. Cache.put (unlike cache.add) will happily store a
+          // 503 from a mid-deploy origin, and that error page then becomes what every
+          // later offline launch sees — permanently, until the next online success.
+          if (fresh.ok) {
+            const cache = await caches.open(CACHE);
+            cache.put("./index.html", fresh.clone());
+          }
           return fresh;
         } catch {
           return (

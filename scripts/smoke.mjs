@@ -235,6 +235,30 @@ try {
   await page.waitForTimeout(200);
   check("escape puts it back down", (await spoken()) === "put down", await spoken());
 
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+
+  // Regression (review): the board must not swallow Space/Enter from a focused
+  // control, or every toolbar button becomes unusable by keyboard.
+  const movesPreEnter = await moves();
+  await page.click("#btn-add-stack");
+  await page.waitForTimeout(400);
+  await page.focus("#btn-undo");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  check("Enter still activates a focused toolbar button", (await moves()) === movesPreEnter,
+    `${movesPreEnter} -> ${await moves()}`);
+
+  // Regression (review): F must not reach into the face-down stock.
+  await page.focus("#board");
+  await page.keyboard.press("1");
+  await page.waitForTimeout(150);
+  await page.keyboard.press("ArrowUp"); // column 1 sits under the stock
+  await page.waitForTimeout(150);
+  await page.keyboard.press("f");
+  await page.waitForTimeout(300);
+  check("F is refused on the stock", (await spoken()).includes("draw the card first"), await spoken());
+
   // ...and the other half of that bargain: once nothing is happening, it must stop
   // drawing. Counting real drawImage calls, since an idle loop that repaints an
   // identical frame is invisible to a pixel hash. Update this deliberately if the

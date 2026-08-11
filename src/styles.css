@@ -427,8 +427,14 @@ body.chrome-hidden .controls {
 
 /* The stat labels are muted for the near-white light-theme bar; on the felt
    strip that shade washes out, so darken it while the bar is folded away. */
+/* Any theme whose felt is pale needs darker stat labels once the toolbar is folded
+   away and painted as fake felt. Listed per theme rather than assumed: a new dark
+   theme must not be dragged in here, and a new pale one has to be added. */
 body.chrome-hidden[data-theme="light"] #toolbar {
   --muted: rgba(9, 43, 27, 0.85);
+}
+body.chrome-hidden[data-theme="parchment"] #toolbar {
+  --muted: rgba(46, 32, 12, 0.85);
 }
 
 /* Smallest phones: the title won't fit beside the stats, and it's the one thing

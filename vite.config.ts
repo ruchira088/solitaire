@@ -5,10 +5,12 @@ import { join } from "node:path";
 
 /** Fill in the service worker's version and precache list after the bundle is written.
  *
- *  The version is a hash of the emitted asset *names*, which Vite content-hashes — so
- *  a changed bundle produces a new cache name (and `activate` drops the old one),
- *  while an unchanged bundle produces a byte-identical worker rather than evicting
- *  every player's cache on a no-op deploy.
+ *  The version is a hash of the *contents* of everything shipped. Hashing the emitted
+ *  asset names alone was not enough: files under `public/` never appear in `bundle`,
+ *  so regenerated card art or a new icon left the version — and the whole worker —
+ *  byte-identical, and the cache-first handler went on serving the old copies forever
+ *  with no way out short of clearing site data. Contents still hash identically for an
+ *  unchanged build, so a no-op deploy does not evict anyone's cache.
  *
  *  The precache list is the shell plus **every** card face. Leaving the 12 court WebPs
  *  (~850 KB) to be cached on demand kept the install lighter, but meant a player who
@@ -24,7 +26,25 @@ function stampServiceWorker(): Plugin {
       const swPath = join(dir, "sw.js");
 
       const emitted = Object.keys(bundle).sort();
-      const version = createHash("sha256").update(emitted.join("|")).digest("hex").slice(0, 12);
+
+      /** Every shipped file, relative to dist, except the worker itself — hashing sw.js
+       *  into its own version is circular. */
+      const shipped = (base: string, prefix = ""): string[] =>
+        readdirSync(base, { withFileTypes: true })
+          .flatMap((e) =>
+            e.isDirectory()
+              ? shipped(join(base, e.name), `${prefix}${e.name}/`)
+              : [`${prefix}${e.name}`],
+          )
+          .filter((f) => f !== "sw.js")
+          .sort();
+
+      const hash = createHash("sha256");
+      for (const file of shipped(dir)) {
+        hash.update(file);
+        hash.update(readFileSync(join(dir, file)));
+      }
+      const version = hash.digest("hex").slice(0, 12);
 
       const cards = readdirSync(join(dir, "cards"))
         .sort()

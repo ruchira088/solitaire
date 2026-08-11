@@ -137,7 +137,12 @@ logic, rendering, animation, and input kept cleanly separated.
   second on an idle board before this. `frame` paints when `dirty` is set, while the
   animator is running, while a drag is live, or during the celebration; `invalidate()`
   sets the flag. **Anything that changes what the canvas should show must call it** —
-  a missed one leaves a stale board, which is far worse than the frames it saves.
+  a missed one leaves a stale board, which is far worse than the frames it saves. Two
+  were missed first time round and are worth knowing about, because neither is a
+  *move*: switching the draw mode changes how the waste fans, and **releasing a press
+  repaints even when nothing happened** — a press that never became a drag has already
+  been painted lifted and offset, so `pointerup`/`pointercancel` on the canvas
+  invalidate unconditionally.
   Three subtleties: `wasAnimating` is read *before* `animator.update()`, because the
   frame that finishes the last flight still has to paint or the card never appears at
   rest; the `pendingCheck` sweep sits outside the paint gate, since a win has to be
@@ -181,12 +186,18 @@ logic, rendering, animation, and input kept cleanly separated.
   caps the undo stack at 200, so past that depth an undo pops the wrong snapshot. So
   `solver.ts` has a compact state of its own, and `solver.test.ts` cross-checks its
   move generator against `Game` on real and hand-built positions. That check has
-  already earned its place: it caught the pruning layer withholding moves `game.ts`
-  allows, which is why `legalMoves` now takes `prune` and the test compares the
-  *complete* set.
+  already earned its place twice: it caught the pruning layer withholding moves
+  `game.ts` allows (hence `prune`, and comparing the *complete* set), and its one blind
+  spot — `compare()` built no `foundationToTableau` entries on either side — is exactly
+  where the empty-column bug hid. **A move class absent from both sides of that
+  comparison is unchecked, not agreed.**
   **"Unwinnable" is a claim, so the move set must be complete** — including
-  foundation→tableau, which is nearly useless and costly to search but whose absence
-  would let a winnable board be called dead. Anything the node budget cuts short is
+  foundation→tableau, and specifically **onto an empty column**: pulling a King back
+  off a foundation to open a base is the only way some boards are winnable at all, and
+  omitting it made the solver declare such a deal dead. The empty-column dedup that
+  goes with it is **per card, not per position** — sharing one flag across suits offers
+  only the lowest-numbered foundation an empty column, and if that card is the wrong
+  colour for what needs a base the winning line is invisible. Anything the node budget cuts short is
   `unknown`, never `unwinnable`. ✦ stacks and easy mode change what a legal move is
   and are not modelled: `canAnalyse` returns false and the UI says so rather than
   answering a different question. Measured over 40 draw-1 deals at a 200k-node cap:

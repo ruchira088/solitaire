@@ -88,6 +88,33 @@ describe("recognising a dead board", () => {
     expect(solve(g).outcome).toBe("unwinnable");
   });
 
+  it("pulls a king back off a foundation to open a base", () => {
+    // ♠ ♥ ♦ are home; A♣ is face down under Q♣ with no empty column to move the queen
+    // to — until K♥ comes *back off* its foundation to make one. Reported by review:
+    // legalMoves used to skip foundation→tableau onto an empty column, so the solver
+    // called this winnable board dead.
+    const initial = state({
+      foundations: [home(S, 13), home(H, 13), home(D, 13), []],
+      tableau: [[dn(C, 1), up(C, 12)], [], [], [], [], [], []],
+      // Every club except the A and Q already on the table. Drawing pops the end, so
+      // this order deals 2♣ first and K♣ last.
+      stock: [13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2].map((r) => dn(C, r)),
+    });
+    expect(initial.tableau.flat().length + initial.stock.length + initial.foundations.flat().length).toBe(52);
+    const r = solve(initial, { maxNodes: 200_000 });
+    expect(r.outcome).toBe("solved");
+    expect(r.moves.some((m) => m.kind === "foundationToTableau")).toBe(true);
+  });
+
+  it("offers a foundation card an empty column to land on", () => {
+    const board = state({
+      foundations: [home(S, 13), [], [], []],
+      tableau: [[], [], [], [], [], [], []],
+    });
+    const moves = legalMoves(toSolverState(board), { prune: false });
+    expect(moves.some((m) => m.kind === "foundationToTableau")).toBe(true);
+  });
+
   it("does not claim unwinnable when it merely ran out of budget", () => {
     const g = new Game(1, 116).serialize();
     const r = solve(g, { maxNodes: 50 });
@@ -205,6 +232,9 @@ describe("its move generator agrees with game.ts", () => {
       if (m.kind === "tableauToFoundation") solverSet.add(`t${m.col}->F`);
       if (m.kind === "wasteToTableau") solverSet.add(`w->t${m.col}`);
       if (m.kind === "wasteToFoundation") solverSet.add(`w->F`);
+      // Reported by review: this class was missing from both sides of the comparison,
+      // which is why a hole in it went unnoticed.
+      if (m.kind === "foundationToTableau") solverSet.add(`F${m.suit}->t${m.col}`);
     }
 
     const gameSet = new Set<string>();
@@ -224,6 +254,15 @@ describe("its move generator agrees with game.ts", () => {
       const top = probe.waste[probe.waste.length - 1];
       for (let to = 0; to < 7; to++) if (probe.canMoveToTableau(top, to)) gameSet.add(`w->t${to}`);
       if (probe.foundationTargetFor(top) >= 0) gameSet.add("w->F");
+    }
+    const SUIT_ORDER = ["spades", "hearts", "diamonds", "clubs"] as const;
+    for (const pile of probe.foundations) {
+      if (!pile.length) continue;
+      const top = pile[pile.length - 1];
+      const suit = SUIT_ORDER.indexOf(top.suit);
+      for (let to = 0; to < 7; to++) {
+        if (probe.canMoveToTableau(top, to)) gameSet.add(`F${suit}->t${to}`);
+      }
     }
 
     expect([...solverSet].sort()).toEqual([...gameSet].sort());
@@ -256,6 +295,15 @@ describe("its move generator agrees with game.ts", () => {
       expect(board.tableau[m.from]).toHaveLength(m.count);
       expect(board.tableau[m.to]).toHaveLength(0);
     }
+  });
+
+  it("agrees about taking a card back off a foundation, empty columns included", () => {
+    compare(
+      state({
+        foundations: [home(S, 13), home(H, 2), [], []],
+        tableau: [[up(D, 12)], [], [], [up(C, 3)], [], [], []],
+      }),
+    );
   });
 
   it("agrees on a board with runs, empties and foundations in play", () => {

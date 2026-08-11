@@ -679,6 +679,7 @@ function persist(): void {
 
 function onChange(): void {
   invalidate();
+  boardVersion++;
   if (cursor) cursor = clampCursor(game, cursor);
   syncSpareLayout();
   if (!countedPlayed && game.moves > 0) {
@@ -709,6 +710,7 @@ function beginGame(deal: () => void): void {
   resuming = false;
   animator.clear();
   invalidate();
+  boardVersion++;
   cursor = null;
   held = null;
   deal();
@@ -851,6 +853,7 @@ function afterTimeTravel(): void {
 
 function setDrawCount(n: DrawCount): void {
   game.drawCount = n;
+  invalidate(); // the waste fans by drawCount, so the board looks different at once
   for (const btn of Array.from(el.drawToggle.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
     btn.classList.toggle("is-active", Number(btn.dataset.draw) === n);
   }
@@ -984,6 +987,11 @@ function showToast(message: string, ms = 6000): void {
 
 let solverWorker: Worker | null = null;
 let analysing = false;
+/** Bumped by every change to the board. The search runs against a snapshot taken at
+ *  click time while the board stays playable, so the verdict has to be checked against
+ *  the position it was actually about — otherwise "this can't be won" can land about a
+ *  game the player has already left, or a different deal entirely. */
+let boardVersion = 0;
 
 /** The search runs in a worker: a stubborn position can take several hundred
  *  milliseconds, which inline would drop frames and stall a drag. */
@@ -1027,7 +1035,14 @@ function analysePosition(): void {
     el.analyse.disabled = false;
     showToast(message);
   };
-  worker.onmessage = (e: MessageEvent<{ outcome: Outcome }>) => done(VERDICT[e.data.outcome]);
+  const askedAbout = boardVersion;
+  worker.onmessage = (e: MessageEvent<{ outcome: Outcome }>) => {
+    if (boardVersion !== askedAbout) {
+      done("🤔 The board changed while I was looking — press 🔍 again.");
+      return;
+    }
+    done(VERDICT[e.data.outcome]);
+  };
   worker.onerror = () => {
     // A worker that won't start shouldn't look like a verdict.
     solverWorker = null;
@@ -1083,19 +1098,24 @@ function playMove(from: PileId, fromIndex: number, to: PileId): boolean {
     .getPile(from)
     .slice(fromIndex)
     .map((_, i) => cardPos(game, layout, from, fromIndex + i));
-  const landing = game.getPile(to).length;
   const result = game.moveCards(from, fromIndex, to);
   if (!result) return false;
   syncSpareLayout(); // emptying a ✦ stack drops a column before we aim the flights
+  // `result.to`, never the requested `to`: moveCards re-indexes a spare destination
+  // when the source spare empties and is spliced out, so the pile the cards actually
+  // landed on can have a lower index than the one asked for. Aiming a flight at the
+  // stale index reads past the end of the freshly rebuilt layout and throws.
+  const dest = result.to;
+  const landing = game.getPile(dest).length - result.moved.length;
   result.moved.forEach((card, i) => {
-    animator.flyCard(card, origins[i], cardPos(game, layout, to, landing + i), {
+    animator.flyCard(card, origins[i], cardPos(game, layout, dest, landing + i), {
       duration: 160,
       easing: Easings.easeOutCubic,
     });
   });
   playPlace();
   if (result.flipped) playFlip();
-  announce(describeMove(game, result.moved, to, result.flipped));
+  announce(describeMove(game, result.moved, dest, result.flipped));
   onChange();
   return true;
 }
@@ -1160,9 +1180,21 @@ function releaseHeld(why: string): void {
 function sendToFoundation(): void {
   if (busy || celebration.active || autoCompleting) return;
   const c = held ?? ensureCursor();
+  // The stock is face down and unplayable until drawn. `moveCards` has no face-up
+  // guard for it (unlike `autoMoveToFoundation`), so without this the F key sends an
+  // undrawn card straight home — breaking the rules and writing a face-down card into
+  // a foundation, which `parseGameState` then rejects, silently binning the save.
+  if (c.pile.kind === "stock") {
+    announce("draw the card first");
+    return;
+  }
   const pile = game.getPile(c.pile);
   if (pile.length === 0) return;
   const card = pile[pile.length - 1];
+  if (!card.faceUp) {
+    announce("that card is face down");
+    return;
+  }
   const target = game.foundationTargetFor(card);
   if (target < 0) {
     announce("no foundation for that card");
@@ -1190,6 +1222,14 @@ canvas.addEventListener("pointerdown", () => {
   held = null;
   invalidate();
 });
+
+// Releasing a press always repaints. While the button is down the renderer draws the
+// pressed card lifted and offset from its pile; if the press never became a drag and
+// the tap did nothing, `Input` just drops `drag` with no onChange, and the paint gate
+// would leave that lifted card on screen until something unrelated dirtied the board.
+for (const type of ["pointerup", "pointercancel"]) {
+  canvas.addEventListener(type, invalidate);
+}
 
 // A drag left mid-air when the tab loses focus: pointercancel usually fires, but not
 // on every platform.
@@ -1250,6 +1290,18 @@ function boardHasKeys(): boolean {
   return !!el.statsOverlay.hidden && !!el.winOverlay.hidden;
 }
 
+/** Whether a focused control should get Space/Enter instead of the board.
+ *
+ *  Those two keys are how a browser activates the focused element, so swallowing them
+ *  unconditionally makes every toolbar button unusable by keyboard — the opposite of
+ *  what the cursor was added for. Arrow keys and letters are safe to take: a focused
+ *  button does nothing with them. */
+function focusOwnsActivation(): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || active === canvas) return false;
+  return active.closest("button, a[href], input, select, textarea, [contenteditable]") !== null;
+}
+
 const ARROWS: Record<string, CursorMove> = {
   ArrowLeft: "left",
   ArrowRight: "right",
@@ -1281,6 +1333,7 @@ window.addEventListener("keydown", (e) => {
       return;
     }
     if (e.key === " " || e.key === "Enter") {
+      if (focusOwnsActivation()) return; // let the focused button take it
       e.preventDefault();
       activateCursor();
       return;

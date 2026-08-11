@@ -170,15 +170,25 @@ export function legalMoves(s: State, { prune = true }: { prune?: boolean } = {})
   }
 
   // Foundation → tableau. Almost never useful, but legal, and leaving it out would
-  // let the search call a winnable board dead.
+  // let the search call a winnable board dead. That includes onto an **empty** column:
+  // the `s.up[c].length &&` guard this once had quietly excluded pulling a King back
+  // off a foundation to open a base, which is exactly the case that makes some boards
+  // winnable at all.
   for (let suit = 0; suit < 4; suit++) {
     const rank = s.found[suit];
     if (rank === 0) continue;
     const id = suit * 13 + rank - 1;
+    // Empty columns are interchangeable, so this card only needs to be offered one of
+    // them — but the flag is **per card**, not shared across suits. Sharing it means
+    // only the lowest-numbered foundation ever gets an empty column, and if that card
+    // is the wrong colour for what needs a base, the winning line is invisible.
+    let emptyOffered = false;
     for (let c = 0; c < 7; c++) {
-      if (s.up[c].length && acceptsOnTableau(s.up[c], id)) {
-        moves.push({ kind: "foundationToTableau", suit, col: c });
-      }
+      if (!acceptsOnTableau(s.up[c], id)) continue;
+      const bareColumn = s.up[c].length === 0 && s.down[c].length === 0;
+      if (prune && bareColumn && emptyOffered) continue;
+      moves.push({ kind: "foundationToTableau", suit, col: c });
+      if (bareColumn) emptyOffered = true;
     }
   }
 
