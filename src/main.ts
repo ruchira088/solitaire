@@ -45,6 +45,7 @@ import {
   recentDailyKeys,
 } from "./rng";
 import { formatClock, shareText } from "./share";
+import { canAnalyse, Outcome } from "./solver";
 import {
   clampCursor,
   Cursor,
@@ -216,7 +217,9 @@ const el = {
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
+  analyse: document.getElementById("btn-analyse") as HTMLButtonElement,
   daily: document.getElementById("btn-daily") as HTMLButtonElement,
+  toast: document.getElementById("toast") as HTMLElement,
   stats: document.getElementById("btn-stats") as HTMLButtonElement,
   statsOverlay: document.getElementById("stats-overlay") as HTMLElement,
   statsList: document.getElementById("stats-list") as HTMLElement,
@@ -942,6 +945,76 @@ function addTempStack(): void {
   if (game.addTempStack()) onChange();
 }
 
+// ---- Messages over the board -----------------------------------------------
+
+let toastTimer = 0;
+
+/** A short-lived line over the board, also spoken. Used for answers that have nowhere
+ *  permanent to live — the solver's verdict is the only one so far. */
+function showToast(message: string, ms = 6000): void {
+  window.clearTimeout(toastTimer);
+  el.toast.textContent = message;
+  el.toast.hidden = false;
+  announce(message);
+  toastTimer = window.setTimeout(() => (el.toast.hidden = true), ms);
+}
+
+// ---- Is this deal still winnable? ------------------------------------------
+
+let solverWorker: Worker | null = null;
+let analysing = false;
+
+/** The search runs in a worker: a stubborn position can take several hundred
+ *  milliseconds, which inline would drop frames and stall a drag. */
+function getSolverWorker(): Worker {
+  solverWorker ??= new Worker(new URL("./solver.worker.ts", import.meta.url), { type: "module" });
+  return solverWorker;
+}
+
+const VERDICT: Record<Outcome, string> = {
+  solved: "✅ This deal can still be won from here.",
+  unwinnable: "🪦 This deal can't be won from here — undo, or start a new game.",
+  // Said plainly: the search gave up, which is not the same as proving anything.
+  unknown: "🤔 Couldn't tell within the time budget — it may still be winnable.",
+};
+
+function analysePosition(): void {
+  if (analysing) return;
+  // Order matters: a won board is mid-celebration, so the busy guard below would
+  // otherwise swallow the click and leave the button looking broken.
+  if (game.isWon()) {
+    showToast("✅ Already won.");
+    return;
+  }
+  if (busy || celebration.active || autoCompleting) {
+    showToast("⏳ Wait for the cards to settle.", 2500);
+    return;
+  }
+  const state = game.serialize();
+  if (!canAnalyse(state)) {
+    showToast("🤔 Can't analyse a board with ✦ stacks or easy mode — their rules differ.");
+    return;
+  }
+
+  analysing = true;
+  el.analyse.disabled = true;
+  showToast("🔍 Looking for a way to win…", 60_000);
+
+  const worker = getSolverWorker();
+  const done = (message: string): void => {
+    analysing = false;
+    el.analyse.disabled = false;
+    showToast(message);
+  };
+  worker.onmessage = (e: MessageEvent<{ outcome: Outcome }>) => done(VERDICT[e.data.outcome]);
+  worker.onerror = () => {
+    // A worker that won't start shouldn't look like a verdict.
+    solverWorker = null;
+    done("🤔 Couldn't run the analysis.");
+  };
+  worker.postMessage({ state, maxNodes: 200_000 });
+}
+
 // ---- Keyboard play ---------------------------------------------------------
 
 const live = document.getElementById("a11y-status") as HTMLElement;
@@ -1117,6 +1190,7 @@ el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
 el.restart.addEventListener("click", restartDeal);
+el.analyse.addEventListener("click", analysePosition);
 el.daily.addEventListener("click", playDaily);
 el.stats.addEventListener("click", openStats);
 el.statsClose.addEventListener("click", closeStats);

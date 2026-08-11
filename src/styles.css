@@ -75,6 +75,7 @@ body {
 }
 
 #app {
+  position: relative; /* anchors #toast over the board */
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -587,6 +588,40 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* A short-lived message over the board. pointer-events: none so it can never sit
+   between the player and a card. */
+#toast {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 7;
+  max-width: min(90vw, 460px);
+  padding: 10px 16px;
+  border: 1px solid var(--btn-border);
+  border-radius: 10px;
+  background: rgba(8, 24, 16, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #eafff3;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  animation: toast-in 0.18s ease-out;
+}
+#toast[hidden] {
+  display: none;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #toast { animation: none; }
 }
 
 /* ---- Statistics dialog --------------------------------------------------- */

@@ -57,6 +57,7 @@
           </div>
           <button id="btn-easy" class="btn" title="Easy mode: empty columns accept any card" aria-pressed="false"><span class="ico" aria-hidden="true">👶</span>Easy</button>
           <button id="btn-add-stack" class="btn" title="Add a temporary ✦ stack (−50 points, max 3; it disappears when emptied)">+ Stack</button>
+          <button id="btn-analyse" class="btn icon-btn" type="button" title="Can this deal still be won?" aria-label="Can this deal still be won?">🔍</button>
           <button id="btn-daily" class="btn icon-btn" type="button" title="Play today's deal" aria-label="Play today's deal">📅</button>
           <button id="btn-stats" class="btn icon-btn" type="button" title="Statistics" aria-label="Statistics">📊</button>
           <button id="btn-sound" class="btn icon-btn" title="Mute sound effects" aria-label="Toggle sound">🔊</button>
@@ -79,6 +80,9 @@
         aria-describedby="a11y-status"
       ></canvas>
       <div id="a11y-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+      <!-- Transient messages over the board. Announced through the live region too,
+           so the answer reaches both audiences. -->
+      <div id="toast" hidden></div>
       <!-- Sits over the board while the cards cascade. No backdrop, and the wrapper
            passes pointer events through, so the celebration keeps running and the
            toolbar stays usable behind it. -->

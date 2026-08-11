@@ -250,6 +250,22 @@ try {
   });
   check("an idle board stops drawing entirely", idleDraws === 0, `${idleDraws} card draws in 1s while idle`);
 
+  // ---- the solver ----
+  // A verdict at all is the check: the worker has to start, the search has to finish,
+  // and the answer has to come back. Which of the three verdicts it is depends on the
+  // deal, so it isn't asserted.
+  await page.click("#btn-analyse");
+  check("analysing disables the button while it thinks",
+    await page.evaluate(() => document.getElementById("btn-analyse").disabled));
+  await page.waitForFunction(
+    () => !document.getElementById("toast").textContent.includes("Looking"),
+    null,
+    { timeout: 30000 },
+  );
+  const verdict = await page.textContent("#toast");
+  check("the solver returns a verdict",
+    /can still be won|can't be won|Couldn't tell|Already won/.test(verdict), verdict);
+
   // ---- offline ----
   // The worker registering is the load-bearing bit: register() rejects silently in the
   // app (offline play is a bonus, never a requirement), so nothing else would notice a

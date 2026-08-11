@@ -65,6 +65,10 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   sends a card home. Every move is announced to screen readers through a live region,
   so the game is playable without seeing it. The cursor only appears once you use the
   keyboard, and goes away the moment you touch the mouse.
+- 🔍 **Is this still winnable?** — a solver searches the position and tells you
+  whether a win is still reachable, so a hopeless deal doesn't waste your evening. It
+  runs off the main thread, and says "couldn't tell" rather than guessing when the
+  search runs long.
 - 📲 **Installable & offline** — a web manifest and a service worker cache the whole
   game (~1.5 MB, all 52 card faces included), so it installs to a phone home screen
   and plays on a plane. Page loads go to the network first, so a new version is never
@@ -226,6 +230,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Park a stack** | Click **+ Stack** in the toolbar (−50 points, up to 3), then drag a card or run onto the ✦ pile to set it aside and reveal the card underneath. The pile disappears once you empty it. |
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
 | **Play from the keyboard** | Arrow keys move the cursor, `Space` picks up and drops, `Shift` + `↑`/`↓` changes how many cards you take, `F` sends one home, `1`–`7` jump to a column, `Esc` puts the cards back down. |
+| **Check a deal** | **🔍** searches for a winning line from the current position and reports whether one exists. |
 | **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |

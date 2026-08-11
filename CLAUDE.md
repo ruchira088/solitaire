@@ -60,7 +60,7 @@ there is no Prettier, and adding one would reflow a lot of hand-broken code at o
 deliberately not valid JavaScript until `vite build` substitutes them.
 
 Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts`,
-`storage.ts`, `share.ts` and `cursor.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
+`storage.ts`, `share.ts`, `cursor.ts` and `solver.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
 and mocking one only buys assertions about the mock.
 
 **`npm run smoke` is what covers those instead** (`scripts/smoke.mjs`). It serves the
@@ -118,6 +118,8 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/storage.ts` | `localStorage`: UI preferences + the in-progress game save |
 | `src/share.ts` | The result text the win dialog copies — **pure**, no DOM |
 | `src/cursor.ts` | Keyboard cursor: navigation and the spoken descriptions — **pure**, no DOM |
+| `src/solver.ts` | Can this position be won? Depth-first search — **pure**, no DOM |
+| `src/solver.worker.ts` | Runs the solver off the main thread |
 
 ### Key design invariants
 
@@ -174,6 +176,22 @@ logic, rendering, animation, and input kept cleanly separated.
   therefore numbers an empty foundation and names a filled one after its actual
   cards — announcing "the spades foundation" for an empty pile would promise a rule
   the game doesn't have.
+- **The solver keeps its own board, and a test stops the rules drifting.** Searching
+  through `Game.undo()` would be tempting — one copy of the rules — but `MAX_HISTORY`
+  caps the undo stack at 200, so past that depth an undo pops the wrong snapshot. So
+  `solver.ts` has a compact state of its own, and `solver.test.ts` cross-checks its
+  move generator against `Game` on real and hand-built positions. That check has
+  already earned its place: it caught the pruning layer withholding moves `game.ts`
+  allows, which is why `legalMoves` now takes `prune` and the test compares the
+  *complete* set.
+  **"Unwinnable" is a claim, so the move set must be complete** — including
+  foundation→tableau, which is nearly useless and costly to search but whose absence
+  would let a winnable board be called dead. Anything the node budget cuts short is
+  `unknown`, never `unwinnable`. ✦ stacks and easy mode change what a legal move is
+  and are not modelled: `canAnalyse` returns false and the UI says so rather than
+  answering a different question. Measured over 40 draw-1 deals at a 200k-node cap:
+  27 solved, 2 proved dead, 11 unknown, ~115 ms average and 405 ms worst — which is
+  why it runs in a worker rather than on the frame loop.
 - **The archive can't back-fill a streak.** Past dailies are playable from the grid
   in the statistics dialog, and winning one ticks its day and counts in `dailyWins` —
   but the run is only ever about keeping up with *today*, so `recordWin` takes
