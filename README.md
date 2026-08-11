@@ -149,6 +149,11 @@ worked out from the date alone, so a score on it is worth comparing. It's an ord
 seeded deal underneath: **Restart** replays it, and its `?deal=` URL shares like any
 other.
 
+Past deals are playable too: the **📊 Statistics** dialog shows the last four weeks as
+a grid, filled in for the days you've won and ringed on today. Click any day to play
+it. Winning an old one ticks it off and counts towards *dailies won* — but it can't
+extend or revive a streak, because the streak is about keeping up with today.
+
 Win it and you start a **daily streak**. Win the next day's too and the run grows;
 skip a day and the next win starts again at 1, though your best run is kept. Replaying
 a day you've already won is fine — it just doesn't count twice.

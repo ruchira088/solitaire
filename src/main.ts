@@ -24,6 +24,7 @@ import { isSoundEnabled, setSoundEnabled, playDeal, playDraw, playFlip, playPlac
 import {
   clearGame,
   currentDailyStreak,
+  hasWonDaily,
   loadGame,
   loadStats,
   readItem,
@@ -35,7 +36,14 @@ import {
   Stats,
   writeItem,
 } from "./storage";
-import { dailyKey, dailySeed, encodeSeed, parseSeed } from "./rng";
+import {
+  dailyDayForSeed,
+  dailyKey,
+  dailySeed,
+  encodeSeed,
+  parseSeed,
+  recentDailyKeys,
+} from "./rng";
 import { formatClock, shareText } from "./share";
 import {
   clampCursor,
@@ -341,7 +349,9 @@ function startCelebration(): void {
     score: game.score,
     elapsedMs: elapsedNow(),
     moves: game.moves,
-    daily: isDailyGame() ? todayKey() : undefined,
+    // Which day's board this is — today's, an archived one, or not a daily at all.
+    // Only today's extends the streak; an archived win just ticks that day off.
+    daily: dailyOfCurrentGame(),
   });
   syncDailyButton();
   if (timerStart !== null) {
@@ -497,6 +507,33 @@ function statGroups(s: Stats): { title: string; rows: [string, string][] }[] {
   ];
 }
 
+/** The archive: the last four weeks of daily deals, ticked where they were won and
+ *  clickable to play. It lives inside the statistics dialog rather than behind a new
+ *  toolbar button — it *is* the daily record, the toolbar is already full, and the
+ *  measured wrap threshold has no room to spare. */
+function renderArchive(s: Stats): HTMLElement {
+  const today = todayKey();
+  const grid = document.createElement("div");
+  grid.className = "archive";
+  // Oldest first, so it reads like a calendar rather than backwards.
+  for (const key of recentDailyKeys(today, ARCHIVE_WINDOW).reverse()) {
+    const won = hasWonDaily(s, key);
+    const isToday = key === today;
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "archive-day";
+    cell.classList.toggle("is-won", won);
+    cell.classList.toggle("is-today", isToday);
+    cell.dataset.day = key;
+    cell.textContent = String(Number(key.slice(8, 10)));
+    const state = won ? "won" : "not won";
+    cell.title = `${key} — ${state}. Click to play this deal.`;
+    cell.setAttribute("aria-label", `${key}, ${state}${isToday ? ", today" : ""}`);
+    grid.appendChild(cell);
+  }
+  return grid;
+}
+
 function renderStats(): void {
   const nodes: HTMLElement[] = [];
   for (const group of statGroups(loadStats())) {
@@ -515,6 +552,15 @@ function renderStats(): void {
     }
   }
   el.statsList.replaceChildren(...nodes);
+
+  const stats = loadStats();
+  const wrap = document.createElement("dd");
+  wrap.className = "archive-cell";
+  wrap.appendChild(renderArchive(stats));
+  const head = document.createElement("dt");
+  head.className = "archive-cell";
+  head.textContent = "Last 4 weeks";
+  el.statsList.append(head, wrap);
 }
 
 function openStats(): void {
@@ -678,6 +724,35 @@ function todayKey(): string {
 function isDailyGame(): boolean {
   return game.seed === dailySeed(todayKey());
 }
+
+/** Which day's deal the board on screen is, if any — today's or one from the archive.
+ *  Derived from the seed, so a game resumed days later is still the daily it came
+ *  from without anything extra in the save. */
+function currentDailyDay(): string | null {
+  return dailyDayForSeed(game.seed, todayKey(), ARCHIVE_WINDOW);
+}
+
+/** What `recordWin` needs to know: which day was won, and whether it counts towards
+ *  the run. Only today's does — an archived win ticks its day off in the grid but
+ *  must not extend or restart a streak that is about keeping up. */
+function dailyOfCurrentGame(): { key: string; extendsStreak: boolean } | undefined {
+  const key = currentDailyDay();
+  if (!key) return undefined;
+  return { key, extendsStreak: key === todayKey() };
+}
+
+/** Deal a specific day from the archive. Same guard as playDaily: don't bin a game
+ *  in progress that is already that very board. */
+function playArchivedDay(key: string): void {
+  if (busy || autoCompleting || input.drag) return;
+  const seed = dailySeed(key);
+  if (game.seed === seed && !game.isWon() && game.moves > 0) return;
+  beginGame(() => game.deal(seed));
+}
+
+/** How far back the archive looks — four weeks in the grid, and the same window
+ *  `currentDailyDay` searches, so anything the grid can offer is recognised when won. */
+const ARCHIVE_WINDOW = 28;
 
 function playDaily(): void {
   if (busy || autoCompleting || input.drag) return;
@@ -1045,6 +1120,12 @@ el.restart.addEventListener("click", restartDeal);
 el.daily.addEventListener("click", playDaily);
 el.stats.addEventListener("click", openStats);
 el.statsClose.addEventListener("click", closeStats);
+el.statsList.addEventListener("click", (e) => {
+  const cell = (e.target as HTMLElement).closest<HTMLButtonElement>(".archive-day");
+  if (!cell?.dataset.day) return;
+  closeStats();
+  playArchivedDay(cell.dataset.day);
+});
 el.statsReset.addEventListener("click", armOrResetStats);
 // A click on the backdrop — not the panel — dismisses it, as a modal should.
 el.statsOverlay.addEventListener("click", (e) => {

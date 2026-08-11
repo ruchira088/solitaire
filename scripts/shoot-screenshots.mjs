@@ -63,16 +63,21 @@ const MID_MOVES = 40;
 const MID_ELAPSED = 97_000; // 1:37
 const WIN_ELAPSED = 402_000; // 6:42
 
-const DAILY_KEY = (() => {
+const pad = (n) => String(n).padStart(2, "0");
+const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const DAILY_KEY = dayKey(new Date());
+
+/** A plausible run of archive wins ending today, so the grid in stats.png isn't blank. */
+const WON_DAYS = [0, 1, 2, 3, 5, 6, 9, 12, 13].map((back) => {
   const d = new Date();
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-})();
+  d.setDate(d.getDate() - back);
+  return dayKey(d);
+});
 
 const STATS = JSON.stringify({
   v: 1, played: 42, won: 17, streak: 3, bestStreak: 6, bestScore: 1240,
   fastestMs: 268_000, fewestMoves: 104, totalMs: 9_480_000, pending: false,
-  dailyWins: 9, dailyStreak: 4, bestDailyStreak: 7, lastDailyWin: DAILY_KEY,
+  dailyWins: 9, dailyStreak: 4, bestDailyStreak: 7, lastDailyWin: DAILY_KEY, dailyWonDays: WON_DAYS,
 });
 
 /** Best score set below what the win board scores, so the panel shows the record line. */

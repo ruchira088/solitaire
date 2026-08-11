@@ -644,6 +644,61 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* The archive grid spans both columns of the stats list. */
+#stats-list .archive-cell {
+  grid-column: 1 / -1;
+}
+#stats-list dt.archive-cell {
+  margin-top: 10px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.archive {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin: 6px 0 2px;
+}
+
+.archive-day {
+  appearance: none;
+  padding: 0;
+  aspect-ratio: 1;
+  border: 1px solid var(--btn-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.06s ease;
+}
+.archive-day:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.archive-day:active {
+  transform: translateY(1px);
+}
+
+/* Won days are filled, not just ticked: at this size a glyph is unreadable, and the
+   fill still reads for anyone who can't distinguish the colour. */
+.archive-day.is-won {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #2a1d00;
+  font-weight: 700;
+}
+
+/* Today is ringed whether or not it has been won. */
+.archive-day.is-today {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
 /* Resetting is destructive, so the button asks once. */
 #stats-reset.is-confirming {
   background: var(--accent);

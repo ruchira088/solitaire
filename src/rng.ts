@@ -86,3 +86,30 @@ export function dailySeed(key: string): number {
   h ^= h >>> 15;
   return h >>> 0;
 }
+
+/** The day `days` before (or after) `key`. Arithmetic is done at UTC midnight so a
+ *  daylight-saving change can't skip or repeat a day. */
+export function shiftDailyKey(key: string, days: number): string {
+  const d = new Date(`${key}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The `count` most recent day keys ending at `today`, newest first. */
+export function recentDailyKeys(today: string, count: number): string[] {
+  return Array.from({ length: Math.max(0, count) }, (_, i) => shiftDailyKey(today, -i));
+}
+
+/** Which day's deal a board is, or null if it isn't one.
+ *
+ *  Derived rather than stored, for the same reason `isDailyGame()` is: it costs no
+ *  save-format change and it survives a reload, so a game resumed days later is still
+ *  recognised as the daily it came from. The search window bounds the work — 400 hashes
+ *  is microseconds — and also bounds the claim: a board older than that reads as an
+ *  ordinary deal, which is the harmless direction. */
+export function dailyDayForSeed(seed: number, today: string, window = 400): string | null {
+  for (const key of recentDailyKeys(today, window)) {
+    if (dailySeed(key) === seed) return key;
+  }
+  return null;
+}

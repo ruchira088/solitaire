@@ -104,7 +104,15 @@ export interface Stats {
   dailyStreak: number;
   bestDailyStreak: number;
   lastDailyWin: string;
+  /** Which days have been won, newest first — what the archive ticks. Capped at
+   *  `WON_DAYS_KEPT`, because the archive only ever shows a recent window and an
+   *  uncapped list would grow forever in a 5 MB store. `dailyWins` is the real total
+   *  and is not capped, so trimming this can't cost you a counter. */
+  dailyWonDays: string[];
 }
+
+/** A bit over a year of history — comfortably more than the archive shows. */
+const WON_DAYS_KEPT = 400;
 
 /** Bumped only when an existing field changes *meaning* — a mismatch wipes the
  *  lifetime record, which is a real loss, so it isn't a version-stamp for every
@@ -126,6 +134,7 @@ const EMPTY_STATS: Stats = {
   dailyStreak: 0,
   bestDailyStreak: 0,
   lastDailyWin: "",
+  dailyWonDays: [],
 };
 
 /** Whole days from `a` to `b`, both YYYY-MM-DD. Parsed at UTC midnight so that a
@@ -145,6 +154,11 @@ export function currentDailyStreak(s: Stats, today: string): number {
   if (s.lastDailyWin === "") return 0;
   const gap = daysBetween(s.lastDailyWin, today);
   return gap === 0 || gap === 1 ? s.dailyStreak : 0;
+}
+
+/** Whether a given day's deal has been won. The archive asks this per cell. */
+export function hasWonDaily(s: Stats, key: string): boolean {
+  return s.dailyWonDays.includes(key);
 }
 
 /** Non-negative integer, or 0. Every stat is a count or a duration, so anything else —
@@ -189,6 +203,9 @@ export function loadStats(): Stats {
     dailyStreak: count(d.dailyStreak),
     bestDailyStreak: count(d.bestDailyStreak),
     lastDailyWin: isDailyKey(d.lastDailyWin) ? d.lastDailyWin : "",
+    dailyWonDays: Array.isArray(d.dailyWonDays)
+      ? [...new Set(d.dailyWonDays.filter(isDailyKey))].sort().reverse().slice(0, WON_DAYS_KEPT)
+      : [],
   };
 }
 
@@ -236,8 +253,13 @@ export function recordWin(game: {
   score: number;
   elapsedMs: number;
   moves: number;
-  /** The YYYY-MM-DD key when this game was that day's daily deal, else absent. */
-  daily?: string;
+  /** Set when the board played was some day's daily deal.
+   *
+   *  `extendsStreak` is separate from `key` on purpose: an archived day can be won at
+   *  any time, and it should tick that day in the archive without touching a run that
+   *  is about it being *today*. Only main.ts knows which case this is, so it says so
+   *  rather than storage guessing from a date. */
+  daily?: { key: string; extendsStreak: boolean };
 }): { stats: Stats; isRecord: boolean } {
   const s = loadStats();
   const isRecord = game.score > s.bestScore;
@@ -253,17 +275,22 @@ export function recordWin(game: {
   if (game.moves > 0 && (s.fewestMoves === 0 || game.moves < s.fewestMoves)) {
     s.fewestMoves = game.moves;
   }
-  // A day's deal counts once: restarting and re-winning it doesn't extend the run,
-  // which is why this keys off the date and not the win. Only an unbroken
-  // yesterday-to-today step continues a streak; any other gap starts a fresh one.
-  if (isDailyKey(game.daily) && game.daily !== s.lastDailyWin) {
+  // A day's deal counts once, however often it is replayed — which is why this keys
+  // off the date rather than off the win.
+  const daily = game.daily;
+  if (daily && isDailyKey(daily.key) && !s.dailyWonDays.includes(daily.key)) {
     s.dailyWins += 1;
-    s.dailyStreak =
-      s.lastDailyWin !== "" && daysBetween(s.lastDailyWin, game.daily) === 1
-        ? s.dailyStreak + 1
-        : 1;
-    s.bestDailyStreak = Math.max(s.bestDailyStreak, s.dailyStreak);
-    s.lastDailyWin = game.daily;
+    s.dailyWonDays = [daily.key, ...s.dailyWonDays].sort().reverse().slice(0, WON_DAYS_KEPT);
+    // The streak is only ever about keeping up with *today*. Winning an archived day
+    // ticks it off above, but must not extend or restart a run.
+    if (daily.extendsStreak) {
+      s.dailyStreak =
+        s.lastDailyWin !== "" && daysBetween(s.lastDailyWin, daily.key) === 1
+          ? s.dailyStreak + 1
+          : 1;
+      s.bestDailyStreak = Math.max(s.bestDailyStreak, s.dailyStreak);
+      s.lastDailyWin = daily.key;
+    }
   }
   saveStats(s);
   return { stats: s, isRecord };

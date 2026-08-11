@@ -174,6 +174,19 @@ logic, rendering, animation, and input kept cleanly separated.
   therefore numbers an empty foundation and names a filled one after its actual
   cards — announcing "the spades foundation" for an empty pile would promise a rule
   the game doesn't have.
+- **The archive can't back-fill a streak.** Past dailies are playable from the grid
+  in the statistics dialog, and winning one ticks its day and counts in `dailyWins` —
+  but the run is only ever about keeping up with *today*, so `recordWin` takes
+  `daily: { key, extendsStreak }` and only main.ts decides which case it is. Filling in
+  a gap after the fact therefore cannot revive a lapsed streak, which is the whole
+  reason the two are separate fields rather than inferred from a date. Which day a
+  board belongs to is **derived** (`dailyDayForSeed` searches the last
+  `ARCHIVE_WINDOW` day-hashes), keeping the no-new-persisted-state property the daily
+  deal started with: a game resumed days later is still the daily it came from.
+  `dailyWonDays` is capped at 400 entries because the grid only shows 28 and an
+  uncapped list grows forever; `dailyWins` is the uncapped total, so trimming costs no
+  counter. The grid lives in the stats dialog rather than behind a new toolbar button
+  because it *is* the daily record and the measured wrap threshold has no room.
 - **Offline is a service worker with two strategies, and one non-obvious rule.**
   `public/sw.js` is hand-written (no Workbox — the zero-runtime-dependency rule).
   **Navigations are network-first**, because `index.html` is the one unhashed file

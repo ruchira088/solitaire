@@ -157,6 +157,7 @@ describe("with working storage", () => {
       dailyStreak: 0,
       bestDailyStreak: 0,
       lastDailyWin: "",
+      dailyWonDays: [],
     });
   });
 
@@ -287,7 +288,7 @@ describe("with working storage", () => {
   /** Win the daily for `day`, as one whole game. */
   const winDaily = (day: string, score = 100): void => {
     store.recordGameStart();
-    store.recordWin({ score, elapsedMs: 60_000, moves: 100, daily: day });
+    store.recordWin({ score, elapsedMs: 60_000, moves: 100, daily: { key: day, extendsStreak: true } });
   };
 
   it("leaves the daily fields alone for an ordinary win", () => {
@@ -356,7 +357,7 @@ describe("with working storage", () => {
 
   it("ignores a malformed daily key rather than recording a phantom day", () => {
     store.recordGameStart();
-    store.recordWin({ score: 100, elapsedMs: 1, moves: 1, daily: "10 August" });
+    store.recordWin({ score: 100, elapsedMs: 1, moves: 1, daily: { key: "10 August", extendsStreak: true } });
     expect(store.loadStats()).toMatchObject({ won: 1, dailyWins: 0, lastDailyWin: "" });
   });
 
@@ -373,6 +374,69 @@ describe("with working storage", () => {
     },
   );
 
+  // ---- the archive --------------------------------------------------------
+
+  /** Win an archived day: it should tick that day off without touching the run. */
+  const winArchived = (day: string): void => {
+    store.recordGameStart();
+    store.recordWin({ score: 100, elapsedMs: 60_000, moves: 100, daily: { key: day, extendsStreak: false } });
+  };
+
+  it("remembers which days were won", () => {
+    winDaily("2026-08-10");
+    winArchived("2026-08-02");
+    expect(store.loadStats().dailyWonDays).toEqual(["2026-08-10", "2026-08-02"]);
+    expect(store.hasWonDaily(store.loadStats(), "2026-08-02")).toBe(true);
+    expect(store.hasWonDaily(store.loadStats(), "2026-08-03")).toBe(false);
+  });
+
+  it("counts an archived win in the total, but not in the streak", () => {
+    winDaily("2026-08-10"); // streak 1
+    winArchived("2026-07-01");
+    winArchived("2026-07-02"); // consecutive, but back-filled
+    const s = store.loadStats();
+    expect(s.dailyWins).toBe(3);
+    expect(s.dailyStreak).toBe(1); // untouched by the back-fill
+    expect(s.lastDailyWin).toBe("2026-08-10"); // still the real last daily
+    expect(s.dailyWonDays).toContain("2026-07-02");
+  });
+
+  it("cannot resurrect a lapsed streak by back-filling the gap", () => {
+    winDaily("2026-08-01");
+    winDaily("2026-08-05"); // gap; a new run starts at 1
+    expect(store.loadStats().dailyStreak).toBe(1);
+    for (const d of ["2026-08-02", "2026-08-03", "2026-08-04"]) winArchived(d);
+    expect(store.loadStats().dailyStreak).toBe(1); // filling the hole changes nothing
+  });
+
+  it("ticks a day once however many times it is replayed", () => {
+    winArchived("2026-08-02");
+    winArchived("2026-08-02");
+    const s = store.loadStats();
+    expect(s.dailyWins).toBe(1);
+    expect(s.dailyWonDays).toEqual(["2026-08-02"]);
+  });
+
+  it("keeps the won-days list newest first and free of junk", () => {
+    mem.setItem("solitaire-stats", JSON.stringify({
+      v: 1, played: 5, won: 5,
+      dailyWonDays: ["2026-08-02", "nope", "2026-08-10", 42, "2026-08-02", null],
+    }));
+    expect(store.loadStats().dailyWonDays).toEqual(["2026-08-10", "2026-08-02"]);
+  });
+
+  it("caps the won-days list so it can't grow without bound", () => {
+    const many = Array.from({ length: 500 }, (_, i) => {
+      const d = new Date(Date.UTC(2026, 0, 1));
+      d.setUTCDate(d.getUTCDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+    mem.setItem("solitaire-stats", JSON.stringify({ v: 1, played: 500, won: 500, dailyWonDays: many }));
+    const kept = store.loadStats().dailyWonDays;
+    expect(kept).toHaveLength(400);
+    expect(kept[0]).toBe(many[many.length - 1]); // newest survives
+  });
+
   it("resets the daily record along with everything else", () => {
     winDaily("2026-08-10");
     store.resetStats();
@@ -381,6 +445,7 @@ describe("with working storage", () => {
       dailyStreak: 0,
       bestDailyStreak: 0,
       lastDailyWin: "",
+      dailyWonDays: [],
     });
   });
 

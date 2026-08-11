@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  dailyDayForSeed,
   dailyKey,
   dailySeed,
   encodeSeed,
@@ -10,6 +11,8 @@ import {
   mulberry32,
   parseSeed,
   randomSeed,
+  recentDailyKeys,
+  shiftDailyKey,
 } from "./rng";
 import { buildDeck, shuffle } from "./cards";
 import { Game } from "./game";
@@ -202,6 +205,55 @@ describe("dailySeed", () => {
   it("round-trips through a shareable deal code, like any other deal", () => {
     const s = dailySeed("2026-08-10");
     expect(parseSeed(encodeSeed(s))).toBe(s);
+  });
+});
+
+describe("the daily archive", () => {
+  it("steps back and forward a day at a time", () => {
+    expect(shiftDailyKey("2026-08-11", -1)).toBe("2026-08-10");
+    expect(shiftDailyKey("2026-08-11", 1)).toBe("2026-08-12");
+    expect(shiftDailyKey("2026-08-11", 0)).toBe("2026-08-11");
+  });
+
+  it("crosses month, year and leap-day boundaries", () => {
+    expect(shiftDailyKey("2026-09-01", -1)).toBe("2026-08-31");
+    expect(shiftDailyKey("2027-01-01", -1)).toBe("2026-12-31");
+    expect(shiftDailyKey("2028-03-01", -1)).toBe("2028-02-29"); // 2028 is a leap year
+    expect(shiftDailyKey("2027-03-01", -1)).toBe("2027-02-28");
+  });
+
+  it("is unaffected by daylight saving, where a local day isn't 24 hours", () => {
+    // European spring-forward (23h) and autumn-back (25h).
+    expect(shiftDailyKey("2026-03-30", -1)).toBe("2026-03-29");
+    expect(shiftDailyKey("2026-10-26", -1)).toBe("2026-10-25");
+  });
+
+  it("lists the recent days newest first, today included", () => {
+    expect(recentDailyKeys("2026-08-11", 4)).toEqual([
+      "2026-08-11", "2026-08-10", "2026-08-09", "2026-08-08",
+    ]);
+    expect(recentDailyKeys("2026-08-11", 0)).toEqual([]);
+  });
+
+  it("recognises which day a board came from, by its seed alone", () => {
+    for (const key of ["2026-08-11", "2026-08-04", "2026-07-20"]) {
+      expect(dailyDayForSeed(dailySeed(key), "2026-08-11", 28)).toBe(key);
+    }
+  });
+
+  it("says a board is not a daily when it isn't one", () => {
+    expect(dailyDayForSeed(12345, "2026-08-11", 28)).toBeNull();
+  });
+
+  it("won't claim a day older than the window it was asked to search", () => {
+    const old = shiftDailyKey("2026-08-11", -60);
+    expect(dailyDayForSeed(dailySeed(old), "2026-08-11", 28)).toBeNull();
+    expect(dailyDayForSeed(dailySeed(old), "2026-08-11", 90)).toBe(old);
+  });
+
+  it("won't claim a future day", () => {
+    const tomorrow = shiftDailyKey("2026-08-11", 1);
+    expect(dailyDayForSeed(dailySeed(tomorrow), "2026-08-11", 28)).toBeNull();
   });
 });
 

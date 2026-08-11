@@ -172,6 +172,12 @@ try {
   await page.click("#btn-stats");
   await page.waitForTimeout(300);
   check("the stats dialog opens", await page.isVisible("#stats-panel"));
+  const archive = await page.evaluate(() => {
+    const cells = [...document.querySelectorAll(".archive-day")];
+    return { count: cells.length, today: cells.filter((c) => c.classList.contains("is-today")).length };
+  });
+  check("the daily archive shows four weeks with today marked",
+    archive.count === 28 && archive.today === 1, `${archive.count} cells, ${archive.today} marked today`);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
   check("Escape closes the stats dialog", !(await page.isVisible("#stats-panel")));
