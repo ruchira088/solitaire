@@ -96,3 +96,46 @@ export function setSoundEnabled(on: boolean): void {
 export function isSoundEnabled(): boolean {
   return enabled;
 }
+
+/** The win fanfare: a rising major arpeggio with a shimmer on top.
+ *
+ *  Everything else in this file is filtered noise, because everything else is a card
+ *  moving. A win is the one moment that deserves a pitch, so this uses oscillators —
+ *  still synthesised, still no asset files. */
+export function playFanfare(): void {
+  const ac = ensureCtx();
+  if (!ac) return;
+  // C major triad up to the octave, then the fifth above: simple and unambiguous.
+  const notes = [523.25, 659.25, 783.99, 1046.5, 1567.98];
+  notes.forEach((freq, i) => {
+    const t0 = ac.currentTime + i * 0.09;
+    const dur = i === notes.length - 1 ? 0.9 : 0.35;
+
+    const osc = ac.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+
+    // A quiet sine an octave up gives it some sparkle without getting shrill.
+    const shimmer = ac.createOscillator();
+    shimmer.type = "sine";
+    shimmer.frequency.value = freq * 2;
+
+    const env = ac.createGain();
+    env.gain.setValueAtTime(0, t0);
+    env.gain.linearRampToValueAtTime(0.16, t0 + 0.02);
+    env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    const shimmerGain = ac.createGain();
+    shimmerGain.gain.value = 0.35;
+
+    osc.connect(env);
+    shimmer.connect(shimmerGain);
+    shimmerGain.connect(env);
+    env.connect(ac.destination);
+
+    osc.start(t0);
+    shimmer.start(t0);
+    osc.stop(t0 + dur);
+    shimmer.stop(t0 + dur);
+  });
+}

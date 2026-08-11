@@ -5,7 +5,7 @@
 import { Card, rankLabel, SUIT_GLYPH, suitColor, Suit } from "./cards";
 import { Game, PileId } from "./game";
 import { columnOffsets, Layout, Point } from "./layout";
-import { Animator } from "./animation";
+import { Animator, Particle } from "./animation";
 import { getFaceArt } from "./courtArt";
 import { getCardFace } from "./cardFaces";
 import { getFelt, ThemeName } from "./theme";
@@ -153,6 +153,8 @@ export class Renderer {
       faceShown?: boolean;
       lift?: boolean;
       flat?: boolean;
+      /** Radians, about the card's centre. Used by the win cascade. */
+      angle?: number;
     } = {},
   ): void {
     const scale = opts.scale ?? 1;
@@ -164,6 +166,7 @@ export class Renderer {
 
     ctx.save();
     ctx.translate(cx, cy);
+    if (opts.angle) ctx.rotate(opts.angle);
     ctx.scale(scale * flipX, scale);
 
     // Drop shadow (stronger when lifted while dragging; none for trail frames).
@@ -673,6 +676,31 @@ export class Renderer {
         return layout.fanX ? { x: base.x + d, y: base.y } : { x: base.x, y: base.y + d };
       }
     }
+  }
+
+  /** Confetti and sparks. Drawn after the cards so a burst reads as being in front,
+   *  and with no shadow: hundreds of shadowed sprites a frame is the one thing here
+   *  expensive enough to notice. */
+  drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]): void {
+    ctx.save();
+    ctx.shadowColor = "transparent";
+    for (const p of particles) {
+      ctx.globalAlpha = Math.min(1, p.life / (p.maxLife * 0.6));
+      ctx.fillStyle = p.color;
+      if (p.ribbon) {
+        // A tumbling scrap: the squash as it turns is what sells the spin.
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.fillRect(-p.size, -p.size * 0.45, p.size * 2, p.size * 0.9);
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   /** Ring the run the keyboard cursor covers: from the focused card to the bottom of

@@ -515,6 +515,35 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   font-size: 22px;
 }
 
+/* The panel arrives a beat after the cards start falling, and pops rather than
+   fades — it's the punchline, not a notification. */
+#win-panel {
+  animation: win-pop 0.42s cubic-bezier(0.18, 1.35, 0.4, 1) both;
+}
+
+@keyframes win-pop {
+  from { opacity: 0; transform: scale(0.82) translateY(14px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* The trophy line on a record gets its own little swell, once. */
+#win-score.is-record {
+  animation: record-swell 0.9s ease-out 0.3s both;
+}
+
+@keyframes record-swell {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #win-panel,
+  #win-score.is-record {
+    animation: none;
+  }
+}
+
 #win-score {
   margin: 0;
   font-size: 14px;

@@ -199,41 +199,141 @@ interface FallingCard {
   y: number;
   vx: number;
   vy: number;
+  /** Radians, and how much it turns per frame — cards tumble as they fall so a wall
+   *  of parallel rectangles never forms. */
+  angle: number;
+  spin: number;
 }
 
+/** A scrap of confetti or a firework spark. Short-lived, unlike the cards. */
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** Frames remaining, and the total, so alpha can fade over the life. */
+  life: number;
+  maxLife: number;
+  size: number;
+  color: string;
+  angle: number;
+  spin: number;
+  /** Ribbons tumble and catch the light; sparks are round and just fade. */
+  ribbon: boolean;
+}
+
+/** The win cascade.
+ *
+ *  Three things happen at once, on purpose. The cards launch **one at a time** rather
+ *  than all together — the classic behaviour, and it lets the screen fill in a rhythm
+ *  instead of a single dump. They **tumble** as they fall, so a wall of parallel cards
+ *  never forms. And fireworks keep going off behind them, which is what makes it read
+ *  as a celebration rather than a physics demo.
+ *
+ *  The canvas is deliberately never cleared while this runs (see `runCelebrationFrame`),
+ *  so everything here paints trails — which is why sparks look like streaks and why the
+ *  board slowly fills. That is the iconic look and worth keeping. */
 export class Celebration {
   private cards: FallingCard[] = [];
+  /** Cards still waiting their turn to launch. */
+  private pending: FallingCard[] = [];
+  private particles: Particle[] = [];
   private gravity = 0.45;
   private bounce = 0.82;
+  private frame = 0;
+  /** Confetti and fireworks. Off under prefers-reduced-motion, where the plain
+   *  cascade is celebration enough. */
+  private extras = true;
   active = false;
 
-  start(seeds: { card: Card; x: number; y: number }[]): void {
+  /** One card every few frames: fast enough to feel eager, slow enough to see. */
+  private static readonly LAUNCH_EVERY = 3;
+  private static readonly FIREWORK_EVERY = 34;
+  private static readonly MAX_PARTICLES = 420;
+
+  start(seeds: { card: Card; x: number; y: number }[], opts: { extras?: boolean } = {}): void {
     this.active = true;
-    this.cards = seeds.map((s, i) => ({
-      card: s.card,
-      x: s.x,
-      y: s.y,
-      vx: (i % 2 === 0 ? -1 : 1) * (2 + Math.random() * 4),
-      vy: -(4 + Math.random() * 7),
-    }));
+    this.extras = opts.extras ?? true;
+    this.frame = 0;
+    this.cards = [];
+    this.particles = [];
+    // Top of each foundation first, so the piles visibly unstack.
+    this.pending = seeds
+      .map((s, i) => ({
+        card: s.card,
+        x: s.x,
+        y: s.y,
+        vx: (i % 2 === 0 ? -1 : 1) * (2 + Math.random() * 4),
+        vy: -(4 + Math.random() * 7),
+        angle: 0,
+        spin: (Math.random() - 0.5) * 0.22,
+      }))
+      .reverse();
   }
 
   stop(): void {
     this.active = false;
     this.cards = [];
+    this.pending = [];
+    this.particles = [];
   }
 
-  /** Advance the physics one frame; returns the cards to draw (with trails). */
-  step(width: number, height: number, cardW: number, cardH: number): FallingCard[] {
+  /** A burst of sparks. Used for the opening flourish and for each firework. */
+  private burst(x: number, y: number, count: number, colors: string[], speed: number): void {
+    for (let i = 0; i < count; i++) {
+      if (this.particles.length >= Celebration.MAX_PARTICLES) return;
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
+      const v = speed * (0.45 + Math.random() * 0.75);
+      const life = 34 + Math.floor(Math.random() * 30);
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * v,
+        vy: Math.sin(angle) * v,
+        life,
+        maxLife: life,
+        size: 2 + Math.random() * 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        angle: Math.random() * Math.PI,
+        spin: (Math.random() - 0.5) * 0.4,
+        ribbon: Math.random() < 0.45,
+      });
+    }
+  }
+
+  /** The opening flourish: a burst over each foundation as the sweep finishes. */
+  openingBurst(points: { x: number; y: number }[], cardW: number, cardH: number): void {
+    if (!this.extras) return;
+    for (const p of points) {
+      this.burst(p.x + cardW / 2, p.y + cardH / 2, 22, CONFETTI, 6);
+    }
+  }
+
+  /** Advance one frame. Returns what to draw: cards first, then particles on top. */
+  step(
+    width: number,
+    height: number,
+    cardW: number,
+    cardH: number,
+  ): { cards: FallingCard[]; particles: Particle[] } {
+    this.frame++;
+
+    if (this.pending.length && this.frame % Celebration.LAUNCH_EVERY === 0) {
+      this.cards.push(this.pending.pop()!);
+    }
+
     for (const c of this.cards) {
       c.vy += this.gravity;
       c.x += c.vx;
       c.y += c.vy;
+      c.angle += c.spin;
       if (c.y + cardH > height) {
         c.y = height - cardH;
         c.vy = -c.vy * this.bounce;
         c.vx *= 0.98;
+        c.spin *= 0.7; // a bounce scrubs off some tumble
         if (Math.abs(c.vy) < 1.5) c.vy = -(6 + Math.random() * 6);
+        if (this.extras) this.burst(c.x + cardW / 2, height, 4, SPARKS, 3);
       }
       if (c.x + cardW < 0 || c.x > width) {
         // Respawn from a foundation-like position once it leaves the screen.
@@ -241,8 +341,36 @@ export class Celebration {
         c.y = -cardH;
         c.vx = (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 4);
         c.vy = -(2 + Math.random() * 4);
+        c.spin = (Math.random() - 0.5) * 0.22;
       }
     }
-    return this.cards;
+
+    if (this.extras && this.frame % Celebration.FIREWORK_EVERY === 0) {
+      this.burst(
+        width * (0.12 + Math.random() * 0.76),
+        height * (0.12 + Math.random() * 0.45),
+        26,
+        CONFETTI,
+        7,
+      );
+    }
+
+    for (const p of this.particles) {
+      p.vy += 0.12; // lighter than the cards: confetti drifts
+      p.vx *= 0.99;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.angle += p.spin;
+      p.life--;
+    }
+    this.particles = this.particles.filter((p) => p.life > 0 && p.y < height + 20);
+
+    return { cards: this.cards, particles: this.particles };
   }
 }
+
+/** Festive, and deliberately not the felt's greens — confetti has to read as thrown
+ *  over the table rather than part of it. */
+const CONFETTI = ["#ffd34e", "#ff5d6c", "#7ee0ff", "#b98cff", "#fdfdf7", "#6ef0a5"];
+/** Struck off the floor by a bouncing card: warm and brief. */
+const SPARKS = ["#ffd34e", "#fff3c4", "#ffb14e"];

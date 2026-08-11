@@ -301,6 +301,18 @@ logic, rendering, animation, and input kept cleanly separated.
   (`#stats-overlay`) is: it dims the board, and a backdrop click or Escape closes it.
   Escape is checked in the keydown handler *before* the drag cancel. Both share the
   card look, the `.dialog-actions` row, and the re-declared dark palette.
+- **The cascade is three effects at once, and the canvas is never cleared.** Cards
+  launch **one at a time** (`LAUNCH_EVERY`) rather than all together, so the screen
+  fills in a rhythm; they **tumble** (`angle`/`spin`, drawn via `drawCard`'s `angle`),
+  so a wall of parallel rectangles never forms; and fireworks keep bursting behind
+  them. Because `runCelebrationFrame` paints without clearing, *everything* leaves a
+  trail — that is what makes sparks read as streaks, and it is the iconic look, so
+  don't "fix" it. The extras are gated on `prefers-reduced-motion` directly rather
+  than on `animationsOn`: the latter is also set by `?animate=off` for deterministic
+  screenshots, and the win shot is the one place the flourish should be captured.
+  `playFanfare` is the only sound in `sound.ts` built from oscillators instead of
+  filtered noise — everything else is a card moving, and a win is the one moment that
+  earns a pitch.
 - **The win dialog is DOM, not canvas.** `#win-overlay` / `#win-panel` in
   `index.html` replaced a banner painted into the canvas, so New Game and Restart are
   real buttons — focusable, keyboard-reachable, styled by the same `.btn` rules. Three

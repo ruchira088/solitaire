@@ -20,7 +20,16 @@ import {
   themeInfo,
   ThemeName,
 } from "./theme";
-import { isSoundEnabled, setSoundEnabled, playDeal, playDraw, playFlip, playPlace, unlockAudio } from "./sound";
+import {
+  isSoundEnabled,
+  setSoundEnabled,
+  playDeal,
+  playDraw,
+  playFanfare,
+  playFlip,
+  playPlace,
+  unlockAudio,
+} from "./sound";
 import {
   clearGame,
   currentDailyStreak,
@@ -367,7 +376,12 @@ function startCelebration(): void {
     for (const card of game.foundations[i]) seeds.push({ card, x: p.x, y: p.y });
   }
   celebStarted = false;
-  celebration.start(seeds);
+  // The extras are motion for its own sake, which is exactly what reduced-motion asks
+  // us not to do. `animationsOn` isn't the right gate — it's also set by ?animate=off
+  // for deterministic screenshots, and the cascade is the one place we *want* the
+  // flourish captured.
+  celebration.start(seeds, { extras: !reduceMotion.matches });
+  playFanfare();
   showWinPanel();
 }
 
@@ -375,13 +389,20 @@ function runCelebrationFrame(): void {
   if (!celebStarted) {
     // Draw the completed board once; subsequent frames leave trails.
     renderer.drawScene(ctx, game, layout, animator, null, null);
+    celebration.openingBurst(layout.foundations, layout.cardW, layout.cardH);
     celebStarted = true;
   }
-  const falling = celebration.step(layout.width, layout.height, layout.cardW, layout.cardH);
-  for (const f of falling) {
+  const { cards, particles } = celebration.step(
+    layout.width,
+    layout.height,
+    layout.cardW,
+    layout.cardH,
+  );
+  for (const f of cards) {
     f.card.faceUp = true;
-    renderer.drawCard(ctx, f.card, f.x, f.y, layout, { flat: true });
+    renderer.drawCard(ctx, f.card, f.x, f.y, layout, { flat: true, angle: f.angle });
   }
+  renderer.drawParticles(ctx, particles);
 }
 
 /** The win dialog: the score against the record, and the two ways out. A record gets

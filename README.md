@@ -185,7 +185,10 @@ does.
 ## Win celebration
 
 Finish a game — or let the **auto-complete** finish it for you — and the cards
-cascade and bounce across the table in the classic Solitaire victory animation. A
+cascade and bounce across the table in the classic Solitaire victory animation —
+cards launch one at a time and tumble as they fall, fireworks burst behind them, and a
+short fanfare plays. (All of the flourish stands down under `prefers-reduced-motion`;
+the cascade itself stays.) A
 dialog shows what you scored against your **best score so far** — kept in
 `localStorage` and announced when you beat it — with **New Game**, **Restart** and
 **Share** right there. Share copies your result and the deal link to the clipboard,
