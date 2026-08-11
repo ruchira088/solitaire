@@ -1137,6 +1137,18 @@ window.addEventListener("keydown", (e) => {
 });
 
 onCardFaceLoad(invalidate);
+// Offline support. Production only — a worker in dev would serve stale modules and
+// make hot reload lie. `updateViaCache: "none"` keeps the browser's HTTP cache away
+// from sw.js itself, which matters because nothing in this repo sets the CDN's cache
+// headers: without it a long-cached worker could never update itself.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("./sw.js", { updateViaCache: "none" })
+      .catch(() => undefined); // offline play is a bonus, never a requirement
+  });
+}
+
 preloadCardFaces();
 preloadFaceArt();
 // ?theme= wins over the saved preference; anything unrecognised — a hand-edited

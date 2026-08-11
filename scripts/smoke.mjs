@@ -244,6 +244,23 @@ try {
   });
   check("an idle board stops drawing entirely", idleDraws === 0, `${idleDraws} card draws in 1s while idle`);
 
+  // ---- offline ----
+  // The worker registering is the load-bearing bit: register() rejects silently in the
+  // app (offline play is a bonus, never a requirement), so nothing else would notice a
+  // worker that stopped parsing.
+  const sw = await page.evaluate(async () => {
+    const r = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((res) => setTimeout(() => res(null), 8000)),
+    ]);
+    if (!r) return { active: false, cached: 0 };
+    const names = (await caches.keys()).filter((n) => n.startsWith("solitaire-"));
+    const cache = names.length ? await caches.open(names[0]) : null;
+    return { active: !!r.active, caches: names.length, cached: cache ? (await cache.keys()).length : 0 };
+  });
+  check("the service worker registers and precaches", sw.active && sw.cached > 50,
+    `active=${sw.active} caches=${sw.caches} entries=${sw.cached}`);
+
   check("no console errors on desktop", logged.length === 0, logged.join(" | "));
   await page.close();
 

@@ -65,6 +65,10 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   sends a card home. Every move is announced to screen readers through a live region,
   so the game is playable without seeing it. The cursor only appears once you use the
   keyboard, and goes away the moment you touch the mouse.
+- 📲 **Installable & offline** — a web manifest and a service worker cache the whole
+  game (~1.5 MB, all 52 card faces included), so it installs to a phone home screen
+  and plays on a plane. Page loads go to the network first, so a new version is never
+  masked by the cache.
 - 🔋 **Idles properly** — the canvas is repainted only when something actually
   changes, so a board you're staring at while you think costs nothing rather than
   redrawing itself a hundred times a second.
