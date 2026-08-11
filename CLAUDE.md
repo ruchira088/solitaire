@@ -100,7 +100,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/courtArt.ts` | Procedural J/Q/K + Ace fallback art (used until SVGs decode) |
 | `src/animation.ts` | Tween engine, card flights, win-celebration physics |
 | `src/input.ts` | Pointer drag & drop, click-to-draw, double-click auto-move |
-| `src/theme.ts` | Light / dark felt + placeholder palettes |
+| `src/theme.ts` | Theme registry: felt, placeholders **and card backs** |
 | `src/sound.ts` | WebAudio sound effects (deal tick, etc.) |
 | `src/storage.ts` | `localStorage`: UI preferences + the in-progress game save |
 | `src/share.ts` | The result text the win dialog copies — **pure**, no DOM |
@@ -161,6 +161,16 @@ logic, rendering, animation, and input kept cleanly separated.
   therefore numbers an empty foundation and names a filled one after its actual
   cards — announcing "the spades foundation" for an empty pile would promise a rule
   the game doesn't have.
+- **Themes are a registry, and they own the card back.** `THEMES` in `theme.ts` is
+  the single list; `ThemeName` is `keyof typeof THEMES`, so adding an entry makes it a
+  legal `?theme=` value and a legal saved preference with no union to keep in step.
+  Adding a theme is one entry plus one `body[data-theme="…"]` block in `styles.css` —
+  `data-theme`, not a class per theme, so a new one can't leave a stale class behind.
+  The **card back** lives in the theme because it used to be a hardcoded blue in
+  `drawBack`, identical everywhere, and it is the most-visible surface on the table:
+  the felt is mostly covered by cards. When adding a theme, sample `--felt-top-edge`
+  and `--felt-top-mid` from its own `feltStops`, or the fake-felt strip left by a
+  hidden toolbar shows a seam.
 - **Two pile highlights, and they answer different questions.** `highlightPile` is
   the drop target — steady, white, wide, drawn under the dragged stack.
   `highlightRun` is the keyboard cursor — yellow, tight to the cards, and covering the
@@ -250,7 +260,7 @@ absent or full, in which case the game just runs without it.
 
 Settings: theme (`solitaire-theme`), sound (`solitaire-sound`) and whether the
 toolbar is folded away (`solitaire-chrome`). Theme also accepts
-`?theme=light|dark`; animations can be disabled with `?animate=off` (also off
+`?theme=<name>` for any theme in the registry (anything else falls back to dark, so an old saved value or a hand-typed one can't break a boot); animations can be disabled with `?animate=off` (also off
 under `prefers-reduced-motion`). A specific layout can be requested with
 `?deal=<code>` and `?draw=1|3` — though `draw=1` is only ever *read*, never written:
 it's the default, so `shareUrl()` emits `draw` for Draw 3 alone and strips it

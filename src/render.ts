@@ -468,10 +468,11 @@ export class Renderer {
     h: number,
     r: number,
   ): void {
+    const back = getFelt().back;
     roundRectPath(ctx, x, y, w, h, r);
     const g = ctx.createLinearGradient(x, y, x + w, y + h);
-    g.addColorStop(0, "#2a4cad");
-    g.addColorStop(1, "#16307a");
+    g.addColorStop(0, back.from);
+    g.addColorStop(1, back.to);
     ctx.fillStyle = g;
     ctx.fill();
     ctx.shadowColor = "transparent";
@@ -480,13 +481,13 @@ export class Renderer {
     const m = w * 0.08;
     roundRectPath(ctx, x + m, y + m, w - m * 2, h - m * 2, r * 0.7);
     ctx.lineWidth = Math.max(1, w * 0.02);
-    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.strokeStyle = back.line;
     ctx.stroke();
 
     // Diagonal lattice pattern, clipped to the inset.
     ctx.save();
     ctx.clip();
-    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.strokeStyle = back.lattice;
     ctx.lineWidth = Math.max(0.75, w * 0.012);
     const step = w * 0.18;
     ctx.beginPath();
@@ -501,12 +502,11 @@ export class Renderer {
 
     // Centre emblem.
     ctx.save();
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.fillStyle = back.emblemColor;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${Math.round(h * 0.22)}px "Helvetica Neue", Arial, sans-serif`;
-    ctx.fillText("✦", x + w / 2, y + h / 2 + h * 0.01);
+    ctx.fillText(back.emblem, x + w / 2, y + h / 2 + h * 0.01);
     ctx.restore();
   }
 

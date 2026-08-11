@@ -11,7 +11,15 @@ import { Input } from "./input";
 import { cardPos } from "./positions";
 import { preloadFaceArt } from "./courtArt";
 import { onCardFaceLoad, preloadCardFaces } from "./cardFaces";
-import { getThemeName, setTheme, ThemeName } from "./theme";
+import {
+  getFelt,
+  getThemeName,
+  isThemeName,
+  nextTheme,
+  setTheme,
+  themeInfo,
+  ThemeName,
+} from "./theme";
 import { isSoundEnabled, setSoundEnabled, playDeal, playDraw, playFlip, playPlace, unlockAudio } from "./sound";
 import {
   clearGame,
@@ -751,15 +759,21 @@ function setDrawCount(n: DrawCount): void {
 
 function applyTheme(name: ThemeName): void {
   setTheme(name);
-  invalidate(); // the felt, vignette and placeholders are all repainted
-  document.body.classList.toggle("theme-light", name === "light");
-  el.theme.textContent = name === "light" ? "☀️" : "🌙";
-  el.theme.title = name === "light" ? "Switch to dark theme" : "Switch to light theme";
+  invalidate(); // the felt, vignette, placeholders and card backs are all repainted
+  // One attribute rather than a class per theme: CSS keys its chrome palette off it,
+  // and adding a theme can't leave a stale class behind.
+  document.body.dataset.theme = name;
+  // The button shows where you are and says where you'd go, since with more than two
+  // themes the icon alone can no longer imply the destination.
+  el.theme.textContent = getFelt().icon;
+  const label = `Theme: ${getFelt().label} — click for ${themeInfo(nextTheme(name)).label}`;
+  el.theme.title = label;
+  el.theme.setAttribute("aria-label", label);
   writeItem("solitaire-theme", name);
 }
 
 function toggleTheme(): void {
-  applyTheme(getThemeName() === "dark" ? "light" : "dark");
+  applyTheme(nextTheme(getThemeName()));
 }
 
 function applySound(on: boolean): void {
@@ -1125,9 +1139,11 @@ window.addEventListener("keydown", (e) => {
 onCardFaceLoad(invalidate);
 preloadCardFaces();
 preloadFaceArt();
+// ?theme= wins over the saved preference; anything unrecognised — a hand-edited
+// value, or a theme that existed in an older build — falls back rather than breaking.
 const urlTheme = new URLSearchParams(location.search).get("theme");
-const savedTheme = urlTheme === "light" || urlTheme === "dark" ? urlTheme : readItem("solitaire-theme");
-applyTheme(savedTheme === "light" ? "light" : "dark");
+const savedTheme = isThemeName(urlTheme) ? urlTheme : readItem("solitaire-theme");
+applyTheme(isThemeName(savedTheme) ? savedTheme : "dark");
 applySound(readItem("solitaire-sound") !== "off");
 // Before resize(), so the board is measured against the bar the user left behind.
 applyChrome(readItem("solitaire-chrome") === "hidden");

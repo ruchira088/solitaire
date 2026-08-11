@@ -16,7 +16,11 @@
     Arial, sans-serif;
 }
 
-body.theme-light {
+/* One block per theme, keyed off the attribute applyTheme() sets. --felt-top-* is
+   the strip a hidden toolbar leaves, faked to match the felt's top row: sample it at
+   the edge and at mid-width from that theme's feltStops in theme.ts, or the seam
+   shows. */
+body[data-theme="light"] {
   --bar: rgba(244, 250, 246, 0.9);
   --bar-border: rgba(0, 0, 0, 0.08);
   --text: #103021;
@@ -28,6 +32,28 @@ body.theme-light {
   --btn-border: rgba(0, 0, 0, 0.14);
   --felt-top-edge: #148d52;
   --felt-top-mid: #27b36f;
+}
+
+body[data-theme="claret"] {
+  --bar: rgba(46, 14, 24, 0.86);
+  --bar-border: rgba(255, 255, 255, 0.09);
+  --text: #ffeef2;
+  --muted: #d9a3b0;
+  --accent: #e8b64c;
+  --page-bg: #14060a;
+  --felt-top-edge: #1b0810;
+  --felt-top-mid: #35111d;
+}
+
+body[data-theme="parchment"] {
+  --bar: rgba(72, 56, 34, 0.9);
+  --bar-border: rgba(255, 255, 255, 0.1);
+  --text: #fbf3e2;
+  --muted: #d9c9a6;
+  --accent: #ffcf5c;
+  --page-bg: #8d7852;
+  --felt-top-edge: #9c8760;
+  --felt-top-mid: #b99f78;
 }
 
 * {
@@ -400,7 +426,7 @@ body.chrome-hidden .controls {
 
 /* The stat labels are muted for the near-white light-theme bar; on the felt
    strip that shade washes out, so darken it while the bar is folded away. */
-body.chrome-hidden.theme-light #toolbar {
+body.chrome-hidden[data-theme="light"] #toolbar {
   --muted: rgba(9, 43, 27, 0.85);
 }
 

@@ -41,8 +41,9 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
-- 🌗 **Light & dark themes** — a toolbar toggle switches the felt and chrome
-  between a bright table and a deep, low-light one; your choice is remembered.
+- 🎨 **Four table themes** — Midnight, Bright, Claret and Parchment. Each restyles
+  the felt, the chrome *and the card backs*, and the toolbar button cycles through
+  them; your choice is remembered.
 - 🙈 **Hideable toolbar** — when the window is too narrow to fit the buttons and
   the stats on one row, a **☰** button (or `T`) folds the buttons away and gives
   the height to the board; the clock, moves and score stay on screen. Wide
@@ -82,11 +83,18 @@ canvas:
 
 ![The full deck](screenshots/cards.png)
 
-## Light & dark themes
+## Themes
 
-Toggle the theme from the toolbar (🌙 / ☀️). The felt, vignette, pile outlines
-and toolbar all adapt, and the preference is saved to `localStorage` (you can
-also deep-link a theme with `?theme=light` or `?theme=dark`).
+The toolbar button cycles through four tables — **Midnight**, **Bright**, **Claret**
+and **Parchment** — and says which one is next. The felt, vignette, pile outlines,
+toolbar *and the card backs* all change together; the backs matter most, since the
+felt spends the game mostly covered by cards.
+
+Your choice is saved to `localStorage`, and any theme can be deep-linked:
+`?theme=dark` (Midnight), `?theme=light` (Bright), `?theme=claret`,
+`?theme=parchment`. The first two keep their original names so links and saved
+preferences from before the other themes existed still work. An unrecognised name
+falls back to Midnight rather than failing.
 
 ![Light theme](screenshots/gameplay-light.png)
 

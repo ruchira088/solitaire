@@ -176,9 +176,25 @@ try {
   await page.waitForTimeout(300);
   check("Escape closes the stats dialog", !(await page.isVisible("#stats-panel")));
 
+  // The theme button cycles a registry rather than flipping a boolean, so this
+  // asserts it moved to *a different* theme, not to one particular one.
+  const themeNow = () => page.evaluate(() => document.body.dataset.theme);
+  const themeBefore = await themeNow();
   await page.click("#btn-theme");
   await page.waitForTimeout(300);
-  check("the theme toggle switches the page", await page.evaluate(() => document.body.classList.contains("theme-light")));
+  check("the theme button moves to another theme", (await themeNow()) !== themeBefore,
+    `${themeBefore} -> ${await themeNow()}`);
+  check("every theme in the cycle is reachable and repaints", await page.evaluate(async () => {
+    const seen = new Set();
+    const btn = document.getElementById("btn-theme");
+    for (let i = 0; i < 12; i++) {
+      seen.add(document.body.dataset.theme);
+      btn.click();
+      await new Promise((r) => setTimeout(r, 60));
+      if (seen.has(document.body.dataset.theme) && seen.size > 1) break;
+    }
+    return seen.size >= 3;
+  }), "expected the cycle to visit at least 3 themes");
 
   // ---- keyboard play ----
   // Focus the canvas rather than clicking it: a click would put the keyboard cursor
