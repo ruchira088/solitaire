@@ -100,7 +100,7 @@ if (names.length === 0) throw new Error(`ONLY matched no shots; known: ${Object.
 /** Build the board in the page and leave it in localStorage as a v:2 save. Everything
  *  here runs in the browser, against the app's own modules. */
 async function inject(page, spec) {
-  return page.evaluate(async (spec) => {
+  return page.evaluate(async (plan) => {
     const { Game, parseGameState } = await import("/src/game.ts");
 
     // A greedy player: foundation moves, then a tableau run that reveals a face-down
@@ -144,11 +144,11 @@ async function inject(page, spec) {
       return g;
     };
 
-    let g = new Game(1, spec.seed);
-    if (spec.board === "mid" || spec.board === "spares") {
-      play(g, spec.midMoves);
+    const g = new Game(1, plan.seed);
+    if (plan.board === "mid" || plan.board === "spares") {
+      play(g, plan.midMoves);
     }
-    if (spec.board === "spares") {
+    if (plan.board === "spares") {
       // Park the longest face-up run on a ✦ stack — preferring one that empties its
       // column outright — then buy a second, empty stack to show alongside it.
       g.addTempStack();
@@ -166,7 +166,7 @@ async function inject(page, spec) {
       g.moveCards({ kind: "tableau", index: best }, bestFirst, { kind: "spare", index: 0 });
       g.addTempStack();
     }
-    if (spec.board === "won") {
+    if (plan.board === "won") {
       // The greedy player above cannot win a game — over 200 seeds its best result is
       // 40 of 52 cards home — so this one board is assembled rather than played, and
       // checked against parseGameState instead, which is the property that matters.
@@ -175,7 +175,7 @@ async function inject(page, spec) {
       // -1 a move that lands the finished game on 122 moves and 980 points.
       const up = (id) => id + 52;
       const state = {
-        seed: spec.seed, drawCount: 1, easy: false, moves: 114, score: 908,
+        seed: plan.seed, drawCount: 1, easy: false, moves: 114, score: 908,
         stock: [], waste: [],
         foundations: [0, 1, 2, 3].map((s) => Array.from({ length: 11 }, (_, r) => up(s * 13 + r))),
         tableau: [
@@ -190,9 +190,9 @@ async function inject(page, spec) {
 
     localStorage.setItem(
       "solitaire-game",
-      JSON.stringify({ v: 2, elapsed: spec.elapsed, state: g.serialize() }),
+      JSON.stringify({ v: 2, elapsed: plan.elapsed, state: g.serialize() }),
     );
-    for (const [k, v] of Object.entries(spec.prefs ?? {})) localStorage.setItem(k, v);
+    for (const [k, v] of Object.entries(plan.prefs ?? {})) localStorage.setItem(k, v);
   }, spec);
 }
 

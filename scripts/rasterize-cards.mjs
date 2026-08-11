@@ -45,10 +45,10 @@ let after = 0;
 for (const file of sources) {
   const svg = readFileSync(join(SRC, file), "utf8");
   const dataUrl = await page.evaluate(
-    async ({ svg, width, quality }) => {
+    async ({ svg: source, width, quality }) => {
       const img = new Image();
       img.src =
-        "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+        "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(source)));
       await img.decode();
       const canvas = document.createElement("canvas");
       canvas.width = width;

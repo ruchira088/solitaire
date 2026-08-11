@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc && vite build",
@@ -18,6 +19,7 @@
     "cards:optimize": "svgo -f public/cards --config svgo.config.mjs"
   },
   "devDependencies": {
+    "oxlint": "^1.78.0",
     "playwright-core": "^1.62.0",
     "svgo": "^4.0.2",
     "typescript": "^7.0.2",

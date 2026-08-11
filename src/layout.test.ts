@@ -212,10 +212,10 @@ describe("columnOffsets", () => {
     // 4-card run always fan at full step. Anything deeper is compressed, which
     // is the trade for cards that aren't tiny.
     for (const [w, h] of [[1280, 720], [1400, 900], [1920, 1080], [845, 415]]) {
-      const l = computeLayout(w, h);
-      const o = columnOffsets([...faceDown(6), ...faceUp(4)], l);
-      expect(o[1], `${w}x${h}`).toBeCloseTo(l.faceDownStep, 5);
-      expect(o[o.length - 1] + l.cardH, `${w}x${h}`).toBeLessThanOrEqual(l.fanLimit + 0.5);
+      const lay = computeLayout(w, h);
+      const o = columnOffsets([...faceDown(6), ...faceUp(4)], lay);
+      expect(o[1], `${w}x${h}`).toBeCloseTo(lay.faceDownStep, 5);
+      expect(o[o.length - 1] + lay.cardH, `${w}x${h}`).toBeLessThanOrEqual(lay.fanLimit + 0.5);
     }
   });
 

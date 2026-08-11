@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "eslint/no-shadow": "error",
+    "eslint/no-else-return": "off",
+    "eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
+    "eslint/no-var": "error",
+    "eslint/prefer-const": "error",
+    "eslint/no-throw-literal": "error",
+    "typescript/no-floating-promises": "off",
+    "unicorn/no-await-expression-member": "off"
+  },
+  "ignorePatterns": ["dist", "cdk-deploy", "node_modules", "public/sw.js"],
+  "env": {
+    "browser": true,
+    "es2024": true,
+    "node": true
+  }
+}

@@ -17,6 +17,7 @@ Everything installed is dev/build tooling:
 | `vite` | `^8.1.5` | dev server + production bundle; `createServer` serves the app for the screenshot script and `preview` serves `dist/` for the smoke test. Its `engines` field is what sets the **Node 20.19+ / 22.12+** floor (`.nvmrc` pins 24) |
 | `vitest` | `^4.1.10` | the pure-logic suite (`npm test`), configured separately in `vitest.config.ts` |
 | `svgo` | `^4.0.2` | one-off pip/ace face optimisation (`npm run cards:optimize`) |
+| `oxlint` | `^1.78.0` | linting (`npm run lint`), gating CI. **Not ESLint on purpose** — `typescript-eslint` hard-errors on TypeScript 7 (it checks the version and refuses; see typescript-eslint#10940), and the only workaround is running a second, older TypeScript side by side. oxlint parses TS itself and has no `typescript` peer dependency, so it costs one binary and no version coupling |
 | `playwright-core` | `^1.62.0` | drives *system* Chrome — `scripts/smoke.mjs` (which runs in CI), `scripts/rasterize-cards.mjs`, `scripts/shoot-screenshots.mjs` and the visual checks below. `-core` on purpose: no browser binaries are downloaded, so CI uses the runner's preinstalled Chrome |
 
 **When any of this changes — a package added, removed, or moved across a major
@@ -29,6 +30,7 @@ them.
 
 ```bash
 npm run dev         # Vite dev server with hot reload
+npm run lint        # oxlint — correctness rules, no formatting opinions
 npm run typecheck   # tsc --noEmit (strict mode)
 npm test            # vitest run — the pure-logic suite
 npm run test:watch  # vitest in watch mode
@@ -43,8 +45,19 @@ visual or behavioural, run the app and look at it (see Verifying).
 
 ### Tests
 
-Vitest, colocated as `src/*.test.ts`. `npm test`, `npm run typecheck` and
-`npm run smoke` all gate CI ahead of every deploy — see the `build-and-typecheck` job.
+Vitest, colocated as `src/*.test.ts`. `npm run lint`, `npm test`, `npm run typecheck`
+and `npm run smoke` all gate CI ahead of every deploy — see the `build-and-typecheck`
+job.
+
+**The lint carries correctness rules only, and no formatting opinions.** oxlint's
+`pedantic`/`style` categories were tried and rejected: they wanted `querySelector`
+over every `getElementById`, `.at()` over `[i]`, and to hoist every small local
+helper — a large diff arguing with deliberate house style, for no defect caught.
+`correctness` plus a short hand-picked list (`no-shadow`, `eqeqeq`, `prefer-const`,
+`no-throw-literal`) is the part that finds bugs. Formatting stays a separate decision;
+there is no Prettier, and adding one would reflow a lot of hand-broken code at once.
+`public/sw.js` is excluded because it holds build-time placeholders and is
+deliberately not valid JavaScript until `vite build` substitutes them.
 
 Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts`,
 `storage.ts`, `share.ts` and `cursor.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,

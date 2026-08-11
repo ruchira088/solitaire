@@ -161,9 +161,9 @@ describe("with working storage", () => {
   });
 
   /** One whole game, from first move to win. */
-  const playAndWin = (store: Store, score: number, elapsedMs = 60_000, moves = 100): void => {
-    store.recordGameStart();
-    store.recordWin({ score, elapsedMs, moves });
+  const playAndWin = (s: Store, score: number, elapsedMs = 60_000, moves = 100): void => {
+    s.recordGameStart();
+    s.recordWin({ score, elapsedMs, moves });
   };
 
   it("counts a game from its first move, not from the deal", () => {
