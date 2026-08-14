@@ -81,8 +81,15 @@ const RAIL_WASTE_FAN = 0.22;
  *  fraction of card height; the rest is centred. */
 const MAX_ROW_GAP = 0.18;
 
-export function computeLayout(width: number, height: number, spareCount = 0): Layout {
-  if (width < 520 && height > width) return verticalLayout(width, height, spareCount);
+export function computeLayout(
+  width: number,
+  height: number,
+  spareCount = 0,
+  leftHanded = false,
+): Layout {
+  // Only the portrait board has a rail to put on one side or the other; the landscape
+  // one is a top row, which no thumb is reaching across.
+  if (width < 520 && height > width) return verticalLayout(width, height, spareCount, leftHanded);
 
   // Compact (phone-landscape) boards get slimmer margins and gaps so the 7
   // columns keep a usable card size, and spare stacks move to their own
@@ -174,8 +181,19 @@ export function computeLayout(width: number, height: number, spareCount = 0): La
  *  four foundations run down a rail on the left — where landscape puts them in a top
  *  row — and the tableau (plus any spare stacks) are rows beside it, fanning right.
  *  The rows own the full height: a header above them would divide the height one more
- *  way and shrink every card, and leave a void in the rail beside the top rows. */
-function verticalLayout(width: number, height: number, spareCount: number): Layout {
+ *  way and shrink every card, and leave a void in the rail beside the top rows.
+ *
+ *  `leftHanded` mirrors the rail to the other edge, because the rail holds the stock —
+ *  the one pile you tap over and over — and on a phone the hand holding it covers the
+ *  side it's on. Only the x coordinates move: the rows keep fanning towards the middle
+ *  of the board, so the fan limit becomes the rail's inner edge rather than the
+ *  screen's. Nothing else in the layout has a handedness. */
+function verticalLayout(
+  width: number,
+  height: number,
+  spareCount: number,
+  leftHanded = false,
+): Layout {
   const margin = Math.max(8, Math.round(height * 0.012));
   const gapX = Math.max(5, Math.round(width * 0.012));
   let gapY = Math.max(5, Math.round(height * 0.008));
@@ -203,13 +221,17 @@ function verticalLayout(width: number, height: number, spareCount: number): Layo
 
   const topY = margin + Math.max(0, slack / 2);
   const rowY = (i: number) => topY + i * (cardH + gapY);
-  const rowX = margin + cardW + gapX * 2;
+  // The two x's the whole board hangs off, swapped for a left-handed rail. The gap
+  // between them is `gapX * 2` either way, so the rows lose no room to the mirror.
+  const railX = leftHanded ? width - margin - cardW : margin;
+  const rowX = leftHanded ? margin : margin + cardW + gapX * 2;
+  const rowLimit = leftHanded ? railX - gapX * 2 : width - margin;
 
   // The rail: stock, waste, then the foundations flush with the board's end. Six
   // piles in seven-plus slots, so the slack sits between the waste and the
   // foundations — which is also where the waste's draw-3 fan hangs.
   const foundations: Point[] = [];
-  for (let i = 0; i < 4; i++) foundations.push({ x: margin, y: rowY(rows - 4 + i) });
+  for (let i = 0; i < 4; i++) foundations.push({ x: railX, y: rowY(rows - 4 + i) });
   const tableau: Point[] = [];
   for (let i = 0; i < COLS; i++) tableau.push({ x: rowX, y: rowY(i) });
   const spares: Point[] = [];
@@ -222,17 +244,17 @@ function verticalLayout(width: number, height: number, spareCount: number): Layo
     cardH,
     radius: Math.max(6, cardW * 0.075),
     fanX: true,
-    stock: { x: margin, y: rowY(0) },
+    stock: { x: railX, y: rowY(0) },
     // Pushed clear of the drawn/total tally under the stock.
-    waste: { x: margin, y: rowY(1) + cardH * COUNTER_GAP },
+    waste: { x: railX, y: rowY(1) + cardH * COUNTER_GAP },
     foundations,
     tableau,
     spares,
     faceDownStep: cardW * ROW_FACE_DOWN_STEP,
     faceUpStep: cardW * ROW_FACE_UP_STEP,
     wasteFan: { x: 0, y: cardH * RAIL_WASTE_FAN },
-    fanLimit: width - margin,
-    spareFanLimit: width - margin,
+    fanLimit: rowLimit,
+    spareFanLimit: rowLimit,
   };
 }
 

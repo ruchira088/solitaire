@@ -31,15 +31,10 @@ interface Snapshot {
   score: number;
 }
 
-/** A whole game as plain JSON-safe data. Piles hold encoded cards (see
- *  `encodeCard`); the undo history is deliberately not part of this. */
-export interface GameState {
-  /** The 32-bit seed this board was dealt from; see rng.ts. */
-  seed: number;
-  drawCount: DrawCount;
-  easy: boolean;
-  moves: number;
-  score: number;
+/** The piles of a board, as plain JSON-safe data: arrays of encoded cards (see
+ *  `encodeCard`). Shared by the live board and by every undo snapshot, so both are
+ *  validated by exactly the same rules. */
+export interface BoardState {
   stock: number[];
   waste: number[];
   foundations: number[][];
@@ -47,7 +42,36 @@ export interface GameState {
   spares: number[][];
 }
 
+/** A board as it was before a move, which is all undo needs: the piles, plus the two
+ *  counters a move changes. */
+export interface SnapshotState extends BoardState {
+  moves: number;
+  score: number;
+}
+
+/** A whole game as plain JSON-safe data. */
+export interface GameState extends BoardState {
+  /** The 32-bit seed this board was dealt from; see rng.ts. */
+  seed: number;
+  drawCount: DrawCount;
+  easy: boolean;
+  moves: number;
+  score: number;
+  /** Undo and redo, oldest first. Optional on purpose: a save written before these
+   *  existed is still a perfectly good board and resumes with an empty history, which
+   *  is exactly how every resumed game used to behave — so this needed no schema bump
+   *  and no one lost a game in progress to the upgrade. */
+  history?: SnapshotState[];
+  future?: SnapshotState[];
+}
+
 const MAX_HISTORY = 200;
+
+/** How much of the undo stack rides along in the save. Smaller than `MAX_HISTORY`
+ *  because the save is rewritten after *every move*: the whole 200 would be ~60 KB of
+ *  JSON per move to buy undo depth that nobody reaches after coming back to a game.
+ *  The most recent moves are the ones anyone actually takes back. */
+const PERSISTED_HISTORY = 40;
 
 /** Maximum number of temp parking stacks alive at once. */
 export const MAX_SPARES = 3;
@@ -71,6 +95,30 @@ function encodePile(p: Card[]): number[] {
 
 function decodePile(codes: number[]): Card[] {
   return codes.map(decodeCard);
+}
+
+function encodeSnapshot(s: Snapshot): SnapshotState {
+  return {
+    stock: encodePile(s.stock),
+    waste: encodePile(s.waste),
+    foundations: s.foundations.map(encodePile),
+    tableau: s.tableau.map(encodePile),
+    spares: s.spares.map(encodePile),
+    moves: s.moves,
+    score: s.score,
+  };
+}
+
+function decodeSnapshot(s: SnapshotState): Snapshot {
+  return {
+    stock: decodePile(s.stock),
+    waste: decodePile(s.waste),
+    foundations: s.foundations.map(decodePile),
+    tableau: s.tableau.map(decodePile),
+    spares: s.spares.map(decodePile),
+    moves: s.moves,
+    score: s.score,
+  };
 }
 
 // ---- Deserialization -------------------------------------------------------
@@ -100,20 +148,12 @@ function isCodeGrid(v: unknown, len: number): v is number[][] {
 
 const allFaceUp = (p: number[]): boolean => p.every((c) => c >= 52);
 
-/** Validate untrusted data — a localStorage save, possibly hand-edited or
- *  written by an older build — as a structurally legal Klondike board. Returns
- *  null instead of throwing so callers can quietly fall back to a fresh deal. */
-export function parseGameState(data: unknown): GameState | null {
-  if (typeof data !== "object" || data === null) return null;
-  const d = data as Record<string, unknown>;
-
-  const seed = asSeed(d.seed);
-  const drawCount = asDrawCount(d.drawCount);
-  const moves = asCount(d.moves);
-  const score = asCount(d.score);
-  const { easy, stock, waste, foundations, tableau, spares } = d;
-  if (seed === null || drawCount === null || moves === null || score === null) return null;
-  if (typeof easy !== "boolean") return null;
+/** The piles of an untrusted board, checked as a structurally legal Klondike position.
+ *  Factored out so an undo snapshot is held to exactly the same standard as the live
+ *  board — a snapshot is a board the game will adopt wholesale the moment Undo is
+ *  pressed, so waving it through would just move the corruption one keystroke away. */
+function parseBoardState(d: Record<string, unknown>): BoardState | null {
+  const { stock, waste, foundations, tableau, spares } = d;
   if (!isCodePile(stock) || !isCodePile(waste)) return null;
   if (!isCodeGrid(foundations, 4) || !isCodeGrid(tableau, 7)) return null;
   if (!Array.isArray(spares) || spares.length > MAX_SPARES) return null;
@@ -149,10 +189,64 @@ export function parseGameState(data: unknown): GameState | null {
     }
   }
 
-  // Deliberately not checked: that the seed actually deals this board. Verifying
-  // would mean re-running the deal on every load, and the only consequence of a
-  // hand-edited mismatch is that Restart lays out a different game.
-  return { seed, drawCount, easy, moves, score, stock, waste, foundations, tableau, spares: sparePiles };
+  return { stock, waste, foundations, tableau, spares: sparePiles };
+}
+
+/** One undo entry. A whole board plus the counters that go back with it. */
+function parseSnapshotState(data: unknown): SnapshotState | null {
+  if (typeof data !== "object" || data === null) return null;
+  const d = data as Record<string, unknown>;
+  const moves = asCount(d.moves);
+  const score = asCount(d.score);
+  if (moves === null || score === null) return null;
+  const board = parseBoardState(d);
+  return board && { ...board, moves, score };
+}
+
+/** A run of undo entries. One bad entry drops the *whole* stack rather than leaving a
+ *  hole in it: undo walks backwards through these in order, and a gap would silently
+ *  skip a position rather than fail. Capped on the way in as well as on the way out, so
+ *  a hand-edited save can't make the game hold an unbounded list in memory. */
+function parseHistory(v: unknown): SnapshotState[] | null {
+  if (v === undefined) return [];
+  if (!Array.isArray(v) || v.length > MAX_HISTORY) return null;
+  const out: SnapshotState[] = [];
+  for (const entry of v) {
+    const snap = parseSnapshotState(entry);
+    if (!snap) return null;
+    out.push(snap);
+  }
+  return out;
+}
+
+/** Validate untrusted data — a localStorage save, possibly hand-edited or
+ *  written by an older build — as a structurally legal Klondike board. Returns
+ *  null instead of throwing so callers can quietly fall back to a fresh deal. */
+export function parseGameState(data: unknown): GameState | null {
+  if (typeof data !== "object" || data === null) return null;
+  const d = data as Record<string, unknown>;
+
+  const seed = asSeed(d.seed);
+  const drawCount = asDrawCount(d.drawCount);
+  const moves = asCount(d.moves);
+  const score = asCount(d.score);
+  const { easy } = d;
+  if (seed === null || drawCount === null || moves === null || score === null) return null;
+  if (typeof easy !== "boolean") return null;
+
+  const board = parseBoardState(d);
+  if (!board) return null;
+
+  const history = parseHistory(d.history);
+  const future = parseHistory(d.future);
+  if (!history || !future) return null;
+
+  // Deliberately not checked: that the seed actually deals this board, and that the
+  // history is a chain of positions one move apart. Verifying either would mean
+  // replaying the game on every load, and neither can produce anything worse than a
+  // legal board — Restart lays out a different game; Undo lands on a position you
+  // couldn't have reached.
+  return { seed, drawCount, easy, moves, score, ...board, history, future };
 }
 
 export class Game {
@@ -448,12 +542,16 @@ export class Game {
       foundations: this.foundations.map(encodePile),
       tableau: this.tableau.map(encodePile),
       spares: this.spares.map(encodePile),
+      // The most recent entries, oldest first — the tail is what undo reaches for, and
+      // `history.shift()` already means the oldest is the one the live stack drops.
+      history: this.history.slice(-PERSISTED_HISTORY).map(encodeSnapshot),
+      future: this.future.slice(-PERSISTED_HISTORY).map(encodeSnapshot),
     };
   }
 
   /** Adopt a state produced by `parseGameState`, which owns validation. Cards are
-   *  rebuilt fresh so nothing aliases the replaced board, and the undo history is
-   *  dropped — it isn't persisted. */
+   *  rebuilt fresh so nothing aliases the replaced board — including in the history,
+   *  whose snapshots are handed to `applySnapshot` whole when Undo is pressed. */
   restore(state: GameState): void {
     this.seed = state.seed;
     this.drawCount = state.drawCount;
@@ -465,8 +563,8 @@ export class Game {
     this.foundations = state.foundations.map(decodePile);
     this.tableau = state.tableau.map(decodePile);
     this.spares = state.spares.map(decodePile);
-    this.history = [];
-    this.future = [];
+    this.history = (state.history ?? []).map(decodeSnapshot);
+    this.future = (state.future ?? []).map(decodeSnapshot);
   }
 
   // ---- Undo / redo --------------------------------------------------------

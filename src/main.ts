@@ -51,15 +51,18 @@ import {
   dailySeed,
   encodeSeed,
   parseSeed,
+  randomSeed,
   recentDailyKeys,
 } from "./rng";
 import { formatClock, shareText } from "./share";
-import { canAnalyse, Outcome } from "./solver";
+import { canAnalyse, GameMove, Outcome } from "./solver";
+import type { SolveRequest, SolveResponse } from "./solver.worker";
 import {
   clampCursor,
   Cursor,
   cardName,
   describe as describeCursor,
+  describeHint,
   describeMove,
   Move as CursorMove,
   moveCursor,
@@ -98,6 +101,9 @@ let celebStarted = false;
 let resuming = false; // a saved game was restored; the overlay reveals it instead of dealing
 let started = false; // the start overlay has been dismissed
 let chromeHidden = false; // toolbar folded down to its toggle
+/** Portrait only: which edge the stock/waste/foundation rail sits on. The hand holding
+ *  a phone covers the side it's on, and the stock is the pile you tap most. */
+let leftHanded = false;
 /** Set when a game is won: the lifetime stats to show on the win panel, and whether
  *  this game beat the best score. Null until then. */
 let winRecord: { stats: Stats; isRecord: boolean } | null = null;
@@ -141,7 +147,10 @@ function resize(): void {
   canvas.height = Math.max(1, Math.round(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   sparesShown = game.spares.length;
-  layout = computeLayout(rect.width, rect.height, sparesShown);
+  layout = computeLayout(rect.width, rect.height, sparesShown, leftHanded);
+  // The rail-side toggle only means something on the portrait board, and this is the
+  // one place that knows which layout was actually chosen.
+  document.body.classList.toggle("portrait-board", layout.fanX);
   appliedW = rect.width;
   appliedH = rect.height;
   invalidate();
@@ -227,6 +236,9 @@ const el = {
   score: document.getElementById("stat-score") as HTMLElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
   analyse: document.getElementById("btn-analyse") as HTMLButtonElement,
+  hint: document.getElementById("btn-hint") as HTMLButtonElement,
+  winnable: document.getElementById("btn-winnable") as HTMLButtonElement,
+  hand: document.getElementById("btn-hand") as HTMLButtonElement,
   daily: document.getElementById("btn-daily") as HTMLButtonElement,
   toast: document.getElementById("toast") as HTMLElement,
   stats: document.getElementById("btn-stats") as HTMLButtonElement,
@@ -273,7 +285,7 @@ function frame(now: number): void {
   } else {
     input.updateDropTarget();
     if (dirty || wasAnimating || animator.isAnimating() || input.drag) {
-      renderer.drawScene(ctx, game, layout, animator, input.drag, cursorView());
+      renderer.drawScene(ctx, game, layout, animator, input.drag, cursorView(), hintView());
       dirty = false;
     }
     // Outside the paint gate on purpose: the win and auto-complete sweep have to be
@@ -843,6 +855,11 @@ function doRedo(): void {
 
 function afterTimeTravel(): void {
   invalidate();
+  // Undo and redo change the board without going through `onChange`, so this is the
+  // one path that has to bump the version itself. Without it a search started before
+  // an undo lands its verdict on the position *after* it — and a hint would point at
+  // cards that have moved.
+  boardVersion++;
   held = null; // the run it referred to may not exist in this position
   if (cursor) cursor = clampCursor(game, cursor);
   animator.clear();
@@ -948,6 +965,23 @@ function toggleChrome(): void {
   applyChrome(!chromeHidden);
 }
 
+/** Which side the portrait rail sits on. A preference rather than a per-game setting:
+ *  which hand you hold the phone in doesn't change between deals. */
+function applyHand(left: boolean): void {
+  leftHanded = left;
+  const label = left ? "Rail on the right" : "Rail on the left";
+  el.hand.title = `${label} — click to switch sides`;
+  el.hand.setAttribute("aria-label", label);
+  el.hand.setAttribute("aria-pressed", left ? "true" : "false");
+  writeItem("solitaire-hand", left ? "left" : "right");
+  resize(); // the piles move; the board is rebuilt from the new layout
+  input.cancelDrag(); // its offsets were measured against the old side
+}
+
+function toggleHand(): void {
+  applyHand(!leftHanded);
+}
+
 /** Easy mode is per-game, not a saved preference: every new deal starts with it
  *  off, and it only travels with a game via that game's save. */
 function applyEasy(on: boolean): void {
@@ -986,12 +1020,21 @@ function showToast(message: string, ms = 6000): void {
 // ---- Is this deal still winnable? ------------------------------------------
 
 let solverWorker: Worker | null = null;
-let analysing = false;
+let solverBusy = false;
 /** Bumped by every change to the board. The search runs against a snapshot taken at
  *  click time while the board stays playable, so the verdict has to be checked against
  *  the position it was actually about — otherwise "this can't be won" can land about a
  *  game the player has already left, or a different deal entirely. */
 let boardVersion = 0;
+
+/** The move the solver suggested, and which board it was about. Drawn only while that
+ *  version is still current: any change — a move, an undo, a new deal — takes the arrow
+ *  away rather than leaving it pointing at cards that have since moved. */
+let hint: { move: GameMove; version: number } | null = null;
+
+function hintView(): GameMove | null {
+  return hint && hint.version === boardVersion ? hint.move : null;
+}
 
 /** The search runs in a worker: a stubborn position can take several hundred
  *  milliseconds, which inline would drop frames and stall a drag. */
@@ -1007,8 +1050,32 @@ const VERDICT: Record<Outcome, string> = {
   unknown: "🤔 Couldn't tell within the time budget — it may still be winnable.",
 };
 
-function analysePosition(): void {
-  if (analysing) return;
+/** A hint is only ever a move off a line that actually wins, so the two answers that
+ *  aren't `solved` have no move to offer and say so rather than falling back to a
+ *  plausible-looking one. A guess dressed as a hint is the one thing this must not do:
+ *  the whole point is that it can be trusted. */
+const NO_HINT: Record<Outcome, string> = {
+  solved: "💡 It's winnable, but I couldn't point at the move.",
+  unwinnable: "🪦 No move from here leads to a win — undo, or start a new game.",
+  unknown: "🤔 Couldn't find a winning line in time, so I've no move worth trusting.",
+};
+
+/** One worker, so the three things that ask it questions take turns rather than
+ *  cutting each other off mid-search. */
+function syncSolverButtons(): void {
+  el.analyse.disabled = solverBusy;
+  el.hint.disabled = solverBusy;
+  el.winnable.disabled = solverBusy;
+}
+
+/** Both buttons ask the same worker the same question; only what they do with the
+ *  answer differs. The guards are shared so they can't come to disagree about which
+ *  boards are answerable, and one flag keeps them from running two searches at once.
+ *
+ *  `handle` returns the line to show, and runs only when the answer is still about the
+ *  board on screen. */
+function askSolver(what: "verdict" | "hint", handle: (r: SolveResponse) => string): void {
+  if (solverBusy) return;
   // Order matters: a won board is mid-celebration, so the busy guard below would
   // otherwise swallow the click and leave the button looking broken.
   if (game.isWon()) {
@@ -1021,34 +1088,124 @@ function analysePosition(): void {
   }
   const state = game.serialize();
   if (!canAnalyse(state)) {
-    showToast("🤔 Can't analyse a board with ✦ stacks or easy mode — their rules differ.");
+    showToast(
+      what === "hint"
+        ? "🤔 Can't suggest a move on a board with ✦ stacks or easy mode — their rules differ."
+        : "🤔 Can't analyse a board with ✦ stacks or easy mode — their rules differ.",
+    );
     return;
   }
 
-  analysing = true;
-  el.analyse.disabled = true;
-  showToast("🔍 Looking for a way to win…", 60_000);
+  solverBusy = true;
+  syncSolverButtons();
+  showToast(what === "hint" ? "💡 Looking for a move…" : "🔍 Looking for a way to win…", 60_000);
 
   const worker = getSolverWorker();
   const done = (message: string): void => {
-    analysing = false;
-    el.analyse.disabled = false;
+    solverBusy = false;
+    syncSolverButtons();
     showToast(message);
   };
   const askedAbout = boardVersion;
-  worker.onmessage = (e: MessageEvent<{ outcome: Outcome }>) => {
+  worker.onmessage = (e: MessageEvent<SolveResponse>) => {
     if (boardVersion !== askedAbout) {
-      done("🤔 The board changed while I was looking — press 🔍 again.");
+      done(`🤔 The board changed while I was looking — press ${what === "hint" ? "💡" : "🔍"} again.`);
       return;
     }
-    done(VERDICT[e.data.outcome]);
+    done(handle(e.data));
   };
   worker.onerror = () => {
     // A worker that won't start shouldn't look like a verdict.
     solverWorker = null;
     done("🤔 Couldn't run the analysis.");
   };
-  worker.postMessage({ state, maxNodes: 200_000 });
+  // Escalate only when the fast pass can't tell. The boards that answer quickly are
+  // untouched, and the ones that would otherwise shrug get a much deeper search
+  // instead — measured over 40 draw-1 deals, that turns 3 of 11 shrugs into answers.
+  const request: SolveRequest = {
+    state,
+    maxNodes: 200_000,
+    escalateNodes: 2_000_000,
+    wantMove: what === "hint",
+  };
+  worker.postMessage(request);
+}
+
+function analysePosition(): void {
+  askSolver("verdict", (r) => VERDICT[r.outcome]);
+}
+
+/** How many candidate deals to test before giving up. About two thirds of random deals
+ *  are provably winnable inside the fast budget, so this almost always ends on the
+ *  first or second — twelve is the "something has gone badly wrong" ceiling rather than
+ *  an expected cost, and at ~70 ms a candidate even that is under a second. */
+const WINNABLE_TRIES = 12;
+
+/** Deal a board the solver has already carried through to 52 cards home.
+ *
+ *  Candidates are tested at the fast budget with no escalation: an `unknown` here isn't
+ *  a board to reject on its merits, it's one we couldn't vouch for, and the cheapest
+ *  answer is to shuffle again rather than think harder about this one. The current
+ *  board is left alone until a winner is found — a search that comes up empty must not
+ *  cost the player the game they were in the middle of. */
+function newWinnableGame(): void {
+  if (solverBusy) return;
+  if (busy || celebration.active || autoCompleting || input.drag) return;
+
+  solverBusy = true;
+  syncSolverButtons();
+  showToast("🎲 Looking for a deal that can be won…", 60_000);
+
+  const worker = getSolverWorker();
+  let tries = 0;
+  let seed = randomSeed();
+  const stop = (message: string): void => {
+    solverBusy = false;
+    syncSolverButtons();
+    showToast(message);
+  };
+  const test = (): void => {
+    tries++;
+    // A deal winnable at Draw 1 need not be at Draw 3, so candidates are tested under
+    // the mode this game will actually be played in.
+    const request: SolveRequest = {
+      state: new Game(game.drawCount, seed).serialize(),
+      maxNodes: 200_000,
+    };
+    worker.postMessage(request);
+  };
+  worker.onmessage = (e: MessageEvent<SolveResponse>) => {
+    if (e.data.outcome === "solved") {
+      const found = seed;
+      stop(`🎲 Dealt a board that can be won — ${tries} shuffle${tries === 1 ? "" : "s"}.`);
+      beginGame(() => game.deal(found));
+      return;
+    }
+    if (tries >= WINNABLE_TRIES) {
+      stop("🤔 Couldn't vouch for a deal just now — your board is untouched. Try again?");
+      return;
+    }
+    seed = randomSeed();
+    test();
+  };
+  worker.onerror = () => {
+    solverWorker = null;
+    stop("🤔 Couldn't run the search.");
+  };
+  test();
+}
+
+/** Show the first move of a line that wins. Not a heuristic "this looks playable" —
+ *  the removed `findHint` was that, and a greedy player built on it can't win a game —
+ *  but the opening move of a line the search has actually carried through to 52 cards
+ *  home. That is also why it declines rather than guessing when there's no such line. */
+function requestHint(): void {
+  askSolver("hint", (r) => {
+    if (r.outcome !== "solved" || !r.next) return NO_HINT[r.outcome];
+    hint = { move: r.next, version: boardVersion };
+    invalidate();
+    return `💡 Try: ${describeHint(game, r.next.from, r.next.fromIndex, r.next.to)}.`;
+  });
 }
 
 // ---- Keyboard play ---------------------------------------------------------
@@ -1252,6 +1409,9 @@ el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
 el.restart.addEventListener("click", restartDeal);
 el.analyse.addEventListener("click", analysePosition);
+el.hint.addEventListener("click", requestHint);
+el.winnable.addEventListener("click", newWinnableGame);
+el.hand.addEventListener("click", toggleHand);
 el.daily.addEventListener("click", playDaily);
 el.stats.addEventListener("click", openStats);
 el.statsClose.addEventListener("click", closeStats);
@@ -1360,6 +1520,10 @@ window.addEventListener("keydown", (e) => {
     newGame();
   } else if (key === "d") {
     playDaily();
+  } else if (key === "h") {
+    requestHint();
+  } else if (key === "w") {
+    newWinnableGame();
   } else if (key === "t") {
     toggleChrome();
   }
@@ -1388,6 +1552,7 @@ applyTheme(isThemeName(savedTheme) ? savedTheme : "dark");
 applySound(readItem("solitaire-sound") !== "off");
 // Before resize(), so the board is measured against the bar the user left behind.
 applyChrome(readItem("solitaire-chrome") === "hidden");
+applyHand(readItem("solitaire-hand") === "left");
 
 // Pick up a saved game if there is a valid one, replacing the constructor's fresh
 // deal. This has to run before resize(), which sizes the board from the number of
@@ -1435,7 +1600,7 @@ const startNew = document.getElementById("start-new") as HTMLButtonElement;
 if (resuming) {
   (startOverlay.querySelector(".start-title") as HTMLElement).textContent = "Resume game";
   (startOverlay.querySelector(".start-tip") as HTMLElement).textContent =
-    `Game in progress — ${game.moves} moves, ${game.score} points. Undo/redo history isn't kept across a reload.`;
+    `Game in progress — ${game.moves} moves, ${game.score} points. Your recent moves can still be undone.`;
   startNew.hidden = false;
 }
 

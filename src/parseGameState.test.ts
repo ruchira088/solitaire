@@ -272,3 +272,118 @@ describe("parseGameState — rejects impossible foundations", () => {
     expect(parseGameState(s)).toBeNull();
   });
 });
+
+// The undo history is a list of whole boards that the game adopts wholesale when Undo
+// is pressed, so it is untrusted input exactly as the live board is — and letting a
+// broken snapshot through would only move the corruption one keystroke away.
+describe("parseGameState — the undo history", () => {
+  /** A state with a real history: three draws and an undo, so `history[1]` is a board
+   *  with cards in the waste and `future[0]` is the position the undo stepped back
+   *  from. `history[0]` is the pre-first-draw board and its waste is empty, which is
+   *  exactly the sort of thing a rejection test must not be pointed at. */
+  function withHistory(): GameState {
+    const g = new Game(1, 7);
+    g.drawFromStock();
+    g.drawFromStock();
+    g.drawFromStock();
+    g.undo();
+    return JSON.parse(JSON.stringify(g.serialize())) as GameState;
+  }
+
+  it("accepts a save carrying history and future", () => {
+    const s = withHistory();
+    expect(s.history?.length).toBe(2);
+    expect(s.future?.length).toBe(1);
+    const parsed = parseGameState(s);
+    expect(parsed?.history?.length).toBe(2);
+    expect(parsed?.future?.length).toBe(1);
+  });
+
+  it("accepts a save from before the history existed", () => {
+    const s = valid();
+    delete s.history;
+    delete s.future;
+    expect(parseGameState(s)?.history).toEqual([]);
+  });
+
+  it("rejects a snapshot missing a card", () => {
+    const s = withHistory();
+    s.history![0].stock.pop();
+    expect(parseGameState(s)).toBeNull();
+  });
+
+  it("rejects a snapshot with a face-down card in the waste", () => {
+    const s = withHistory();
+    expect(s.history![1].waste.length).toBeGreaterThan(0);
+    s.history![1].waste = s.history![1].waste.map((c) => c % UP);
+    expect(parseGameState(s)).toBeNull();
+  });
+
+  it("rejects a snapshot whose counters aren't counts", () => {
+    const s = withHistory();
+    s.history![0].moves = -1;
+    expect(parseGameState(s)).toBeNull();
+  });
+
+  it("rejects a history that isn't a list", () => {
+    const s = withHistory();
+    (s as unknown as Record<string, unknown>).history = { 0: s.history![0] };
+    expect(parseGameState(s)).toBeNull();
+  });
+
+  it("rejects a history longer than the game will ever hold", () => {
+    const s = withHistory();
+    s.history = Array.from({ length: 201 }, () => structuredClone(s.history![0]));
+    expect(parseGameState(s)).toBeNull();
+  });
+
+  it("checks the future as well as the history", () => {
+    const s = withHistory();
+    s.future![0].tableau[0] = [];
+    expect(parseGameState(s)).toBeNull();
+  });
+});
+
+// Round-tripping is what the feature actually promises: close the tab mid-game, come
+// back, and the last few moves are still there to take back.
+describe("undo survives a save and reload", () => {
+  it("restores a history that can still be undone", () => {
+    const g = new Game(1, 11);
+    g.drawFromStock();
+    g.drawFromStock();
+    const movesBefore = g.moves;
+
+    const revived = new Game(1, 11);
+    revived.restore(parseGameState(JSON.parse(JSON.stringify(g.serialize())))!);
+    expect(revived.canUndo()).toBe(true);
+    expect(revived.undo()).toBe(true);
+    expect(revived.moves).toBe(movesBefore - 1);
+    expect(revived.waste.length).toBe(1);
+  });
+
+  it("restores a redo that was pending when the tab closed", () => {
+    const g = new Game(1, 11);
+    g.drawFromStock();
+    g.undo();
+
+    const revived = new Game(1, 11);
+    revived.restore(parseGameState(JSON.parse(JSON.stringify(g.serialize())))!);
+    expect(revived.canRedo()).toBe(true);
+    expect(revived.redo()).toBe(true);
+    expect(revived.waste.length).toBe(1);
+  });
+
+  it("keeps only the most recent entries, and the newest ones at that", () => {
+    const g = new Game(1, 11);
+    for (let i = 0; i < 60; i++) g.drawFromStock();
+    const s = g.serialize();
+    expect(s.history!.length).toBe(40);
+
+    const revived = new Game(1, 11);
+    revived.restore(parseGameState(JSON.parse(JSON.stringify(s)))!);
+    // The tail is what undo reaches for: the first undo must land on the position one
+    // move back, not on one from forty moves ago.
+    revived.undo();
+    expect(revived.waste.length).toBe(g.waste.length - 1);
+  });
+});

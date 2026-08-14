@@ -18,7 +18,7 @@
 // solver that quietly ignored them would answer a different question from the one the
 // board is asking — `analyse` returns `unknown` for those positions instead.
 
-import { GameState } from "./game";
+import { GameState, PileId } from "./game";
 
 /** id 0..51, laid out by cards.ts: suit = id / 13 (spades, hearts, diamonds, clubs),
  *  rank = id % 13 + 1. */
@@ -64,6 +64,106 @@ export interface SolveResult {
  *  different rules, and the honest answer there is "I don't know". */
 export function canAnalyse(state: GameState): boolean {
   return state.spares.length === 0 && !state.easy;
+}
+
+/** Where a move starts and ends in the *game's* terms, which is what the board can
+ *  point at. */
+export interface GameMove {
+  from: PileId;
+  /** Index into the source pile of the first card that moves. */
+  fromIndex: number;
+  to: PileId;
+}
+
+/** Which foundation pile would take this card. The search tracks foundations per suit
+ *  because that's canonical, but the game's four piles aren't suit-locked — any ace can
+ *  start any of them — so the pile has to be found by asking which one accepts it,
+ *  exactly as `foundationTargetFor` does. */
+function foundationHolding(state: GameState, suit: number): number {
+  for (let i = 0; i < 4; i++) {
+    const pile = state.foundations[i];
+    if (pile.length > 0 && suitOf(pile[pile.length - 1] % 52) === suit) return i;
+  }
+  return -1;
+}
+
+function foundationAccepting(state: GameState, id: number): number {
+  for (let i = 0; i < 4; i++) {
+    const pile = state.foundations[i];
+    if (pile.length === 0) {
+      if (rankOf(id) === 1) return i;
+      continue;
+    }
+    const top = pile[pile.length - 1] % 52;
+    if (suitOf(top) === suitOf(id) && rankOf(top) === rankOf(id) - 1) return i;
+  }
+  return -1;
+}
+
+/** Translate a search move into the piles the board draws, so a hint can be shown on
+ *  it. Returns null if the move doesn't fit the position — which shouldn't happen for a
+ *  line the search just produced from this very state, but the caller is pointing at
+ *  the player's board and a wrong arrow is worse than no arrow. */
+export function toGameMove(state: GameState, m: Move): GameMove | null {
+  const last = (p: number[]): number => p.length - 1;
+  switch (m.kind) {
+    case "draw":
+      return state.stock.length === 0
+        ? null
+        : { from: { kind: "stock" }, fromIndex: last(state.stock), to: { kind: "waste" } };
+    case "recycle":
+      return state.waste.length === 0
+        ? null
+        : { from: { kind: "waste" }, fromIndex: 0, to: { kind: "stock" } };
+    case "wasteToTableau":
+      return state.waste.length === 0
+        ? null
+        : {
+            from: { kind: "waste" },
+            fromIndex: last(state.waste),
+            to: { kind: "tableau", index: m.col },
+          };
+    case "wasteToFoundation": {
+      if (state.waste.length === 0) return null;
+      const index = foundationAccepting(state, state.waste[last(state.waste)] % 52);
+      return index < 0
+        ? null
+        : { from: { kind: "waste" }, fromIndex: last(state.waste), to: { kind: "foundation", index } };
+    }
+    case "tableauToFoundation": {
+      const col = state.tableau[m.col];
+      if (!col?.length) return null;
+      const index = foundationAccepting(state, col[last(col)] % 52);
+      return index < 0
+        ? null
+        : {
+            from: { kind: "tableau", index: m.col },
+            fromIndex: last(col),
+            to: { kind: "foundation", index },
+          };
+    }
+    case "tableauToTableau": {
+      const col = state.tableau[m.from];
+      const fromIndex = (col?.length ?? 0) - m.count;
+      return fromIndex < 0
+        ? null
+        : {
+            from: { kind: "tableau", index: m.from },
+            fromIndex,
+            to: { kind: "tableau", index: m.to },
+          };
+    }
+    case "foundationToTableau": {
+      const index = foundationHolding(state, m.suit);
+      return index < 0
+        ? null
+        : {
+            from: { kind: "foundation", index },
+            fromIndex: last(state.foundations[index]),
+            to: { kind: "tableau", index: m.col },
+          };
+    }
+  }
 }
 
 function toState(g: GameState): State {
@@ -307,17 +407,64 @@ function revert(s: State, u: Undo): void {
 
 // ---- Search ----------------------------------------------------------------
 
+/** One printable character per card. The visited set *is* the search's memory
+ *  footprint — one entry per node explored — so the length of this string is what
+ *  decides whether a deep search fits in a phone's tab or takes it down with it.
+ *  Cards are 0..51, so 35 + id lands inside '#'..'V' and never collides with the
+ *  separators below. A decimal-with-commas key ran ~150 characters; this one is
+ *  ~65, and it hashes faster for being shorter. */
+const CH = (n: number): string => String.fromCharCode(35 + n);
+/** Between the sections, and between columns. Card characters start at 35, so these
+ *  can never be read as one — and they have to be there: a column's length isn't
+ *  otherwise recoverable from the run of characters, and two different positions
+ *  sharing a key is the one mistake this set must never make. */
+const SEP = String.fromCharCode(1);
+const COL_SEP = String.fromCharCode(2);
+
 /** A canonical key. Tableau columns are interchangeable, so their signatures are
  *  sorted: two positions that differ only by which column a run sits in are the same
- *  position, and collapsing them is a large part of why this terminates. */
+ *  position, and collapsing them is a large part of why this terminates.
+ *
+ *  A column contributes its face-down *count* rather than its face-down cards, which
+ *  is lossless here: those cards never move, only get revealed, so a column's hidden
+ *  stack is fixed by the deal. Two columns can only produce the same signature if
+ *  their face-up cards are identical — impossible unless both are empty, and an empty
+ *  face-up half with cards still face down can't occur, because `flipIfNeeded` turns
+ *  one up as part of the move that emptied it. */
 function key(s: State): string {
   const cols: string[] = [];
-  for (let c = 0; c < 7; c++) cols.push(`${s.down[c].length}:${s.up[c].join(",")}`);
+  for (let c = 0; c < 7; c++) {
+    let sig = CH(s.down[c].length);
+    for (const id of s.up[c]) sig += CH(id);
+    cols.push(sig);
+  }
   cols.sort();
-  return `${s.found.join(",")}|${cols.join("/")}|${s.stock.join(",")}|${s.waste.join(",")}`;
+  let k = CH(s.found[0]) + CH(s.found[1]) + CH(s.found[2]) + CH(s.found[3]);
+  k += SEP + cols.join(COL_SEP) + SEP;
+  for (const id of s.stock) k += CH(id);
+  k += SEP;
+  for (const id of s.waste) k += CH(id);
+  return k;
 }
 
 const DEFAULT_MAX_NODES = 200_000;
+
+/** How many visited positions to remember. Forgetting one only costs pruning — the
+ *  search re-explores a branch it has seen — so this bounds memory without ever
+ *  changing an answer, which a lossy *hash* of the key would not: two positions
+ *  colliding would prune an unexplored branch and could call a winnable board dead.
+ *  Sized so a search at several times the default budget still fits comfortably in a
+ *  phone's tab, where an unbounded set measured over 400 MB. */
+const SEEN_CAP = 600_000;
+
+/** A ceiling on how deep the line may go. `search` recurses once per move, so depth is
+ *  stack frames: without this, a search given a large enough node budget eventually
+ *  throws `RangeError: Maximum call stack size exceeded` instead of returning — and in
+ *  a browser, whose stack is smaller than Node's, that surfaces as "couldn't run the
+ *  analysis" rather than an answer. Treated exactly like the node budget, so hitting it
+ *  reports `unknown` and never `unwinnable`. A real winning line is a few hundred moves
+ *  at most, so this only ever bites pathological branches. */
+const MAX_DEPTH = 2_000;
 
 /** Search a position. Sound in both directions within the budget: `solved` comes with
  *  a line that wins, `unwinnable` means the complete move set was exhausted, and
@@ -334,7 +481,7 @@ export function solve(state: GameState, opts: { maxNodes?: number } = {}): Solve
 
   const search = (): boolean => {
     if (isWon(s)) return true;
-    if (nodes >= maxNodes) {
+    if (nodes >= maxNodes || line.length >= MAX_DEPTH) {
       exhausted = true;
       return false;
     }
@@ -342,11 +489,18 @@ export function solve(state: GameState, opts: { maxNodes?: number } = {}): Solve
 
     const k = key(s);
     if (seen.has(k)) return false;
-    seen.add(k);
+    // Past the cap, stop remembering rather than stop searching: a forgotten position
+    // costs re-exploration, never an answer.
+    if (seen.size < SEEN_CAP) seen.add(k);
+
+    // One move list per node, shared by the autoplay scan and the branching loop
+    // below. Generating it twice was a second full allocation on the hottest path in
+    // the search, for an identical list.
+    const moves = legalMoves(s);
 
     // Forced-safe autoplay: if a card can go home and nothing on the table could still
     // need it, play it and don't branch. Never loses a win, and prunes hard.
-    for (const move of legalMoves(s)) {
+    for (const move of moves) {
       const id =
         move.kind === "wasteToFoundation"
           ? s.waste[s.waste.length - 1]
@@ -363,7 +517,7 @@ export function solve(state: GameState, opts: { maxNodes?: number } = {}): Solve
       }
     }
 
-    for (const move of order(s, legalMoves(s))) {
+    for (const move of order(s, moves)) {
       const u = apply(s, move);
       line.push(move);
       if (search()) return true;

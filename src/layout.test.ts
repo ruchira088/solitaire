@@ -6,6 +6,7 @@ import { columnOffsets, computeLayout, Layout } from "./layout";
 
 const DESKTOP = () => computeLayout(1400, 900);
 const PHONE = () => computeLayout(390, 844);
+const PHONE_LEFT = () => computeLayout(390, 844, 0, true);
 
 const faceUp = (n: number) => Array.from({ length: n }, () => ({ faceUp: true }));
 const faceDown = (n: number) => Array.from({ length: n }, () => ({ faceUp: false }));
@@ -126,6 +127,52 @@ describe("computeLayout — phone portrait", () => {
     const l = computeLayout(390, 844, 2);
     expect(l.spares).toHaveLength(2);
     expect(l.spares[0].y).toBeGreaterThan(l.tableau[6].y);
+  });
+});
+
+// The rail holds the stock, which is the pile you tap over and over, and the hand
+// holding a phone covers the side it is on. Mirroring must move the rail *and* the
+// room the rows fan into — a rail on the right with rows still fanning to the screen
+// edge would run the cards underneath it.
+describe("computeLayout — left-handed portrait rail", () => {
+  it("puts the rail against the right edge and the rows against the left", () => {
+    const l = PHONE_LEFT();
+    const right = PHONE();
+    expect(l.stock.x).toBeGreaterThan(right.stock.x);
+    expect(l.stock.x + l.cardW).toBeLessThanOrEqual(l.width);
+    expect(l.tableau[0].x).toBeLessThan(right.tableau[0].x);
+    for (const f of l.foundations) expect(f.x).toBe(l.stock.x);
+  });
+
+  it("stops the row fans short of the rail instead of running under it", () => {
+    const l = PHONE_LEFT();
+    expect(l.fanLimit).toBeLessThanOrEqual(l.stock.x);
+    expect(l.spareFanLimit).toBe(l.fanLimit);
+  });
+
+  it("is a mirror: same card size, same rows, same fan room", () => {
+    const l = PHONE_LEFT();
+    const r = PHONE();
+    expect(l.cardW).toBeCloseTo(r.cardW, 6);
+    expect(l.cardH).toBeCloseTo(r.cardH, 6);
+    expect(l.tableau.map((p) => p.y)).toEqual(r.tableau.map((p) => p.y));
+    expect(l.fanLimit - l.tableau[0].x).toBeCloseTo(r.fanLimit - r.tableau[0].x, 6);
+  });
+
+  it("keeps the waste clear of the stock counter on either side", () => {
+    const l = PHONE_LEFT();
+    expect(l.waste.x).toBe(l.stock.x);
+    expect(l.waste.y).toBeGreaterThan(l.stock.y + l.cardH);
+  });
+
+  it("does nothing to the landscape board, which has no rail", () => {
+    expect(computeLayout(1400, 900, 0, true)).toEqual(computeLayout(1400, 900, 0, false));
+  });
+
+  it("keeps spare rows beside the rail too", () => {
+    const l = computeLayout(390, 844, 2, true);
+    expect(l.spares).toHaveLength(2);
+    for (const s of l.spares) expect(s.x).toBe(l.tableau[0].x);
   });
 });
 

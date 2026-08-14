@@ -45,6 +45,30 @@ body[data-theme="claret"] {
   --felt-top-mid: #35111d;
 }
 
+/* --felt-top-edge / --felt-top-mid are sampled from this theme's own feltStops: the
+   folded toolbar leaves a strip painted as fake felt, and a mismatch shows as a seam. */
+body[data-theme="ocean"] {
+  --bar: rgba(11, 34, 48, 0.88);
+  --bar-border: rgba(255, 255, 255, 0.09);
+  --text: #e8f6ff;
+  --muted: #9dc0d4;
+  --accent: #45c8e0;
+  --page-bg: #051520;
+  --felt-top-edge: #0a2231;
+  --felt-top-mid: #16455f;
+}
+
+body[data-theme="violet"] {
+  --bar: rgba(31, 20, 52, 0.88);
+  --bar-border: rgba(255, 255, 255, 0.1);
+  --text: #f3ecff;
+  --muted: #bda8dd;
+  --accent: #c79bff;
+  --page-bg: #140c24;
+  --felt-top-edge: #1c1132;
+  --felt-top-mid: #402a6b;
+}
+
 body[data-theme="parchment"] {
   --bar: rgba(72, 56, 34, 0.9);
   --bar-border: rgba(255, 255, 255, 0.1);
@@ -285,6 +309,15 @@ body {
   .icon-btn {
     padding: 8px 8px;
   }
+  /* The decorative glyph on each *labelled* button goes before any button does. The
+     icons cost ~120px across the row and carry no meaning — they're aria-hidden, and
+     the label is the accessible name either way — so dropping them buys back more
+     width than a whole control and loses nothing but ornament. The icon-only buttons
+     keep theirs: there the glyph *is* the button. Without this the row wraps onto a
+     second line at 1280, which the smoke test checks. */
+  .btn .ico {
+    display: none;
+  }
 }
 
 /* Tablets / phone landscape: tighten everything so the full toolbar still
@@ -435,6 +468,19 @@ body.chrome-hidden[data-theme="light"] #toolbar {
 }
 body.chrome-hidden[data-theme="parchment"] #toolbar {
   --muted: rgba(46, 32, 12, 0.85);
+}
+
+/* The rail-side toggle is meaningful only on the phone-portrait board, which is the
+   only layout with a rail — on the landscape board the same piles are a top row that
+   no thumb has to reach across. main.ts sets `portrait-board` from the layout it just
+   computed, so the button appears exactly where it does something, and costs the
+   toolbar no width anywhere else (the bar is measured for wrapping with it out). */
+#btn-hand {
+  display: none;
+}
+
+body.portrait-board #btn-hand {
+  display: inline-flex;
 }
 
 /* Smallest phones: the title won't fit beside the stats, and it's the one thing

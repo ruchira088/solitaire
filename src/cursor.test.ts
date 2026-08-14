@@ -9,6 +9,7 @@ import {
   clampCursor,
   Cursor,
   describe as describeCursor,
+  describeHint,
   describeMove,
   minDepth,
   moveCursor,
@@ -249,6 +250,32 @@ describe("describeMove", () => {
     const g = boardOf({ tableau: [[up(C, 4), up(H, 7)], [], [], [], [], [], []] });
     expect(describeMove(g, [g.tableau[0][1]], TAB(1), g.tableau[0][0])).toBe(
       "moved 7 of hearts to column 2, turned up 4 of clubs",
+    );
+  });
+});
+
+// A hint has to name the same cards the arrow rings, and say it as an instruction —
+// the move hasn't happened yet.
+describe("describeHint", () => {
+  it("names the run to pick up and where it goes", () => {
+    const g = boardOf({ tableau: [[dn(C, 4), up(S, 8), up(H, 7)], [], [], [], [], [], []] });
+    expect(describeHint(g, TAB(0), 1, TAB(3))).toBe("move 2 cards from 8 of spades to column 4");
+  });
+
+  it("names a single card", () => {
+    const g = boardOf({ waste: [up(H, 7)] });
+    expect(describeHint(g, { kind: "waste" }, 0, FND(1))).toBe("move 7 of hearts to foundation 2");
+  });
+
+  it("describes the stock as the gesture, not as a card that hasn't been turned up", () => {
+    const g = boardOf({ stock: [dn(C, 4), dn(H, 9)] });
+    expect(describeHint(g, { kind: "stock" }, 1, { kind: "waste" })).toBe("draw from the stock");
+  });
+
+  it("describes a recycle from the waste side", () => {
+    const g = boardOf({ waste: [up(H, 7), up(S, 8)] });
+    expect(describeHint(g, { kind: "waste" }, 0, { kind: "stock" })).toBe(
+      "turn the waste back into the stock",
     );
   });
 });

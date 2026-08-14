@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { Game, GameState } from "./game";
-import { canAnalyse, legalMoves, Move, solve } from "./solver";
+import { canAnalyse, legalMoves, Move, solve, toGameMove } from "./solver";
 
 const UP = 52;
 const [S, H, D, C] = [0, 1, 2, 3];
@@ -323,6 +323,79 @@ describe("its move generator agrees with game.ts", () => {
         ],
       }),
     );
+  });
+});
+
+// A hint points at the player's board, so the translation from a search move to the
+// piles the board draws has to be right — a confident arrow at the wrong pile is worse
+// than no hint at all. The foundation cases are the ones with something to get wrong:
+// the search tracks foundations per suit, while the game's four piles are whatever
+// landed on them.
+describe("translating a search move to board piles", () => {
+  it("sends a waste card to the foundation that actually holds its suit", () => {
+    // Spades sit on pile 2, not pile 0 — foundations are not suit-locked.
+    const g = state({
+      foundations: [home(H, 3), [], home(S, 4), []],
+      waste: [up(S, 5)],
+    });
+    expect(toGameMove(g, { kind: "wasteToFoundation" })).toEqual({
+      from: { kind: "waste" },
+      fromIndex: 0,
+      to: { kind: "foundation", index: 2 },
+    });
+  });
+
+  it("starts an ace on the first empty foundation", () => {
+    const g = state({ foundations: [home(H, 3), [], [], []], waste: [up(C, 1)] });
+    expect(toGameMove(g, { kind: "wasteToFoundation" })).toEqual({
+      from: { kind: "waste" },
+      fromIndex: 0,
+      to: { kind: "foundation", index: 1 },
+    });
+  });
+
+  it("pulls a card back off the foundation pile holding that suit", () => {
+    const g = state({
+      foundations: [[], home(D, 2), [], home(S, 1)],
+      tableau: [[], [], [], [], [], [], []],
+    });
+    expect(toGameMove(g, { kind: "foundationToTableau", suit: D, col: 3 })).toEqual({
+      from: { kind: "foundation", index: 1 },
+      fromIndex: 1,
+      to: { kind: "tableau", index: 3 },
+    });
+  });
+
+  it("counts back from the top of the column for a multi-card run", () => {
+    const g = state({
+      tableau: [[dn(S, 5), up(H, 9), up(S, 8), up(D, 7)], [up(C, 10)], [], [], [], [], []],
+    });
+    expect(toGameMove(g, { kind: "tableauToTableau", from: 0, to: 1, count: 2 })).toEqual({
+      from: { kind: "tableau", index: 0 },
+      fromIndex: 2,
+      to: { kind: "tableau", index: 1 },
+    });
+  });
+
+  it("refuses rather than pointing at a pile that isn't there", () => {
+    expect(toGameMove(state({ stock: [] }), { kind: "draw" })).toBeNull();
+    expect(toGameMove(state({ waste: [] }), { kind: "recycle" })).toBeNull();
+    // No foundation can take this card, so there is nothing honest to point at.
+    expect(toGameMove(state({ waste: [up(S, 7)] }), { kind: "wasteToFoundation" })).toBeNull();
+  });
+
+  it("translates the first move of a line it just found", () => {
+    const g = state({
+      foundations: [home(S, 12), home(H, 13), home(D, 13), home(C, 13)],
+      tableau: [[up(S, 13)], [], [], [], [], [], []],
+    });
+    const r = solve(g);
+    expect(r.outcome).toBe("solved");
+    expect(toGameMove(g, r.moves[0])).toEqual({
+      from: { kind: "tableau", index: 0 },
+      fromIndex: 0,
+      to: { kind: "foundation", index: 0 },
+    });
   });
 });
 

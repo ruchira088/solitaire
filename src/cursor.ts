@@ -188,3 +188,13 @@ export function describeMove(game: Game, moved: Card[], to: PileId, flipped: Car
   const tail = flipped ? `, turned up ${cardName(flipped)}` : "";
   return `moved ${runName(moved)} to ${pileName(game, to)}${tail}`;
 }
+
+/** What a hint says. Same vocabulary as `describeMove` but in the imperative, because
+ *  the move hasn't happened yet: it names the cards to pick up and where they go. The
+ *  stock is described as the gesture rather than as a move between piles — "draw" is
+ *  what the player does, and naming the card would give away what's coming. */
+export function describeHint(game: Game, from: PileId, fromIndex: number, to: PileId): string {
+  if (from.kind === "stock") return "draw from the stock";
+  if (to.kind === "stock") return "turn the waste back into the stock";
+  return `move ${runName(game.getPile(from).slice(fromIndex))} to ${pileName(game, to)}`;
+}

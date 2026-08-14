@@ -27,6 +27,20 @@ export interface CursorView {
   held: { pile: PileId; depth: number } | null;
 }
 
+/** A move the solver found, drawn as "these cards go there". Cleared the moment the
+ *  board changes — see `hintView` in main.ts — so it can never point at cards that
+ *  have moved on. */
+export interface HintView {
+  from: PileId;
+  /** Index of the first card that would move; the ring covers it and everything above. */
+  fromIndex: number;
+  to: PileId;
+}
+
+/** Cyan: not the drop ring's white, not the cursor's yellow, and legible on all four
+ *  felts — the two greens, the claret and the parchment. */
+const HINT_COLOR = "#5ad2ff";
+
 export interface DragState {
   cards: Card[];
   from: PileId;
@@ -522,6 +536,7 @@ export class Renderer {
     animator: Animator,
     drag: DragState | null,
     cursor: CursorView | null,
+    hint: HintView | null = null,
   ): void {
     this.drawBoard(ctx, layout);
 
@@ -598,6 +613,10 @@ export class Renderer {
       const onHeld = cursor.held && samePile(cursor.held.pile, cursor.pile);
       if (!onHeld) this.highlightRun(ctx, game, layout, cursor.pile, cursor.depth, false);
     }
+
+    // The suggested move, under the drop ring: while a drag is live the player has
+    // already decided, and the ring they're steering by has to win the foreground.
+    if (hint) this.drawHint(ctx, game, layout, hint);
 
     // Where the live drag would land. Drawn under the dragged stack, hence the
     // wide ring and glow.
@@ -736,6 +755,76 @@ export class Renderer {
     }
     ctx.strokeStyle = "#ffd34e";
     ctx.stroke();
+    ctx.restore();
+  }
+
+  /** The suggested move: the cards to pick up, where they go, and an arrow between.
+   *
+   *  This is the third pile highlight, and the other two are a standing warning that a
+   *  third needs to be tellable apart from both — so it differs in all three of the
+   *  ways they differ from each other. Colour: cyan, against the drop ring's white and
+   *  the cursor's yellow. Weight: dashed, where both of those are solid. Extent: it
+   *  marks a *pair* of piles and joins them, which neither of the others ever does —
+   *  a hint answers "from here to there", not "here". */
+  private drawHint(
+    ctx: CanvasRenderingContext2D,
+    game: Game,
+    layout: Layout,
+    hint: HintView,
+  ): void {
+    const cards = game.getPile(hint.from);
+    const first = cards.length
+      ? cardPos(game, layout, hint.from, Math.min(hint.fromIndex, cards.length - 1))
+      : this.pileAnchor(game, layout, hint.from);
+    const last = cards.length ? cardPos(game, layout, hint.from, cards.length - 1) : first;
+    const dest = this.pileAnchor(game, layout, hint.to);
+
+    const pad = 5;
+    const x = Math.min(first.x, last.x) - pad;
+    const y = Math.min(first.y, last.y) - pad;
+    const w = Math.abs(last.x - first.x) + layout.cardW + pad * 2;
+    const h = Math.abs(last.y - first.y) + layout.cardH + pad * 2;
+
+    ctx.save();
+    ctx.strokeStyle = HINT_COLOR;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([9, 6]);
+    ctx.shadowColor = "rgba(90,210,255,0.55)";
+    ctx.shadowBlur = 12;
+
+    roundRectPath(ctx, x, y, w, h, layout.radius);
+    ctx.stroke();
+    roundRectPath(ctx, dest.x - pad, dest.y - pad, layout.cardW + pad * 2, layout.cardH + pad * 2, layout.radius);
+    ctx.stroke();
+
+    // From the middle of the run to the middle of the destination. Solid, so the arrow
+    // reads as one object rather than as more dashes.
+    ctx.setLineDash([]);
+    const from = { x: x + w / 2, y: y + h / 2 };
+    const to = { x: dest.x + layout.cardW / 2, y: dest.y + layout.cardH / 2 };
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    // Stop short of the destination card so the head sits on its edge, not its face.
+    const inset = Math.min(layout.cardW, layout.cardH) * 0.42;
+    const tip = { x: to.x - Math.cos(angle) * inset, y: to.y - Math.sin(angle) * inset };
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.stroke();
+
+    const head = Math.max(9, layout.cardW * 0.12);
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(
+      tip.x - Math.cos(angle - Math.PI / 7) * head,
+      tip.y - Math.sin(angle - Math.PI / 7) * head,
+    );
+    ctx.lineTo(
+      tip.x - Math.cos(angle + Math.PI / 7) * head,
+      tip.y - Math.sin(angle + Math.PI / 7) * head,
+    );
+    ctx.closePath();
+    ctx.fillStyle = HINT_COLOR;
+    ctx.fill();
     ctx.restore();
   }
 

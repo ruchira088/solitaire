@@ -215,12 +215,49 @@ logic, rendering, animation, and input kept cleanly separated.
   omitting it made the solver declare such a deal dead. The empty-column dedup that
   goes with it is **per card, not per position** — sharing one flag across suits offers
   only the lowest-numbered foundation an empty column, and if that card is the wrong
-  colour for what needs a base the winning line is invisible. Anything the node budget cuts short is
+  colour for what needs a base the winning line is invisible. Anything a budget cuts short is
   `unknown`, never `unwinnable`. ✦ stacks and easy mode change what a legal move is
   and are not modelled: `canAnalyse` returns false and the UI says so rather than
-  answering a different question. Measured over 40 draw-1 deals at a 200k-node cap:
-  27 solved, 2 proved dead, 11 unknown, ~115 ms average and 405 ms worst — which is
-  why it runs in a worker rather than on the frame loop.
+  answering a different question.
+  **There are three budgets, and all three fail to `unknown`.** Nodes is the obvious
+  one. `MAX_DEPTH` is not optional: `search` recurses once per move, so without a depth
+  ceiling a large enough node budget ends in `RangeError: Maximum call stack size
+  exceeded` — which in a browser, whose stack is smaller than Node's, surfaces as
+  "couldn't run the analysis" rather than as an answer. `SEEN_CAP` bounds the visited
+  set; past it the search stops *remembering* rather than stops searching, which costs
+  re-exploration and never an answer. That last one is also why the key stays an exact
+  string rather than a hash: two positions colliding would prune an unexplored branch
+  and could call a winnable board dead.
+  The key is one character per card (`CH`), with separators *below* the card range so a
+  card can never be read as one — a column's length isn't otherwise recoverable, and the
+  ambiguity would be a collision by another name. It encodes face-down *counts*, which
+  is lossless because those cards never move and an empty face-up half over a non-empty
+  face-down one can't occur (`flipIfNeeded` turns one up as part of the same move).
+  Measured over the same 40 draw-1 deals at 200k: 27 solved, 2 dead, 11 unknown, **71 ms
+  average and 253 ms worst** — down from 121/450 before the compact key and before the
+  per-node move list stopped being generated twice. More nodes buy very little on their
+  own (500k changes nothing at all; 1M resolves one more board), so the UI escalates to
+  2M **only when the fast pass says `unknown`**: 29 solved, 3 dead, 8 unknown, and the
+  29 boards that answer quickly never pay for it. All of which is why it runs in a
+  worker rather than on the frame loop.
+- **A hint is the first move of a line that wins, or it is nothing.** `solve` already
+  computed the whole line; the worker sends `moves[0]` through `toGameMove` and drops
+  the rest, because a full walkthrough is a different feature and copying a few hundred
+  moves nothing reads is pure cost. On `unwinnable` or `unknown` the button says so
+  instead of falling back to a plausible-looking move: the removed `findHint` was that,
+  and the greedy player built on it can't win a game (40 of 52 cards home over 200
+  seeds). A guess dressed as a hint would cost the feature the one thing it has.
+  `toGameMove` resolves foundations by asking which pile *accepts* the card, since the
+  search tracks them per suit while the game's four piles aren't suit-locked, and it
+  returns null rather than pointing at a pile that isn't there.
+- **A winnable deal is screened, not generated.** `newWinnableGame` shuffles and asks
+  the solver until one comes back `solved`, at the fast budget with no escalation — an
+  `unknown` isn't a board to reject on its merits, it's one we can't vouch for, and
+  reshuffling is cheaper than thinking harder about it. Candidates are tested at the
+  *current* draw count, because a board winnable at Draw 1 needn't be at Draw 3. About
+  two thirds pass, so it almost always ends on the first or second try; `WINNABLE_TRIES`
+  is a ceiling for when something has gone wrong, and a search that comes up empty
+  leaves the board alone rather than costing the player the game they were in.
 - **The archive can't back-fill a streak.** Past dailies are playable from the grid
   in the statistics dialog, and winning one ticks its day and counts in `dailyWins` —
   but the run is only ever about keeping up with *today*, so `recordWin` takes
@@ -262,13 +299,16 @@ logic, rendering, animation, and input kept cleanly separated.
   the felt is mostly covered by cards. When adding a theme, sample `--felt-top-edge`
   and `--felt-top-mid` from its own `feltStops`, or the fake-felt strip left by a
   hidden toolbar shows a seam.
-- **Two pile highlights, and they answer different questions.** `highlightPile` is
+- **Three pile highlights, and they answer different questions.** `highlightPile` is
   the drop target — steady, white, wide, drawn under the dragged stack.
   `highlightRun` is the keyboard cursor — yellow, tight to the cards, and covering the
   whole run rather than the pile, because the outline *is* the cards that would move;
-  the held version fills and glows. They have to stay tellable apart when both are on
-  screen, which is why they differ in colour, weight and extent rather than just one
-  of the three. A third would want the same scrutiny.
+  the held version fills and glows. `drawHint` is the solver's suggestion — cyan,
+  **dashed** where both others are solid, and marking a *pair* of piles joined by an
+  arrow, which neither other ever does: a hint answers "from here to there", not
+  "here". They have to stay tellable apart when more than one is on screen, which is
+  why each differs from the others in colour, weight *and* extent rather than in just
+  one of the three. A fourth would want the same scrutiny.
 - **Card size is set by the fan reserve, not by the width.** Height binds at
   every ordinary landscape aspect, so `computeLayout` sizing the cards is really
   a choice about how deep a column may fan before `columnOffsets` compresses it:
@@ -279,7 +319,14 @@ logic, rendering, animation, and input kept cleanly separated.
   made the board a small huddle of cards in the middle of empty felt.
 - **The portrait board is the landscape one transposed.** `verticalLayout` runs
   stock, waste and the foundations down a **rail** at the left — landscape's top
-  row — and gives the tableau rows the full height, one slot each. A header above
+  row — and gives the tableau rows the full height, one slot each. The rail is the one
+  thing on the board with a handedness: it holds the stock, which is the pile you tap
+  over and over, and the hand holding a phone covers the side it's on — so `leftHanded`
+  mirrors the x coordinates. It must move the **fan limit** with the rail, not just the
+  piles, or the rows fan out underneath it. The landscape board takes the flag and
+  ignores it: a top row is not something a thumb reaches across, and the test asserts
+  the two layouts come out identical. The ☰-adjacent 🤚 button is shown only while
+  `body.portrait-board` is set, so it costs the desktop toolbar no width at all. A header above
   the rows would divide the height one more way (shrinking every card ~18%) and
   leave a void in the rail beside the top rows. Consequences to keep: the waste sits
   `COUNTER_GAP` below the stock so `drawStockCounter` has room; `wasteFan` runs
@@ -361,8 +408,10 @@ logic, rendering, animation, and input kept cleanly separated.
 All access goes through `src/storage.ts` and is best-effort — storage can be
 absent or full, in which case the game just runs without it.
 
-Settings: theme (`solitaire-theme`), sound (`solitaire-sound`) and whether the
-toolbar is folded away (`solitaire-chrome`). Theme also accepts
+Settings: theme (`solitaire-theme`), sound (`solitaire-sound`), whether the
+toolbar is folded away (`solitaire-chrome`), and which edge the portrait rail sits on
+(`solitaire-hand`) — a preference rather than a per-game setting, since which hand
+holds the phone doesn't change between deals. Theme also accepts
 `?theme=<name>` for any theme in the registry (anything else falls back to dark, so an old saved value or a hand-typed one can't break a boot); animations can be disabled with `?animate=off` (also off
 under `prefers-reduced-motion`). A specific layout can be requested with
 `?deal=<code>` and `?draw=1|3` — though `draw=1` is only ever *read*, never written:
@@ -415,7 +464,16 @@ The game in progress (`solitaire-game`) so a refresh resumes the same board:
   meaning of `GameState` changes; old saves are discarded, never migrated.
 - The save exists exactly while there's an in-progress game: `persist()` no-ops
   before the first move and once won, so New Game and winning clear it.
-- **Undo/redo history is not persisted** — both start disabled on a resumed game.
+- **Undo/redo history rides along in the save**, capped at `PERSISTED_HISTORY` (40)
+  rather than the in-memory `MAX_HISTORY` (200): the save is rewritten on every move,
+  so the whole stack would be ~60 KB of JSON per move to buy depth nobody reaches
+  after coming back to a game. Snapshots go through the *same* `parseBoardState` as
+  the live board — a snapshot is a board the game adopts wholesale on the next Undo,
+  so accepting a broken one just moves the corruption one keystroke away — and one bad
+  entry drops the whole stack rather than leaving a hole, since undo walks the list in
+  order and a gap would silently skip a position. The fields are **optional**, which is
+  why this needed no `SCHEMA` bump: an older save is still a perfectly good board and
+  resumes with an empty history, exactly as every resumed game used to.
 - Elapsed play time rides along, and freezes while the tab is closed.
 - The start overlay reads "Resume game" when a save exists and reveals the board
   via `animator.clear()`. It must not call `startDeal()`, which assumes a freshly
@@ -566,7 +624,11 @@ artifact bucket) is in `cdk-deploy/bin/cdk-deploy.ts`.
   because the emoji arrows render dark blue-grey and disappear into the dark bar,
   while colour emoji survive the yellow `aria-pressed` state unchanged. The icons add
   ~120px to the control row, which is why there's a `max-width: 1340px` block
-  tightening button padding — without it a 1280px window wraps onto a second row. On
+  tightening button padding **and hiding `.btn .ico` outright** — measured at 1280,
+  the glyphs are 96px of the row and dropping them turns a 74px overflow into 22px of
+  slack, where trimming padding alone could never have found that much. The icon-only
+  buttons keep theirs, since there the glyph *is* the button. Without the rule a
+  1280px window wraps onto a second row, which `npm run smoke` checks. On
   phones they cost a third button row (+34px); the ☰ fold is the escape hatch.
 - **Only the pip faces are preloaded.** `preloadCardFaces` fetches the 40 pip/ace
   SVGs (~150 KB) up front and warms the 12 court WebPs (~850 KB) on idle, so they

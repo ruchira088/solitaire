@@ -41,9 +41,9 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
-- 🎨 **Four table themes** — Midnight, Bright, Claret and Parchment. Each restyles
-  the felt, the chrome *and the card backs*, and the toolbar button cycles through
-  them; your choice is remembered.
+- 🎨 **Six table themes** — Midnight, Bright, Claret, Ocean, Violet and Parchment.
+  Each restyles the felt, the chrome *and the card backs*, and the toolbar button
+  cycles through them; your choice is remembered.
 - 🙈 **Hideable toolbar** — when the window is too narrow to fit the buttons and
   the stats on one row, a **☰** button (or `T`) folds the buttons away and gives
   the height to the board; the clock, moves and score stay on screen. Wide
@@ -55,20 +55,32 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
 - 💾 **Resumes where you left off** — the game in progress is saved to
   `localStorage`, so closing the tab or refreshing brings back the same board,
   score, moves and clock. The opening screen offers **Resume game**, or a fresh
-  deal if you'd rather start over. (Undo history isn't kept across a reload.)
+  deal if you'd rather start over, and your recent moves can still be undone.
 - 🖱️ **Mouse & touch** — drag-and-drop, click-to-draw, and double-click /
   double-tap to auto-send a card to its foundation. While you drag, the pile
   you'd land on lights up, the cursor shows what's grabbable, and `Esc` puts
   the cards back.
 - ⌨️ **Playable without a mouse** — arrow keys move a cursor around the board,
-  `Space` picks up and drops, `Shift` + `↑`/`↓` takes more or fewer cards, and `F`
-  sends a card home. Every move is announced to screen readers through a live region,
+  `Space` picks up and drops, `Shift` + `↑`/`↓` takes more or fewer cards, `F`
+  sends a card home, and `H` asks for a hint. Every move is announced to screen readers through a live region,
   so the game is playable without seeing it. The cursor only appears once you use the
   keyboard, and goes away the moment you touch the mouse.
 - 🔍 **Is this still winnable?** — a solver searches the position and tells you
   whether a win is still reachable, so a hopeless deal doesn't waste your evening. It
   runs off the main thread, and says "couldn't tell" rather than guessing when the
-  search runs long.
+  search runs long — and when the quick pass can't decide, it thinks harder rather
+  than shrugging straight away.
+- 💡 **A hint you can trust** — the **💡** button (or `H`) rings a move and draws an
+  arrow to where it goes. It isn't a guess at a playable move: it's the *first move of
+  a line the solver has carried all the way to 52 cards home*. If there's no such line,
+  it tells you that instead of inventing one.
+- 🎲 **Deal me a winnable one** — the **🎲** button (or `W`) shuffles until it finds a
+  board it has proved can be won, so a session isn't spent on dead deals. It tests
+  candidates under the draw mode you're actually playing, and leaves your current game
+  alone if it comes up empty.
+- 🤚 **Left- or right-handed** — on phones, the rail of stock, waste and foundations
+  can sit on either edge, since the hand holding the phone covers the side it's on.
+  The **🤚** button appears only in the portrait layout, where it means something.
 - 📲 **Installable & offline** — a web manifest and a service worker cache the whole
   game (~1.5 MB, all 52 card faces included), so it installs to a phone home screen
   and plays on a plane. Page loads go to the network first, so a new version is never
@@ -93,14 +105,14 @@ canvas:
 
 ## Themes
 
-The toolbar button cycles through four tables — **Midnight**, **Bright**, **Claret**
-and **Parchment** — and says which one is next. The felt, vignette, pile outlines,
+The toolbar button cycles through six tables — **Midnight**, **Bright**, **Claret**,
+**Ocean**, **Violet** and **Parchment** — and says which one is next. The felt, vignette, pile outlines,
 toolbar *and the card backs* all change together; the backs matter most, since the
 felt spends the game mostly covered by cards.
 
 Your choice is saved to `localStorage`, and any theme can be deep-linked:
 `?theme=dark` (Midnight), `?theme=light` (Bright), `?theme=claret`,
-`?theme=parchment`. The first two keep their original names so links and saved
+`?theme=ocean`, `?theme=violet`, `?theme=parchment`. The first two keep their original names so links and saved
 preferences from before the other themes existed still work. An unrecognised name
 falls back to Midnight rather than failing.
 
@@ -234,6 +246,9 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
 | **Play from the keyboard** | Arrow keys move the cursor, `Space` picks up and drops, `Shift` + `↑`/`↓` changes how many cards you take, `F` sends one home, `1`–`7` jump to a column, `Esc` puts the cards back down. |
 | **Check a deal** | **🔍** searches for a winning line from the current position and reports whether one exists. |
+| **Ask for a hint** | **💡** (or `H`) rings the cards to move and points an arrow at where they go — the opening move of a line that actually wins. If there isn't one, it says so rather than guessing. |
+| **Start a winnable deal** | **🎲** (or `W`) shuffles until it finds a board proved winnable under your current draw mode. |
+| **Swap the rail's side** | **🤚**, on phone-portrait screens only, moves the stock, waste and foundations to the other edge for left-handed play. |
 | **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
@@ -272,7 +287,9 @@ below zero, so a game that's already at 0 can't be dug deeper.
 | `F` | Send the card to its foundation |
 | `1`–`7` | Jump to a tableau column |
 | `Esc` | Put down the cards, or cancel a drag |
+| `H` | Hint: show a move from a winning line |
 | `N` | New game |
+| `W` | Deal a game that can be won |
 | `D` | Today's daily deal |
 | `T` | Show / hide the toolbar |
 
@@ -294,9 +311,12 @@ src/
   render.ts      card body + table drawing, SVG-face compositing
   cardFaces.ts   loads & caches the SVG card faces from public/cards/
   courtArt.ts    procedural J/Q/K + Ace fallback art (used until SVGs decode)
-  theme.ts       light / dark felt + placeholder palettes
+  theme.ts       theme registry: felt, placeholders and card backs
   animation.ts   tween engine, card flights, win-celebration physics
   input.ts       pointer drag & drop, click-to-draw, double-click auto-move
+  cursor.ts      keyboard cursor: navigation and spoken descriptions (pure)
+  solver.ts      can this position be won? depth-first search (pure)
+  solver.worker.ts  runs the solver off the main thread
 public/
   cards/         52 card faces (vector-playing-cards, public domain):
                  12 court cards as WebP, 40 pip/ace faces as SVG
