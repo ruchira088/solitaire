@@ -80,7 +80,7 @@ jobs:
     if: github.ref != 'refs/heads/main'
 
     concurrency:
-      group: pipeline-${{ github.ref }}
+      group: deploy-to-dev-${{ github.ref }}
       cancel-in-progress: false
 
     permissions:
