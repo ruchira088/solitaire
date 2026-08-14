@@ -74,6 +74,14 @@ jobs:
     needs:
       - build-and-typecheck
 
+    # Dependabot branches are linted, typechecked, tested and smoke-tested like any
+    # other -- that is what reviewing a dependency bump needs -- but they stop here.
+    # Nothing downstream would consume the bundle: each dev environment is a real
+    # CloudFront distribution, pr-cleanup.yml only tears down the stack of a PR that
+    # was *merged*, and a Dependabot-triggered run gets a restricted token that can't
+    # assume the deploy role anyway. Skipping the upload skips deploy-to-dev with it.
+    if: "!startsWith(github.ref, 'refs/heads/dependabot/')"
+
     permissions:
       contents: read
       id-token: write
@@ -111,12 +119,7 @@ jobs:
     needs:
       - upload-bundle
 
-    # Dependabot branches are built and tested like any other, but they don't get an
-    # environment: each would stand up its own CloudFront distribution, and
-    # pr-cleanup.yml only tears down the stack of a PR that was *merged*.
-    if: >-
-      github.ref != 'refs/heads/main'
-      && !startsWith(github.ref, 'refs/heads/dependabot/')
+    if: github.ref != 'refs/heads/main'
 
     concurrency:
       group: deploy-to-dev-${{ github.ref }}

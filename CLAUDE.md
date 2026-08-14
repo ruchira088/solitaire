@@ -30,9 +30,12 @@ them.
 and the workflow actions — and **groups minor/patch bumps into one PR per ecosystem
 while leaving majors ungrouped, deliberately**: a major is exactly the case that
 drags the table above and README along with it, and that review shouldn't arrive
-buried in a five-package bump. Dependabot branches are built and tested like any
-other but are excluded from `deploy-to-dev`, since each dev environment is a real
-CloudFront distribution and `pr-cleanup.yml` only tears down a *merged* PR's stack.
+buried in a five-package bump. Dependabot branches are linted, typechecked, tested
+and smoke-tested like any other but stop at `upload-bundle`, which skips them — and
+skips `deploy-to-dev` with it. Each dev environment is a real CloudFront
+distribution, `pr-cleanup.yml` only tears down a *merged* PR's stack, and a
+Dependabot-triggered run gets a restricted token that couldn't assume the deploy
+role anyway.
 
 `cdk-deploy` pins `aws-cdk-lib` through its lockfile rather than `package.json` (it
 arrives as a peer dependency of `react-app-cdk-deploy`), and **`aws-cdk-lib` bundles
