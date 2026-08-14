@@ -1,0 +1,49 @@
+version: 2
+
+# Everything here is build tooling — the shipped bundle has no runtime
+# dependencies — so these PRs are about keeping the toolchain and the workflow
+# action versions current, not about what players download.
+#
+# Minor and patch bumps are grouped into one PR per ecosystem to keep the noise
+# down. **Majors are deliberately left ungrouped**, because a major of any root
+# dev dependency is a decision with paperwork attached: CLAUDE.md's dependency
+# table and README's "Tech stack" / Node requirement have to move with it, and
+# that review doesn't belong buried in a five-package bump.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      dev-tooling:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # cdk-deploy is its own entry: separate lockfile, separate node_modules, and it
+  # never ships — it only runs in the deploy jobs.
+  - package-ecosystem: npm
+    directory: /cdk-deploy
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      cdk-deploy:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns:
+          - "*"

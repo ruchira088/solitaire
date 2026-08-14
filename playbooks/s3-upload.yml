@@ -11,14 +11,33 @@
 
     - name: Build production bundle
       block:
-        - name: Remove existing production bundle
-          file:
-            path: ../dist
-            state: absent
+        # CI hands over the dist/ that passed the smoke test, so what ships is what
+        # was tested rather than a second build of the same commit. It signals that
+        # with PREBUILT_BUNDLE rather than by the directory merely existing: a local
+        # run must keep building from scratch, since silently zipping a stale dist/
+        # left lying around is the one outcome worse than a slow upload.
+        - name: Verify the handed-over bundle arrived
+          when: lookup('env', 'PREBUILT_BUNDLE') | lower == 'true'
+          block:
+            - stat:
+                path: ../dist/index.html
+              register: prebuilt_index
 
-        - name: Build production bundle
-          shell: |
-            cd ../ && npm ci && npm run build
+            - assert:
+                that: prebuilt_index.stat.exists
+                fail_msg: PREBUILT_BUNDLE is set, but ../dist/index.html is missing
+
+        - name: Build the production bundle
+          when: lookup('env', 'PREBUILT_BUNDLE') | lower != 'true'
+          block:
+            - name: Remove existing production bundle
+              file:
+                path: ../dist
+                state: absent
+
+            - name: Build production bundle
+              shell: |
+                cd ../ && npm ci && npm run build
 
         - name: Ensure bundle output directory exists
           file:

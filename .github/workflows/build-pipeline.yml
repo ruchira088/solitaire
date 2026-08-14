@@ -4,11 +4,15 @@ on:
   push:
     branches:
       - "**"
+  # Lets a deploy be re-run without an empty commit — to redeploy the current tip
+  # by hand, or after a superseded run skipped its deploy (see the tip check below).
+  workflow_dispatch:
 
 jobs:
   build-and-typecheck:
     name: Build and Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     permissions:
       contents: read
@@ -20,7 +24,7 @@ jobs:
       - name: Set up NodeJS
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -32,18 +36,41 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Gates every deploy: upload-bundle needs this job, and every deploy job needs
+      # upload-bundle. `npm test` is `vitest run` -- never bare `vitest`, which would
+      # enter watch mode and hang the runner.
       - name: Test
         run: npm test
 
       - name: Build production bundle
         run: npm run build
 
+      # `npm test` is the pure-logic suite by design, which leaves render/input/
+      # animation/main -- over half the source -- checked by nothing but tsc. This
+      # boots the bundle just built in the runner's preinstalled Chrome and asserts
+      # the board actually paints, the toolbar doesn't wrap, and the toolbar controls
+      # still drive the game. playwright-core downloads no browser of its own;
+      # scripts/smoke.mjs finds the system one, or CHROME_PATH overrides it.
       - name: Smoke test the production bundle
         run: npm run smoke
+
+      # Hand this exact directory on to upload-bundle. s3-upload.yml used to rebuild
+      # from scratch, so what shipped was a second build of the commit rather than
+      # the bundle the smoke test had just approved -- and sw.js's cache version is
+      # a hash of the emitted asset names, so nondeterminism there is precisely what
+      # strands people on a dead bundle.
+      - name: Upload the smoke-tested bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
 
   upload-bundle:
     name: Upload bundle to S3
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs:
       - build-and-typecheck
 
@@ -55,29 +82,34 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up NodeJS
-        uses: actions/setup-node@v6
+      - name: Download the smoke-tested bundle
+        uses: actions/download-artifact@v8
         with:
-          node-version: 24
-          cache: npm
+          name: dist
+          path: dist
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-region: ap-southeast-2
-          role-session-name: solitaire-s3-publish
-          role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
-
+      # PREBUILT_BUNDLE tells the playbook to zip what it was handed instead of
+      # running its own `npm ci && npm run build`; it asserts the bundle is really
+      # there rather than uploading an empty zip. Nothing here needs Node any more,
+      # which is why there is no setup-node step.
       - name: Upload bundle to S3
         run: ansible-playbook playbooks/s3-upload.yml
+        env:
+          PREBUILT_BUNDLE: "true"
 
   deploy-to-dev:
     name: Deploy to Dev
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - upload-bundle
 
-    if: github.ref != 'refs/heads/main'
+    # Dependabot branches are built and tested like any other, but they don't get an
+    # environment: each would stand up its own CloudFront distribution, and
+    # pr-cleanup.yml only tears down the stack of a PR that was *merged*.
+    if: >-
+      github.ref != 'refs/heads/main'
+      && !startsWith(github.ref, 'refs/heads/dependabot/')
 
     concurrency:
       group: deploy-to-dev-${{ github.ref }}
@@ -91,24 +123,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      # Deploys are serialised per environment, but builds are not, so a slower run
+      # can reach this job after a newer commit has already shipped -- and deploying
+      # anyway would roll the site back to the older bundle, then leave it there. A
+      # superseded run skips, and skips green: being overtaken is routine, not a
+      # failure. `ls-remote` also covers a branch deleted mid-run, which comes back
+      # empty rather than erroring.
+      - name: Check this commit is still the tip of the branch
+        id: tip
+        run: |
+          set -euo pipefail
+          tip=$(git ls-remote origin "$GITHUB_REF" | cut -f1)
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$GITHUB_REF is now ${tip:-deleted}, not $GITHUB_SHA; skipping the deploy."
+          fi
+
       - name: Configure AWS Credentials
+        if: steps.tip.outputs.superseded != 'true'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ap-southeast-2
           role-session-name: solitaire-dev-deploy
           role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
 
+      - name: Set up NodeJS
+        if: steps.tip.outputs.superseded != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: cdk-deploy/package-lock.json
+
       - name: Install deploy dependencies
+        if: steps.tip.outputs.superseded != 'true'
         run: npm ci
         working-directory: cdk-deploy
 
       - name: Deploy to S3 & Cloudfront
+        if: steps.tip.outputs.superseded != 'true'
         run: npm run deploy
         working-directory: cdk-deploy
 
   comment-preview-url:
     name: Comment preview URL on PR
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - deploy-to-dev
 
@@ -158,6 +220,7 @@ jobs:
   deploy-to-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - upload-bundle
 
@@ -177,24 +240,49 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      # See deploy-to-dev: an overtaken run must not deploy its older bundle.
+      - name: Check this commit is still the tip of main
+        id: tip
+        run: |
+          set -euo pipefail
+          tip=$(git ls-remote origin "$GITHUB_REF" | cut -f1)
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$GITHUB_REF is now ${tip:-deleted}, not $GITHUB_SHA; skipping the deploy."
+          fi
+
       - name: Configure AWS Credentials
+        if: steps.tip.outputs.superseded != 'true'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ap-southeast-2
           role-session-name: solitaire-staging-deploy
           role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
 
+      - name: Set up NodeJS
+        if: steps.tip.outputs.superseded != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: cdk-deploy/package-lock.json
+
       - name: Install deploy dependencies
+        if: steps.tip.outputs.superseded != 'true'
         run: npm ci
         working-directory: cdk-deploy
 
       - name: Deploy to S3 & Cloudfront
+        if: steps.tip.outputs.superseded != 'true'
         run: npm run deploy
         working-directory: cdk-deploy
 
   deploy-to-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - deploy-to-staging
 
@@ -214,26 +302,52 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      # See deploy-to-dev: an overtaken run must not deploy its older bundle.
+      - name: Check this commit is still the tip of main
+        id: tip
+        run: |
+          set -euo pipefail
+          tip=$(git ls-remote origin "$GITHUB_REF" | cut -f1)
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$GITHUB_REF is now ${tip:-deleted}, not $GITHUB_SHA; skipping the deploy."
+          fi
+
       - name: Configure AWS Credentials
+        if: steps.tip.outputs.superseded != 'true'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ap-southeast-2
           role-session-name: solitaire-production-deploy
           role-to-assume: "arn:aws:iam::365562660444:role/github_iam_role"
 
+      - name: Set up NodeJS
+        if: steps.tip.outputs.superseded != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: cdk-deploy/package-lock.json
+
       - name: Install deploy dependencies
+        if: steps.tip.outputs.superseded != 'true'
         run: npm ci
         working-directory: cdk-deploy
 
       - name: Deploy to S3 & Cloudfront
+        if: steps.tip.outputs.superseded != 'true'
         run: ENVIRONMENT=production npm run deploy
         working-directory: cdk-deploy
 
       - name: Create GitHub release
+        if: steps.tip.outputs.superseded != 'true'
         run: ansible-playbook playbooks/github-release.yml
 
   send-notification:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: always()
 
     permissions:

@@ -17,6 +17,7 @@ jobs:
   destroy-dev-environment:
     name: Destroy PR dev environment
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     # Only when the PR was actually merged, and never for a `main` head branch
     # (which maps to the persistent staging / production environments).
@@ -44,8 +45,11 @@ jobs:
       - name: Set up NodeJS
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
+          # The install below is cdk-deploy's, so key the cache on its lockfile —
+          # the root one would hash a file this job never installs.
+          cache-dependency-path: cdk-deploy/package-lock.json
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v6

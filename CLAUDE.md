@@ -26,6 +26,21 @@ version — update the table above *and* the matching spots in `README.md`:** th
 "Tech stack" list. The two files drift silently otherwise, since nothing checks
 them.
 
+`.github/dependabot.yml` watches three ecosystems — this lockfile, `cdk-deploy`'s,
+and the workflow actions — and **groups minor/patch bumps into one PR per ecosystem
+while leaving majors ungrouped, deliberately**: a major is exactly the case that
+drags the table above and README along with it, and that review shouldn't arrive
+buried in a five-package bump. Dependabot branches are built and tested like any
+other but are excluded from `deploy-to-dev`, since each dev environment is a real
+CloudFront distribution and `pr-cleanup.yml` only tears down a *merged* PR's stack.
+
+`cdk-deploy` pins `aws-cdk-lib` through its lockfile rather than `package.json` (it
+arrives as a peer dependency of `react-app-cdk-deploy`), and **`aws-cdk-lib` bundles
+its own dependencies** — so an advisory against something nested inside it can't be
+fixed with an `overrides` entry or by `npm audit fix`, which will happily *downgrade*
+`aws-cdk-lib` and still land in the vulnerable range. `npm update aws-cdk-lib` is the
+lever: a newer release carries a newer bundle.
+
 ## Commands
 
 ```bash

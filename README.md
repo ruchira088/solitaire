@@ -366,10 +366,20 @@ a production build, and then `npm run smoke` — which boots that build in the r
 Chrome and checks the board actually paints, the toolbar stays on one row, and the
 controls still drive the game. Nothing deploys if any of those fail.
 
-`upload-bundle` runs `playbooks/s3-upload.yml`, which builds the Vite bundle,
-zips `dist/` to `client.zip`, and uploads it to
-`solitaire-bundles.ruchij.com/<branch>/<commit>/client.zip`. The deploy jobs then
-run the CDK app, which pulls that exact artifact and publishes it.
+`upload-bundle` runs `playbooks/s3-upload.yml`, which zips `dist/` to `client.zip`
+and uploads it to `solitaire-bundles.ruchij.com/<branch>/<commit>/client.zip`. The
+`dist/` it zips is handed over from `build-and-typecheck` as a workflow artifact, so
+what ships is the bundle the smoke test approved rather than a second build of the
+same commit — `PREBUILT_BUNDLE=true` is what tells the playbook to skip its own build
+step (a local `ansible-playbook` run, with the variable unset, still builds from
+scratch). The deploy jobs then run the CDK app, which pulls that exact artifact and
+publishes it.
+
+Deploys are serialised per environment by a job-level `concurrency` group rather than
+per pipeline run, so two pushes can build and test in parallel. Because that lets a
+slower run reach a deploy job after a newer commit has already shipped, each deploy
+job first checks its commit is still the tip of the ref and skips — green — if it
+isn't, instead of rolling the site back to the older bundle.
 
 ### Deployment files
 
@@ -377,7 +387,7 @@ run the CDK app, which pulls that exact artifact and publishes it.
 .github/workflows/build-pipeline.yml   CI/CD pipeline
 cdk-deploy/                            CDK app (S3 + CloudFront infra)
   bin/cdk-deploy.ts                    stack name, domain, artifact bucket
-playbooks/                             Ansible: build → zip → upload to S3
+playbooks/                             Ansible: zip → upload to S3
   s3-upload.yml
   github-release.yml
   tasks/{git-info,install-dependencies}.yml
