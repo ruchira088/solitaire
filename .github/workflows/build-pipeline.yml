@@ -5,10 +5,6 @@ on:
     branches:
       - "**"
 
-concurrency:
-  group: pipeline-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   build-and-typecheck:
     name: Build and Typecheck
@@ -36,21 +32,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # Gates every deploy: upload-bundle needs this job, and all four deploy jobs
-      # need upload-bundle. `npm test` is `vitest run` -- never bare `vitest`, which
-      # would enter watch mode and hang the runner.
       - name: Test
         run: npm test
 
       - name: Build production bundle
         run: npm run build
 
-      # `npm test` is the pure-logic suite by design, which leaves render/input/
-      # animation/main -- over half the source -- checked by nothing but tsc. This
-      # boots the bundle just built in the runner's preinstalled Chrome and asserts
-      # the board actually paints, the toolbar doesn't wrap, and the toolbar controls
-      # still drive the game. playwright-core downloads no browser of its own;
-      # scripts/smoke.mjs finds the system one, or CHROME_PATH overrides it.
       - name: Smoke test the production bundle
         run: npm run smoke
 
@@ -91,6 +78,10 @@ jobs:
       - upload-bundle
 
     if: github.ref != 'refs/heads/main'
+
+    concurrency:
+      group: pipeline-${{ github.ref }}
+      cancel-in-progress: false
 
     permissions:
       contents: read
@@ -174,6 +165,10 @@ jobs:
 
     if: github.ref == 'refs/heads/main'
 
+    concurrency:
+      group: deploy-to-staging
+      cancel-in-progress: false
+
     permissions:
       contents: read
       id-token: write
@@ -206,6 +201,10 @@ jobs:
     environment: Production
 
     if: github.ref == 'refs/heads/main'
+
+    concurrency:
+      group: deploy-to-production
+      cancel-in-progress: false
 
     permissions:
       contents: read
