@@ -457,13 +457,18 @@ const DEFAULT_MAX_NODES = 200_000;
  *  phone's tab, where an unbounded set measured over 400 MB. */
 const SEEN_CAP = 600_000;
 
-/** A ceiling on how deep the line may go. `search` recurses once per move, so depth is
- *  stack frames: without this, a search given a large enough node budget eventually
- *  throws `RangeError: Maximum call stack size exceeded` instead of returning — and in
- *  a browser, whose stack is smaller than Node's, that surfaces as "couldn't run the
- *  analysis" rather than an answer. Treated exactly like the node budget, so hitting it
- *  reports `unknown` and never `unwinnable`. A real winning line is a few hundred moves
- *  at most, so this only ever bites pathological branches. */
+/** A ceiling on how deep the line may go. Treated exactly like the node budget, so
+ *  hitting it reports `unknown` and never `unwinnable`.
+ *
+ *  This bounds *memory* — one move list per level — and nothing else, because the
+ *  search below keeps its own stack rather than recursing. It used to recurse, and the
+ *  depth limit was load-bearing: a search deep enough threw `RangeError: Maximum call
+ *  stack size exceeded` instead of returning an answer. Sizing that limit was guesswork
+ *  in the worst way, since the ceiling isn't ours — a worker's stack is smaller than
+ *  the main thread's, and both are smaller than Node's, so a value verified locally
+ *  still died in CI's browser. The longest winning line measured over 40 deals is 559
+ *  moves, so any cap low enough to be *safe* against an unknown stack was in danger of
+ *  being low enough to lose real solutions. An explicit stack has no such ceiling. */
 const MAX_DEPTH = 2_000;
 
 /** Search a position. Sound in both directions within the budget: `solved` comes with
@@ -479,27 +484,39 @@ export function solve(state: GameState, opts: { maxNodes?: number } = {}): Solve
   let nodes = 0;
   let exhausted = false;
 
-  const search = (): boolean => {
-    if (isWon(s)) return true;
-    if (nodes >= maxNodes || line.length >= MAX_DEPTH) {
+  /** One entered position: the moves still to try from it, and how to leave it. `undo`
+   *  is null only for the root, which nothing has to step back out of. */
+  interface Level {
+    moves: Move[];
+    next: number;
+    undo: Undo | null;
+  }
+  const stack: Level[] = [];
+
+  /** Step into the position the board is now in. Returns whether it won, is a dead end
+   *  (already seen, or out of budget), or has been pushed with moves to try. */
+  const enter = (undo: Undo | null): "won" | "dead" | "open" => {
+    if (isWon(s)) return "won";
+    if (nodes >= maxNodes || stack.length >= MAX_DEPTH) {
       exhausted = true;
-      return false;
+      return "dead";
     }
     nodes++;
 
     const k = key(s);
-    if (seen.has(k)) return false;
+    if (seen.has(k)) return "dead";
     // Past the cap, stop remembering rather than stop searching: a forgotten position
     // costs re-exploration, never an answer.
     if (seen.size < SEEN_CAP) seen.add(k);
 
-    // One move list per node, shared by the autoplay scan and the branching loop
-    // below. Generating it twice was a second full allocation on the hottest path in
-    // the search, for an identical list.
+    // One move list per node, shared by the autoplay scan and the branching below.
+    // Generating it twice was a second full allocation on the hottest path in the
+    // search, for an identical list.
     const moves = legalMoves(s);
 
     // Forced-safe autoplay: if a card can go home and nothing on the table could still
-    // need it, play it and don't branch. Never loses a win, and prunes hard.
+    // need it, play it and don't branch — the level gets that one move and no other.
+    // Never loses a win, and prunes hard.
     for (const move of moves) {
       const id =
         move.kind === "wasteToFoundation"
@@ -508,27 +525,40 @@ export function solve(state: GameState, opts: { maxNodes?: number } = {}): Solve
             ? s.up[move.col][s.up[move.col].length - 1]
             : -1;
       if (id >= 0 && safeToFoundation(s, id)) {
-        const u = apply(s, move);
-        line.push(move);
-        if (search()) return true;
-        line.pop();
-        revert(s, u);
-        return false;
+        stack.push({ moves: [move], next: 0, undo });
+        return "open";
       }
     }
 
-    for (const move of order(s, moves)) {
-      const u = apply(s, move);
-      line.push(move);
-      if (search()) return true;
-      line.pop();
-      revert(s, u);
-      if (exhausted) return false;
-    }
-    return false;
+    stack.push({ moves: order(s, moves), next: 0, undo });
+    return "open";
   };
 
-  const solved = search();
+  let solved = enter(null) === "won";
+  while (!solved && stack.length > 0) {
+    const level = stack[stack.length - 1];
+    // Out of moves here, or the budget ran out mid-search: step back out. Reverting on
+    // the way up is what lets the next branch start from a clean board.
+    if (exhausted || level.next >= level.moves.length) {
+      stack.pop();
+      if (level.undo) {
+        line.pop();
+        revert(s, level.undo);
+      }
+      continue;
+    }
+    const move = level.moves[level.next++];
+    const undo = apply(s, move);
+    line.push(move);
+    const result = enter(undo);
+    if (result === "won") {
+      solved = true;
+    } else if (result === "dead") {
+      // Nothing was pushed, so unwind this one move here rather than on the way up.
+      line.pop();
+      revert(s, undo);
+    }
+  }
   return {
     outcome: solved ? "solved" : exhausted ? "unknown" : "unwinnable",
     moves: solved ? [...line] : [],

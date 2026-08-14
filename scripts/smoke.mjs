@@ -290,6 +290,26 @@ try {
   check("the solver returns a verdict",
     /can still be won|can't be won|Couldn't tell|Already won/.test(verdict), verdict);
 
+  // A *deep* search, specifically. Seed 8 can't be decided inside the fast budget, so
+  // asking about it escalates to the 2M-node pass — several thousand levels down, on a
+  // worker thread. That is exactly where the search used to die: it recursed once per
+  // move, and a worker's stack is smaller than the main thread's, which is smaller than
+  // Node's. The verdict above never reached that depth, so a stack overflow shipped
+  // green locally and only failed in CI. The search keeps its own stack now, which is
+  // why this can hold. `💡` shares the same worker and budget, so it is covered too.
+  await page.goto(`${base}?deal=8&draw=1&animate=off`, { waitUntil: "load" });
+  await page.click("#start-btn");
+  await page.waitForSelector("#start-overlay", { state: "detached" });
+  await page.click("#btn-analyse");
+  await page.waitForFunction(
+    () => !document.getElementById("toast").textContent.includes("Looking"),
+    null,
+    { timeout: 120000 },
+  );
+  const deepVerdict = await page.textContent("#toast");
+  check("a search deep enough to escalate still returns an answer",
+    /can still be won|can't be won|Couldn't tell/.test(deepVerdict), deepVerdict);
+
   // ---- offline ----
   // The worker registering is the load-bearing bit: register() rejects silently in the
   // app (offline play is a bonus, never a requirement), so nothing else would notice a

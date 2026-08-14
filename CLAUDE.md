@@ -220,10 +220,17 @@ logic, rendering, animation, and input kept cleanly separated.
   and are not modelled: `canAnalyse` returns false and the UI says so rather than
   answering a different question.
   **There are three budgets, and all three fail to `unknown`.** Nodes is the obvious
-  one. `MAX_DEPTH` is not optional: `search` recurses once per move, so without a depth
-  ceiling a large enough node budget ends in `RangeError: Maximum call stack size
-  exceeded` — which in a browser, whose stack is smaller than Node's, surfaces as
-  "couldn't run the analysis" rather than as an answer. `SEEN_CAP` bounds the visited
+  one. `MAX_DEPTH` bounds memory, one move list per level.
+  **The search keeps its own stack rather than recursing, and that is not a style
+  choice.** Recursing once per move meant a deep enough search threw `RangeError:
+  Maximum call stack size exceeded` instead of returning, and the ceiling isn't ours to
+  know: a worker's stack is smaller than the main thread's, which is smaller than
+  Node's. A depth cap picked to be safe against an unknown stack was in danger of being
+  low enough to lose real solutions — the longest winning line measured over 40 deals is
+  **559 moves**, and branches run past 2,000 levels at the escalated budget. A version
+  capped at 2,000 passed every local check and died in CI's browser. The smoke test now
+  asks about a deal that *forces* the escalated pass (`?deal=8`), because the ordinary
+  verdict never goes deep enough to notice. `SEEN_CAP` bounds the visited
   set; past it the search stops *remembering* rather than stops searching, which costs
   re-exploration and never an answer. That last one is also why the key stays an exact
   string rather than a hash: two positions colliding would prune an unexplored branch
