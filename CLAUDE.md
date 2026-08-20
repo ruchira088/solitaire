@@ -581,9 +581,9 @@ screenshots` reshoots a subset.
 removed shows up in all six. Run the script; don't patch a single image.
 
 Each shot keeps the pixel size it has always had: 1280×820 for `gameplay`,
-`gameplay-light` and `spare-pile`, 1280×706 for `win`, 1000×700 for `stats` and
-`toolbar-hidden` (narrow enough that the ☰ is offered), and 390×844 at DPR 2 for
-`iphone`. `cards.png` is card art from `cards:rasterize` and is not touched here.
+`gameplay-light` and `spare-pile`, 1280×706 for `win`, 1000×700 for `stats`,
+`toolbar-hidden` (narrow enough that the ☰ is offered) and `challenge`, and 390×844 at
+DPR 2 for `iphone`. `cards.png` is card art from `cards:rasterize` and is not touched here.
 
 The same run also writes **`public/og.png`** (1200×630, the ratio scrapers show
 uncropped), which `index.html` points `og:image` at. It lives in this script on
@@ -605,6 +605,12 @@ changing it. The short version, each point having gone wrong at least once:
 - **One stock click after the overlay,** or every shot shows Undo/Redo greyed out.
   It clicks `computeLayout(...).stock`, not a fixed point, so it lands at every
   viewport.
+- **`challenge.png` is the one shot of the start overlay**, so it injects no save and
+  never dismisses it — a `?win=` link is the whole setup. It shares the win board's
+  seed and quotes the score `win.png` finishes on (the `WIN_*` constants), so the two
+  images are one game seen from both ends. Its `.start-title` is asserted for the same
+  reason the resume assertion exists: a rejected `win=` would quietly photograph the
+  ordinary start screen.
 - **`win.png` is the one board assembled rather than played.** The script's greedy
   player — which stands in for the removed `findHint` — can't win a game; over 200
   seeds its best is 40 of 52 cards home. So that board is built directly, asserted

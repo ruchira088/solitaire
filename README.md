@@ -205,11 +205,25 @@ the cascade itself stays.) A
 dialog shows what you scored against your **best score so far** — kept in
 `localStorage` and announced when you beat it — with **New Game**, **Restart** and
 **Share** right there. Share copies your result and a link to the clipboard, so a
-daily win can be pasted straight into a chat — and the link opens on a card showing
-what you scored, on what board, above a button that deals the challenged player the
-same cards. The cascade keeps running behind it, and the toolbar stays usable:
+daily win can be pasted straight into a chat. The cascade keeps running behind it, and
+the toolbar stays usable:
 
 ![Win celebration](screenshots/win.png)
+
+## Challenge someone
+
+The link **Share** copies isn't a bare deal link: it carries the result too, so opening
+it leads with what there is to beat — your score, time and moves, and which board they
+were scored on — above a button that deals whoever clicked it the very same cards.
+This is the win above, as the person you sent it to sees it:
+
+![A shared win, opened](screenshots/challenge.png)
+
+Nothing is stored to make that work: the deal code names the board, the three numbers
+ride in `&win=`, and whether it was a daily is worked out from the seed. Accepting the
+challenge clears the result from the address bar, so the link you share back is yours.
+Already part-way through that same deal? The button offers to resume it instead of
+dealing over your progress.
 
 ---
 

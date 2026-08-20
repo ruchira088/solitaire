@@ -3,7 +3,8 @@
 // Why a script: every one of these shows the toolbar, so adding or removing a single
 // button dates the whole set at once, and reshooting by hand invites a board that
 // quietly differs between shots. One deal (MID_SEED) carries the five board shots, so
-// they read as one game seen five ways.
+// they read as one game seen five ways, and the win and challenge shots share a
+// second deal for the same reason.
 //
 // This is a one-off; the output is committed. Re-run it when the toolbar, the board
 // layout or the dialogs change:
@@ -36,7 +37,11 @@
 //   3. Draw one card after dismissing the overlay. A resumed game carries no undo
 //      history, so otherwise every shot shows Undo and Redo greyed out.
 //
-// Six of the seven come out byte-identical run to run. win.png cannot: the cascade is
+// challenge.png is the exception to all three: it photographs the start overlay itself
+// on a `?win=` link, so there is no save to inject and nothing is ever dismissed. Its
+// title is asserted instead, which is the same guard by another name.
+//
+// Seven of the eight come out byte-identical run to run. win.png cannot: the cascade is
 // physics seeded with Math.random() and sampled on a wall-clock delay, so re-running
 // it always produces a diff. That is expected, not a regression — don't chase it.
 
@@ -62,6 +67,15 @@ const MID_MOVES = 40;
 // shots rather than anything the run measures.
 const MID_ELAPSED = 97_000; // 1:37
 const WIN_ELAPSED = 402_000; // 6:42
+
+/** The seed win.png is assembled on, and what that board finishes at once the app's
+ *  auto-complete has swept the last eight cards home (+10 a card, -1 a move, from the
+ *  114 moves and 908 points it is built at). challenge.png shows this same result as
+ *  the recipient of the shared link sees it, so the pair reads as one game. */
+const WIN_SEED = 8675309;
+const WIN_DEAL = WIN_SEED.toString(36).toUpperCase();
+const WIN_SCORE = 980;
+const WIN_MOVES = 122;
 
 const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -93,6 +107,12 @@ const SHOTS = {
   "toolbar-hidden": { w: 1000, h: 700, board: "mid", draw: true, prefs: { "solitaire-chrome": "hidden" } },
   stats: { w: 1000, h: 700, board: "mid", prefs: { "solitaire-stats": STATS }, dialog: "#btn-stats" },
   win: { w: 1280, h: 706, board: "won", elapsed: WIN_ELAPSED, prefs: { "solitaire-stats": STATS_PRE_WIN }, settle: 9000 },
+  // The other end of that win: the link its Share button copies, opened. Same score on
+  // the same board, so the two shots are one game — hence the WIN_* constants rather
+  // than numbers invented here. No save is injected and the overlay is never
+  // dismissed: the challenge card *is* the shot.
+  challenge: { w: 1000, h: 700, overlay: `Can you beat ${WIN_SCORE}?`,
+    query: `?deal=${WIN_DEAL}&win=${WIN_SCORE}-${WIN_MOVES}-${WIN_ELAPSED / 1000}` },
   iphone: { w: 390, h: 844, dpr: 2, mobile: true, board: "mid", draw: true },
   // Not a README shot: the og:image, so it lands in public/ to be served at /og.png.
   og: { w: 1200, h: 630, board: "mid", draw: true, dir: PUBLIC, prefs: { "solitaire-chrome": "hidden" } },
@@ -237,25 +257,35 @@ try {
     page.on("console", (m) => { if (m.type() === "error") problems.push(`${name}: ${m.text()}`); });
 
     await page.goto(url, { waitUntil: "networkidle" });
-    await inject(page, {
-      board: spec.board,
-      seed: spec.board === "won" ? 8675309 : MID_SEED,
-      midMoves: MID_MOVES,
-      elapsed: spec.elapsed ?? MID_ELAPSED,
-      prefs: spec.prefs,
-    });
-    await page.goto(url, { waitUntil: "networkidle" }); // clean url — never reload()
-
-    const title = await page.textContent(".start-title");
-    if (title !== "Resume game") {
-      throw new Error(`${name}: the injected save was dropped — overlay said "${title}"`);
+    if (!spec.overlay) {
+      await inject(page, {
+        board: spec.board,
+        seed: spec.board === "won" ? WIN_SEED : MID_SEED,
+        midMoves: MID_MOVES,
+        elapsed: spec.elapsed ?? MID_ELAPSED,
+        prefs: spec.prefs,
+      });
+      await page.goto(url, { waitUntil: "networkidle" }); // clean url — never reload()
+    } else {
+      await page.waitForTimeout(400); // nothing to inject; let the overlay settle
     }
-    await page.click("#start-btn");
-    await page.waitForTimeout(spec.settle ?? 400);
-    if (spec.draw) await drawOne(page);
-    if (spec.dialog) {
-      await page.click(spec.dialog);
-      await page.waitForTimeout(400);
+
+    // What the overlay says is the guard on having photographed the right screen: a
+    // dropped save deals a random board, and a `win=` the parser rejects would shoot
+    // the ordinary start screen. Neither looks wrong in isolation.
+    const want = spec.overlay ?? "Resume game";
+    const title = await page.textContent(".start-title");
+    if (title !== want) {
+      throw new Error(`${name}: expected the overlay to say "${want}", got "${title}"`);
+    }
+    if (!spec.overlay) {
+      await page.click("#start-btn");
+      await page.waitForTimeout(spec.settle ?? 400);
+      if (spec.draw) await drawOne(page);
+      if (spec.dialog) {
+        await page.click(spec.dialog);
+        await page.waitForTimeout(400);
+      }
     }
 
     await page.screenshot({ path: join(spec.dir ?? OUT, `${name}.png`) });
@@ -264,7 +294,8 @@ try {
       score: document.getElementById("stat-score").textContent,
     }));
     const where = spec.dir === PUBLIC ? "public/" : "screenshots/";
-    console.log(`  ${`${where}${name}.png`.padEnd(30)} ${`${spec.w}x${spec.h}`.padEnd(10)} ${s.moves} moves, ${s.score} points`);
+    const shown = spec.overlay ? title : `${s.moves} moves, ${s.score} points`;
+    console.log(`  ${`${where}${name}.png`.padEnd(30)} ${`${spec.w}x${spec.h}`.padEnd(10)} ${shown}`);
     await page.close();
   }
 } finally {
