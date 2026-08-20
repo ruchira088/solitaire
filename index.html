@@ -113,6 +113,20 @@
       </div>
     </div>
     <div id="start-overlay">
+      <!-- Where a shared win lands. A `?win=` the parser accepts fills this in with the
+           sender's result and the board it was scored on, and the start button below
+           turns into "Can you beat …?" — the link is an invitation to play that deal,
+           so the score to beat has to be on screen before the cards are. Hidden on an
+           ordinary boot. -->
+      <div id="challenge" hidden>
+        <p class="challenge-kicker">You've been challenged</p>
+        <div class="challenge-stats">
+          <div class="stat"><span class="label">Score</span><span id="challenge-score" class="value">0</span></div>
+          <div class="stat"><span class="label">Time</span><span id="challenge-time" class="value">0:00</span></div>
+          <div class="stat"><span class="label">Moves</span><span id="challenge-moves" class="value">0</span></div>
+        </div>
+        <p id="challenge-deal" class="challenge-deal"></p>
+      </div>
       <button id="start-btn" type="button">
         <span class="start-pips"><span class="pip red">&#9829;</span><span class="pip">&#9824;</span></span>
         <span class="start-title">Click to play</span>

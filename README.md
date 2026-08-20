@@ -33,7 +33,8 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   is unplayed, under way, or already won.
 - 🔗 **Share your result** — winning offers a **Share** button that copies your
   score, time, moves and daily streak, with a link to the exact deal, ready to paste
-  into a chat.
+  into a chat. The link opens on your result — *"Can you beat 527?"* — and the button
+  under it deals whoever clicked it the very same board.
 - 🏆 **Lifetime statistics** — games played, games won, win rate, current and best
   streak, best score, fastest win, fewest moves, total time played, and your daily
   streak, all kept in `localStorage`. The win dialog calls out a new best score, and
@@ -203,8 +204,10 @@ short fanfare plays. (All of the flourish stands down under `prefers-reduced-mot
 the cascade itself stays.) A
 dialog shows what you scored against your **best score so far** — kept in
 `localStorage` and announced when you beat it — with **New Game**, **Restart** and
-**Share** right there. Share copies your result and the deal link to the clipboard,
-so a daily win can be pasted straight into a chat. The cascade keeps running behind it, and the toolbar stays usable:
+**Share** right there. Share copies your result and a link to the clipboard, so a
+daily win can be pasted straight into a chat — and the link opens on a card showing
+what you scored, on what board, above a button that deals the challenged player the
+same cards. The cascade keeps running behind it, and the toolbar stays usable:
 
 ![Win celebration](screenshots/win.png)
 
@@ -249,10 +252,10 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Ask for a hint** | **💡** (or `H`) rings the cards to move and points an arrow at where they go — the opening move of a line that actually wins. If there isn't one, it says so rather than guessing. |
 | **Start a winnable deal** | **🎲** (or `W`) shuffles until it finds a board proved winnable under your current draw mode. |
 | **Swap the rail's side** | **🤚**, on phone-portrait screens only, moves the stock, waste and foundations to the other edge for left-handed play. |
-| **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. |
+| **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. Opening that link shows the score, time and moves to beat, then deals the same board. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
-| **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…`), plus `&draw=3` when you're playing Draw 3. |
+| **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…`), plus `&draw=3` when you're playing Draw 3. A result is never in it: only the **Share** button adds `&win=…`, and accepting a challenge clears it again. |
 | **Hide the toolbar** | The **☰** button at the far left of the bar, or `T` — offered when the bar can't fit on one row. The board grows into the freed space, the stats stay visible, and everything stays playable with the buttons folded away. |
 
 **Tableau rules:** cards stack in descending rank and alternating colour

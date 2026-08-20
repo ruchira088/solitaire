@@ -54,7 +54,7 @@ import {
   randomSeed,
   recentDailyKeys,
 } from "./rng";
-import { formatClock, shareText } from "./share";
+import { boardLine, encodeResult, formatClock, parseResult, shareText, SharedResult } from "./share";
 import { canAnalyse, GameMove, Outcome } from "./solver";
 import type { SolveRequest, SolveResponse } from "./solver.worker";
 import {
@@ -818,7 +818,11 @@ function syncDailyButton(): void {
   el.daily.setAttribute("aria-label", label);
 }
 
-function shareUrl(): string {
+/** The link to this board: the deal code, and the draw mode when it isn't the
+ *  default. Never a `win=` — an inbound challenge is someone else's result and must
+ *  not survive into the board the recipient is now playing, or a mid-game reload
+ *  would greet them with a stale score to beat. */
+function dealUrl(): string {
   const u = new URL(location.href);
   u.searchParams.set("deal", encodeSeed(game.seed));
   // Draw 1 is what you get with no parameter at all, so saying it adds nothing. The
@@ -826,6 +830,15 @@ function shareUrl(): string {
   // when the player switches back.
   if (game.drawCount === 3) u.searchParams.set("draw", "3");
   else u.searchParams.delete("draw");
+  u.searchParams.delete("win");
+  return u.toString();
+}
+
+/** What Share copies: the deal link with this game's result attached, so opening it
+ *  shows the score to beat before dealing the board. */
+function shareUrl(): string {
+  const u = new URL(dealUrl());
+  u.searchParams.set("win", encodeResult({ score: game.score, moves: game.moves, elapsedMs: elapsedNow() }));
   return u.toString();
 }
 
@@ -833,7 +846,7 @@ function shareUrl(): string {
  *  the shareable thing — and this also keeps screenshots reproducible. */
 function syncDealUrl(): void {
   try {
-    history.replaceState(null, "", shareUrl());
+    history.replaceState(null, "", dealUrl());
   } catch {
     /* replaceState can throw on exotic origins; the game plays on regardless */
   }
@@ -1560,6 +1573,9 @@ applyHand(readItem("solitaire-hand") === "left");
 const params = new URLSearchParams(location.search);
 const urlSeed = parseSeed(params.get("deal"));
 const urlDraw = params.get("draw") === "3" ? 3 : params.get("draw") === "1" ? 1 : null;
+// A shared win: someone's result, on the deal named alongside it. Only a challenge
+// when the link carries both — a score with no board is nothing to be challenged to.
+const challenge = urlSeed === null ? null : parseResult(params.get("win"));
 const saved = loadGame();
 // Resume unless the URL names a *different* deal. Reloading a shared link mid-game
 // therefore keeps your board rather than wiping it.
@@ -1596,24 +1612,58 @@ requestAnimationFrame(frame);
 const startOverlay = document.getElementById("start-overlay") as HTMLElement;
 const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
 const startNew = document.getElementById("start-new") as HTMLButtonElement;
+const startTitle = startOverlay.querySelector(".start-title") as HTMLElement;
+const startTip = startOverlay.querySelector(".start-tip") as HTMLElement;
 
+/** Fill in the challenge card and turn the start button into the invitation. The
+ *  board it names is `game`'s, not the link's numbers: the deal has already been laid
+ *  out from `?deal=`, so what the card describes is what pressing the button plays —
+ *  including whether it is a daily, which comes from the seed rather than the URL. */
+function showChallenge(r: SharedResult): void {
+  const chall = document.getElementById("challenge") as HTMLElement;
+  (document.getElementById("challenge-score") as HTMLElement).textContent = String(r.score);
+  (document.getElementById("challenge-time") as HTMLElement).textContent = formatClock(r.elapsedMs);
+  (document.getElementById("challenge-moves") as HTMLElement).textContent = String(r.moves);
+  (document.getElementById("challenge-deal") as HTMLElement).textContent = boardLine({
+    code: encodeSeed(game.seed),
+    drawCount: game.drawCount,
+    dailyKey: dailyDayForSeed(game.seed, todayKey()),
+    todayKey: todayKey(),
+  });
+  chall.hidden = false;
+  startTitle.textContent = `Can you beat ${r.score}?`;
+  startTip.textContent =
+    "The same deal, dealt the same way. Every move costs a point, so a tidy win scores higher than a long one.";
+  startNew.hidden = false; // declining the challenge is a normal thing to want
+}
+
+if (challenge) showChallenge(challenge);
+
+// Resume wins the button over the challenge when both apply — this board is already
+// on the go, and dealing it again would bin the progress. The card stays up: it is
+// still the score to beat.
 if (resuming) {
-  (startOverlay.querySelector(".start-title") as HTMLElement).textContent = "Resume game";
-  (startOverlay.querySelector(".start-tip") as HTMLElement).textContent =
-    `Game in progress — ${game.moves} moves, ${game.score} points. Your recent moves can still be undone.`;
+  startTitle.textContent = "Resume game";
+  startTip.textContent = `Game in progress — ${game.moves} moves, ${game.score} points. Your recent moves can still be undone.`;
   startNew.hidden = false;
 }
 
-function dismissStartOverlay(resume: boolean): void {
+/** What the overlay's buttons ask for: pick the restored board back up, reveal the one
+ *  already dealt behind the overlay (a fresh boot, or an accepted challenge), or throw
+ *  that away for a new deal. */
+type StartChoice = "resume" | "reveal" | "fresh";
+
+function dismissStartOverlay(choice: StartChoice): void {
   unlockAudio();
   started = true;
   startOverlay.classList.add("is-hiding");
   setTimeout(() => startOverlay.remove(), 400);
-  if (!resume) {
-    // Deal fresh, discarding any save. Also covers the first-ever load, where the
-    // constructor's deal is the one being revealed.
-    if (resuming) newGame();
-    else startDeal();
+  if (choice === "fresh") {
+    newGame(); // deals a new seed and discards any save
+    return;
+  }
+  if (choice === "reveal") {
+    startDeal();
     return;
   }
   resuming = false;
@@ -1624,8 +1674,8 @@ function dismissStartOverlay(resume: boolean): void {
   pendingCheck = true; // a restored board may already be won or auto-completable
 }
 
-startBtn.addEventListener("click", () => dismissStartOverlay(resuming));
-startNew.addEventListener("click", () => dismissStartOverlay(false));
+startBtn.addEventListener("click", () => dismissStartOverlay(resuming ? "resume" : "reveal"));
+startNew.addEventListener("click", () => dismissStartOverlay("fresh"));
 
 // Capture think-time since the last move, and act as a backstop for tab eviction.
 document.addEventListener("visibilitychange", () => {

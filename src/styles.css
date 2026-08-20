@@ -921,6 +921,64 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   font-weight: 600;
 }
 
+/* ---- The challenge card -------------------------------------------------- */
+
+/* Shown above the start button when a shared link carried a result. It borrows the
+   dialog look — dark panel, gold rule — rather than inventing a third one, and
+   re-declares the dark palette for the same reason `#win-panel` does: it stays dark
+   in both themes. */
+#challenge {
+  --text: #eafff3;
+  --muted: #9fd8bd;
+  --accent: #ffd34e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 420px);
+  padding: 16px 26px 14px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 211, 78, 0.9);
+  background: rgba(8, 40, 26, 0.98);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  color: #eafff3;
+  text-align: center;
+}
+
+#challenge[hidden] {
+  display: none;
+}
+
+.challenge-kicker {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+
+.challenge-stats {
+  display: flex;
+  gap: 26px;
+}
+
+/* The toolbar's readouts, centred: the numbers being the same shape in both places is
+   the point — this is the row the player is about to be measured against. */
+#challenge .stat {
+  align-items: center;
+}
+
+#challenge .stat .value {
+  font-size: 24px;
+}
+
+.challenge-deal {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* ---- Motion & focus ------------------------------------------------------ */
 
 /* The JS side gates card animations, but these CSS transitions ran regardless. */

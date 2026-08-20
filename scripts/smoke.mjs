@@ -290,6 +290,38 @@ try {
   check("the solver returns a verdict",
     /can still be won|can't be won|Couldn't tell|Already won/.test(verdict), verdict);
 
+  // ---- a shared win ----
+  // What the Share button copies now opens on the sender's result rather than straight
+  // into a deal, so the numbers have to survive the round trip through the URL. The
+  // second assertion matters as much: accepting the challenge must leave no `win=`
+  // behind, or a mid-game reload would greet the player with a stale score to beat.
+  await page.goto(`${base}?deal=DWLVHU&win=527-154-278&animate=off`, { waitUntil: "load" });
+  const challenge = await page.evaluate(() => ({
+    shown: !document.getElementById("challenge").hidden,
+    score: document.getElementById("challenge-score").textContent,
+    time: document.getElementById("challenge-time").textContent,
+    moves: document.getElementById("challenge-moves").textContent,
+    deal: document.getElementById("challenge-deal").textContent,
+    title: document.querySelector(".start-title").textContent,
+  }));
+  check(
+    "a shared win opens on the score to beat",
+    challenge.shown &&
+      challenge.score === "527" &&
+      challenge.time === "4:38" &&
+      challenge.moves === "154" &&
+      challenge.deal === "Deal DWLVHU · Draw 1" &&
+      challenge.title === "Can you beat 527?",
+    JSON.stringify(challenge),
+  );
+  await page.click("#start-btn");
+  await page.waitForSelector("#start-overlay", { state: "detached" });
+  check(
+    "accepting it plays that deal and drops the result from the address bar",
+    /[?&]deal=DWLVHU/.test(page.url()) && !/win=/.test(page.url()),
+    page.url(),
+  );
+
   // A *deep* search, specifically. Seed 8 can't be decided inside the fast budget, so
   // asking about it escalates to the 2M-node pass — several thousand levels down, on a
   // worker thread. That is exactly where the search used to die: it recursed once per
