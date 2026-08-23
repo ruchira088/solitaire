@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "aws-cdk": "^2.1138.0",
-    "react-app-cdk-deploy": "github:ruchira088/react-app-cdk-deploy#v1"
+    "react-app-cdk-deploy": "github:ruchira088/react-app-cdk-deploy#v1.1.3"
   },
   "allowScripts": {
     "github:ruchira088/react-app-cdk-deploy#03b8e278b72e9ea350eace0e17633dfb9a83b2f2": true
