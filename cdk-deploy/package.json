@@ -17,10 +17,10 @@
     "typescript": "~7.0.2"
   },
   "dependencies": {
-    "aws-cdk": "^2.1133.0",
+    "aws-cdk": "^2.1138.0",
     "react-app-cdk-deploy": "github:ruchira088/react-app-cdk-deploy#v1"
   },
   "allowScripts": {
-    "github:ruchira088/react-app-cdk-deploy#7e93af186985f350e5284e28be2d0acc8a2679e7": true
+    "github:ruchira088/react-app-cdk-deploy#03b8e278b72e9ea350eace0e17633dfb9a83b2f2": true
   }
 }
