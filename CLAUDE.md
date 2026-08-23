@@ -1,4 +1,4 @@
-# CLAUDE.md
+# Project guide
 
 Klondike Solitaire — TypeScript + HTML5 Canvas 2D, bundled with Vite. **Zero
 runtime dependencies**; the shipped bundle is pure vanilla JS/Canvas.
@@ -14,11 +14,11 @@ Everything installed is dev/build tooling:
 | Package | Range | Used for |
 | --- | --- | --- |
 | `typescript` | `^7.0.2` | strict-mode checking (`npm run typecheck`) and the `tsc` step ahead of `vite build` |
-| `vite` | `^8.1.5` | dev server + production bundle; `createServer` serves the app for the screenshot script and `preview` serves `dist/` for the smoke test. Its `engines` field is what sets the **Node 20.19+ / 22.12+** floor (`.nvmrc` pins 24) |
-| `vitest` | `^4.1.10` | the pure-logic suite (`npm test`), configured separately in `vitest.config.ts` |
+| `vite` | `^8.2.2` | dev server + production bundle; `createServer` serves the app for the screenshot script and `preview` serves `dist/` for the smoke test. Its `engines` field is what sets the **Node 20.19+ / 22.12+** floor (`.nvmrc` pins 24) |
+| `vitest` | `^4.1.11` | the pure-logic suite (`npm test`), configured separately in `vitest.config.ts` |
 | `svgo` | `^4.0.2` | one-off pip/ace face optimisation (`npm run cards:optimize`) |
-| `oxlint` | `^1.78.0` | linting (`npm run lint`), gating CI. **Not ESLint on purpose** — `typescript-eslint` hard-errors on TypeScript 7 (it checks the version and refuses; see typescript-eslint#10940), and the only workaround is running a second, older TypeScript side by side. oxlint parses TS itself and has no `typescript` peer dependency, so it costs one binary and no version coupling |
-| `playwright-core` | `^1.62.0` | drives *system* Chrome — `scripts/smoke.mjs` (which runs in CI), `scripts/rasterize-cards.mjs`, `scripts/shoot-screenshots.mjs` and the visual checks below. `-core` on purpose: no browser binaries are downloaded, so CI uses the runner's preinstalled Chrome |
+| `oxlint` | `^1.79.0` | linting (`npm run lint`), gating CI. **Not ESLint on purpose** — `typescript-eslint` hard-errors on TypeScript 7 (it checks the version and refuses; see typescript-eslint#10940), and the only workaround is running a second, older TypeScript side by side. oxlint parses TS itself and has no `typescript` peer dependency, so it costs one binary and no version coupling |
+| `playwright-core` | `^1.62.1` | drives *system* Chrome — `scripts/smoke.mjs` (which runs in CI), `scripts/rasterize-cards.mjs`, `scripts/shoot-screenshots.mjs` and the visual checks below. `-core` on purpose: no browser binaries are downloaded, so CI uses the runner's preinstalled Chrome |
 
 **When any of this changes — a package added, removed, or moved across a major
 version — update the table above *and* the matching spots in `README.md`:** the
