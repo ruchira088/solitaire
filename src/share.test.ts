@@ -4,11 +4,13 @@
 import { describe, expect, it } from "vitest";
 import {
   boardLine,
+  dealUrl,
   encodeResult,
   formatClock,
   parseResult,
   resultLine,
   shareText,
+  shareUrl,
   WinSummary,
 } from "./share";
 
@@ -171,5 +173,72 @@ describe("boardLine", () => {
     expect(boardLine({ code: "UA2WB9", drawCount: 1, dailyKey: null, todayKey: "2026-08-20" })).toBe(
       "Deal UA2WB9 · Draw 1",
     );
+  });
+});
+
+// ---- The links --------------------------------------------------------------
+//
+// These were built inline in main.ts against `location.href`. They're string work
+// over a URL, so taking the href as an argument makes them testable — and the two
+// rules that matter (draw=1 is never written, win= is always stripped) are exactly
+// the kind that go wrong silently.
+
+const SITE = "https://solitaire.ruchij.com/";
+const deal = { code: "UA2WB9", drawCount: 1 };
+
+describe("dealUrl", () => {
+  it("names the deal", () => {
+    expect(dealUrl(SITE, deal)).toBe(`${SITE}?deal=UA2WB9`);
+  });
+
+  it("writes draw=3, since the same cards under Draw 3 are a different game", () => {
+    expect(dealUrl(SITE, { ...deal, drawCount: 3 })).toBe(`${SITE}?deal=UA2WB9&draw=3`);
+  });
+
+  it("never writes draw=1, which is what no parameter already means", () => {
+    expect(dealUrl(`${SITE}?draw=1`, deal)).toBe(`${SITE}?deal=UA2WB9`);
+  });
+
+  it("clears draw=3 when the player switches back to Draw 1", () => {
+    expect(dealUrl(`${SITE}?deal=OLD&draw=3`, deal)).toBe(`${SITE}?deal=UA2WB9`);
+  });
+
+  it("replaces a deal already in the address rather than appending one", () => {
+    expect(dealUrl(`${SITE}?deal=OLD`, deal)).toBe(`${SITE}?deal=UA2WB9`);
+  });
+
+  // The load-bearing one: `win=` is someone else's result. Left in the address, a
+  // mid-game reload would greet the player with a stale challenge over their own board.
+  it("always strips an inbound win=", () => {
+    expect(dealUrl(`${SITE}?deal=UA2WB9&win=336-118-252`, deal)).toBe(`${SITE}?deal=UA2WB9`);
+  });
+
+  it("leaves unrelated parameters alone", () => {
+    expect(dealUrl(`${SITE}?theme=light&animate=off`, deal)).toBe(
+      `${SITE}?theme=light&animate=off&deal=UA2WB9`,
+    );
+  });
+});
+
+describe("shareUrl", () => {
+  const result = { score: 336, moves: 118, elapsedMs: 252_000 };
+
+  it("is the deal link with the result attached", () => {
+    expect(shareUrl(SITE, deal, result)).toBe(`${SITE}?deal=UA2WB9&win=336-118-252`);
+  });
+
+  it("carries the draw mode too, since a score only compares within one", () => {
+    expect(shareUrl(SITE, { ...deal, drawCount: 3 }, result)).toBe(
+      `${SITE}?deal=UA2WB9&draw=3&win=336-118-252`,
+    );
+  });
+
+  it("overwrites an inbound win= with this game's, rather than keeping both", () => {
+    expect(shareUrl(`${SITE}?win=1-1-1`, deal, result)).toBe(`${SITE}?deal=UA2WB9&win=336-118-252`);
+  });
+
+  it("round-trips through parseResult", () => {
+    const back = new URL(shareUrl(SITE, deal, result)).searchParams.get("win");
+    expect(parseResult(back)).toEqual(result);
   });
 });

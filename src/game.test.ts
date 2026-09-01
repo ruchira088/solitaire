@@ -599,6 +599,59 @@ describe("isWon / canAutoComplete", () => {
     const g = boardOf({ tableau: [[up(S, 5)], [], [], [], [], [], []] });
     expect(g.autoCompleteStep()).toBeNull();
   });
+
+  // main.ts drives the sweep a card at a time so it can capture each card's screen
+  // position *before* the move and fly it. It used to do that by mirroring the loop
+  // below in its own `nextAutoSource`, which is two copies of an ordering with nothing
+  // holding them together — so the source is defined here now, and these pin the
+  // contract main.ts relies on: what `autoCompleteSource` names is exactly what the
+  // next `autoCompleteStep` moves.
+  describe("autoCompleteSource", () => {
+    it("names the card the next step actually moves", () => {
+      const g = boardOf({
+        foundations: [[up(S, 1)], [up(H, 1)], [], []],
+        waste: [],
+        tableau: [[up(H, 2)], [], [], [up(S, 2)], [], [], []],
+        spares: [[up(D, 1)]],
+      });
+      for (let i = 0; i < 4; i++) {
+        const next = g.autoCompleteSource();
+        if (!next) break;
+        const card = g.getPile(next.from)[next.index];
+        const result = g.autoCompleteStep();
+        expect(result).not.toBeNull();
+        expect(result!.moved).toEqual([card]);
+        expect(result!.from).toEqual(next.from);
+      }
+      expect(g.autoCompleteSource()).toBeNull();
+    });
+
+    it("prefers tableau tops, then the waste, then the ✦ stacks", () => {
+      // All three hold an ace, so only the ordering decides which is named.
+      const g = boardOf({
+        waste: [up(H, 1)],
+        tableau: [[], [], [], [], [], [up(S, 1)], []],
+        spares: [[up(D, 1)]],
+      });
+      expect(g.autoCompleteSource()).toEqual({ from: TABLEAU(5), index: 0 });
+      g.autoCompleteStep();
+      expect(g.autoCompleteSource()).toEqual({ from: WASTE, index: 0 });
+      g.autoCompleteStep();
+      expect(g.autoCompleteSource()).toEqual({ from: SPARE(0), index: 0 });
+    });
+
+    it("is null exactly when autoCompleteStep would decline", () => {
+      const g = boardOf({ tableau: [[up(S, 5)], [], [], [], [], [], []] });
+      expect(g.autoCompleteSource()).toBeNull();
+      expect(g.autoCompleteStep()).toBeNull();
+    });
+
+    it("names only the top card of a pile", () => {
+      const g = boardOf({ tableau: [[up(S, 1), up(H, 13)], [], [], [], [], [], []] });
+      // The ace is buried under a King, so nothing is playable from here.
+      expect(g.autoCompleteSource()).toBeNull();
+    });
+  });
 });
 
 describe("serialize / restore", () => {

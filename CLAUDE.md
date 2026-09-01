@@ -78,7 +78,7 @@ there is no Prettier, and adding one would reflow a lot of hand-broken code at o
 deliberately not valid JavaScript until `vite build` substitutes them.
 
 Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts`,
-`storage.ts`, `share.ts`, `cursor.ts` and `solver.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
+`storage.ts`, `share.ts`, `statsView.ts`, `cursor.ts` and `solver.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
 and mocking one only buys assertions about the mock.
 
 **`npm run smoke` is what covers those instead** (`scripts/smoke.mjs`). It serves the
@@ -134,7 +134,8 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/theme.ts` | Theme registry: felt, placeholders **and card backs** |
 | `src/sound.ts` | WebAudio sound effects (deal tick, etc.) |
 | `src/storage.ts` | `localStorage`: UI preferences + the in-progress game save |
-| `src/share.ts` | The result the win dialog copies: the text, and the `win=` payload its link carries — **pure**, no DOM |
+| `src/share.ts` | The result the win dialog copies: the text, the `?deal=`/`?draw=` links it points at, and the `win=` payload they carry — **pure**, no DOM |
+| `src/statsView.ts` | The statistics dialog's rows and duration formatting — **pure**, no DOM; main.ts only turns the rows into elements |
 | `src/cursor.ts` | Keyboard cursor: navigation and the spoken descriptions — **pure**, no DOM |
 | `src/solver.ts` | Can this position be won? Depth-first search — **pure**, no DOM |
 | `src/solver.worker.ts` | Runs the solver off the main thread |
@@ -169,6 +170,11 @@ logic, rendering, animation, and input kept cleanly separated.
   with no other trigger — without it a late face would never replace the procedural
   fallback. `rAF` itself keeps running (an empty callback is nearly free); stopping it
   outright would save a little more and risk a frozen board for it.
+  The toolbar clock sits *outside* the paint gate — it's DOM, not canvas — but obeys
+  the same principle: `formatClock` is m:ss, so at 120 Hz all but one frame a second
+  recomputes the string already on screen, and assigning `textContent` replaces the
+  node whether or not the text changed. `showClock` compares first, and is the only
+  writer, so the three places that set the clock can't diverge on that.
 - **Model updates instantly; the view catches up.** A move mutates the game
   model immediately, then `Animator.flyCard` animates the affected cards from
   their old screen positions to the new ones. Logic never waits on animation.
@@ -401,11 +407,43 @@ logic, rendering, animation, and input kept cleanly separated.
   Before the overlay is dismissed it must *not* clear, or `hideCards` stops hiding
   the board. `syncSpareLayout` stays synchronous — its caller needs the new layout
   on the next line.
+- **`boardBusy()` is the one answer to "are the cards moving?"** The opening deal
+  (`busy`), the auto-complete sweep (`autoCompleting`) and the win cascade
+  (`celebration.active`) all mean the board must not change under them, and every
+  action that mutates it in place — undo, redo, + Stack, the solver, the keyboard's
+  Space and F, and `Input`'s own gate — asks this rather than picking its own subset.
+  That is not tidiness. `doUndo` used to check only `busy` and `celebration.active`, so
+  Undo stayed live during auto-complete; the sweep's loop *is* the `onDone` of the
+  flight it last launched, `afterTimeTravel`'s `animator.clear()` drops callbacks
+  without firing them, and one undo therefore stranded the chain with `autoCompleting`
+  latched on — which, through this same predicate, killed every pointer and key for the
+  rest of the game. Only New Game recovered it. `updateStats` disables the buttons from
+  the same predicate, so nothing looks live while it refuses, and `endAutoComplete` /
+  `startCelebration` both re-run it on the way out of the sweep, which is otherwise not
+  a board change and would leave them stuck disabled.
+  The actions that *replace* the board — New Game, Restart, the daily — deliberately
+  don't ask: the win panel offers two of them while the cascade is still running.
+  Related: **`Game.autoCompleteSource()` is the single definition of the sweep's
+  order.** main.ts drives it a card at a time so it can capture each card's screen
+  position *before* the move, and used to mirror the ordering loop to do it — two
+  copies with nothing holding them together. Now both ask the same method and only one
+  of them then moves; `game.test.ts` pins that what it names is what the next
+  `autoCompleteStep` moves.
 - **Two dialogs, two behaviours.** The win panel is *not* modal — no backdrop, wrapper
   `pointer-events: none` — because the cascade is the reward. The stats dialog
   (`#stats-overlay`) is: it dims the board, and a backdrop click or Escape closes it.
-  Escape is checked in the keydown handler *before* the drag cancel. Both share the
-  card look, the `.dialog-actions` row, and the re-declared dark palette.
+  Escape is checked in the keydown handler *before* the drag cancel.
+  Its `aria-modal="true"` is **enforced, not merely claimed**, in two places that both
+  had to be added: `modalOpen()` returns the keydown handler early so *no* board
+  shortcut fires through it — `boardHasKeys` gates only the arrows, Space, F and the
+  digits, so `n` behind an open dialog used to deal a new game and leave the panel
+  sitting over it reporting the record it had just abandoned — and `setAppInert` marks
+  `#app` inert while it is up, since Tab otherwise walks straight out of the panel into
+  the toolbar, and inert also takes the board out of the accessibility tree. That is
+  why `#stats-overlay` is a **sibling of `#app`** rather than inside it: one line
+  inerts everything behind the dialog. Both are checked by `npm run smoke`.
+  The two panels share the card look, the `.dialog-actions` row, and the re-declared
+  dark palette.
 - **The cascade is three effects at once, and the canvas is never cleared.** Cards
   launch **one at a time** (`LAUNCH_EVERY`) rather than all together, so the screen
   fills in a rhythm; they **tumble** (`angle`/`spin`, drawn via `drawCard`'s `angle`),

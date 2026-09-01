@@ -54,7 +54,17 @@ import {
   randomSeed,
   recentDailyKeys,
 } from "./rng";
-import { boardLine, encodeResult, formatClock, parseResult, shareText, SharedResult } from "./share";
+import {
+  boardLine,
+  DealLink,
+  dealUrl,
+  formatClock,
+  parseResult,
+  shareText,
+  SharedResult,
+  shareUrl,
+} from "./share";
+import { statGroups } from "./statsView";
 import { canAnalyse, GameMove, Outcome } from "./solver";
 import type { SolveRequest, SolveResponse } from "./solver.worker";
 import {
@@ -229,6 +239,7 @@ const el = {
   startMute: document.getElementById("start-mute") as HTMLButtonElement,
   theme: document.getElementById("btn-theme") as HTMLButtonElement,
   chrome: document.getElementById("btn-chrome") as HTMLButtonElement,
+  app: document.getElementById("app") as HTMLElement,
   toolbar: document.getElementById("toolbar") as HTMLElement,
   controls: document.querySelector(".controls") as HTMLElement,
   time: document.getElementById("stat-time") as HTMLElement,
@@ -256,12 +267,36 @@ const el = {
   winRestart: document.getElementById("win-restart") as HTMLButtonElement,
 };
 
+/** The cards are moving under their own steam and the board must not be changed out
+ *  from under them: the opening deal, the auto-complete sweep, or the win cascade.
+ *
+ *  Every action that mutates the board in place asks *this*, rather than each picking
+ *  its own subset of the three flags — which is how the bug this replaced happened.
+ *  `doUndo` checked only `busy` and `celebration.active`, so Undo stayed live during
+ *  auto-complete; `afterTimeTravel`'s `animator.clear()` then dropped the flight whose
+ *  `onDone` *is* the sweep's loop, leaving `autoCompleting` latched on for good and,
+ *  through this very predicate, every pointer and key dead for the rest of the game.
+ *
+ *  Note the actions that replace the board outright — New Game, Restart, the daily —
+ *  deliberately don't ask: the win panel offers two of them while the cascade is still
+ *  running, and starting a new game is always allowed to interrupt. */
+function boardBusy(): boolean {
+  return busy || celebration.active || autoCompleting;
+}
+
+/** The toolbar clock, written only when it actually changes. */
+function showClock(text: string): void {
+  if (el.time.textContent !== text) el.time.textContent = text;
+}
+
 function updateStats(): void {
   el.moves.textContent = String(game.moves);
   el.score.textContent = String(game.score);
-  el.undo.disabled = !game.canUndo() || busy;
-  el.redo.disabled = !game.canRedo() || busy;
-  el.addStack.disabled = busy || game.spares.length >= MAX_SPARES;
+  // Disabled, not merely ignored: a button that looks live and does nothing is how a
+  // player finds the guard in the first place.
+  el.undo.disabled = !game.canUndo() || boardBusy();
+  el.redo.disabled = !game.canRedo() || boardBusy();
+  el.addStack.disabled = boardBusy() || game.spares.length >= MAX_SPARES;
 }
 
 // ---- Game loop -------------------------------------------------------------
@@ -296,9 +331,12 @@ function frame(now: number): void {
     }
   }
 
-  // Live timer. DOM text, not canvas, so it costs nothing to keep current.
+  // Live timer. `formatClock` is m:ss, so at 120 Hz all but one frame a second
+  // recomputes the string it already shows — and writing textContent replaces the
+  // node whether or not the text changed, which is precisely the idle work the paint
+  // gate above exists to avoid. Compare first; the clock still ticks every second.
   if (timerStart !== null && !game.isWon()) {
-    el.time.textContent = formatClock(elapsedFrozen + (now - timerStart));
+    showClock(formatClock(elapsedFrozen + (now - timerStart)));
   }
 
   requestAnimationFrame(frame);
@@ -315,29 +353,22 @@ function evaluateBoard(): void {
   }
 }
 
-/** Mirror Game.autoCompleteStep's selection so we can capture the source
- *  position before the move (needed for the fly animation). */
-function nextAutoSource(): { from: PileId; index: number } | null {
-  const sources: PileId[] = [];
-  for (let i = 0; i < 7; i++) sources.push({ kind: "tableau", index: i });
-  sources.push({ kind: "waste" });
-  for (let i = 0; i < game.spares.length; i++) sources.push({ kind: "spare", index: i });
-  for (const from of sources) {
-    const pile = game.getPile(from);
-    if (pile.length === 0) continue;
-    const card = pile[pile.length - 1];
-    if (game.foundationTargetFor(card) >= 0) {
-      return { from, index: pile.length - 1 };
-    }
-  }
-  return null;
+/** Leave the sweep. `updateStats` has to run again on the way out: Undo, Redo and
+ *  + Stack are disabled for its duration, and the frame that ends it is not otherwise
+ *  a board change, so nothing else would re-enable them. */
+function endAutoComplete(): void {
+  autoCompleting = false;
+  updateStats();
 }
 
 function autoStep(): void {
   invalidate();
-  const next = nextAutoSource();
+  // The same question `autoCompleteStep` asks, asked a moment earlier: the flight
+  // needs the card's position *before* it moves, and one definition of the sweep's
+  // order means the animation can't come to disagree with the move it illustrates.
+  const next = game.autoCompleteSource();
   if (!next) {
-    autoCompleting = false;
+    endAutoComplete();
     if (game.isWon()) startCelebration();
     return;
   }
@@ -349,7 +380,7 @@ function autoStep(): void {
   const before = game.getPile(dest).length;
   const result = game.moveCards(next.from, next.index, dest);
   if (!result) {
-    autoCompleting = false;
+    endAutoComplete();
     return;
   }
   // Emptying a temp stack removes its column; refresh the layout before
@@ -393,6 +424,9 @@ function startCelebration(): void {
   // for deterministic screenshots, and the cascade is the one place we *want* the
   // flourish captured.
   celebration.start(seeds, { extras: !reduceMotion.matches });
+  // After `start`, so the toolbar reflects a board that is now celebrating: the
+  // cascade owns the canvas and Undo, Redo and + Stack all refuse until the next game.
+  updateStats();
   playFanfare();
   showWinPanel();
 }
@@ -449,11 +483,16 @@ function currentWinText(): string {
     winRecord && isDailyGame()
       ? { key: todayKey(), streak: currentDailyStreak(winRecord.stats, todayKey()) }
       : undefined;
-  return shareText({
+  // One reading of the clock, shared by the text and the link in it: two calls to
+  // `elapsedNow()` can land either side of a second boundary and disagree.
+  const result: SharedResult = {
     score: game.score,
     moves: game.moves,
     elapsedMs: elapsedNow(),
-    url: shareUrl(),
+  };
+  return shareText({
+    ...result,
+    url: shareUrl(location.href, dealLink(), result),
     code: encodeSeed(game.seed),
     daily,
   });
@@ -499,50 +538,6 @@ function resetShareLabel(): void {
 
 // ---- Statistics dialog -----------------------------------------------------
 
-/** Durations for the stats list: minutes and seconds up to an hour, then hours and
- *  minutes, since a lifetime total runs long. A zero means it never happened. */
-function fmtDuration(ms: number): string {
-  if (ms <= 0) return "—";
-  const total = Math.round(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}:${String(s).padStart(2, "0")}`;
-}
-
-/** The record, in two groups. Twelve rows in one list read as a wall, and the daily
- *  counters answer a different question from the lifetime ones — so they get their own
- *  heading rather than trailing off the bottom of the same column. */
-function statGroups(s: Stats): { title: string; rows: [string, string][] }[] {
-  const dash = (n: number): string => (n > 0 ? String(n) : "—");
-  return [
-    {
-      title: "Games",
-      rows: [
-        ["Played", String(s.played)],
-        ["Won", String(s.won)],
-        ["Win rate", s.played === 0 ? "—" : `${Math.round((s.won / s.played) * 100)}%`],
-        ["Current streak", String(s.streak)],
-        ["Best streak", String(s.bestStreak)],
-        ["Best score", dash(s.bestScore)],
-        ["Fastest win", fmtDuration(s.fastestMs)],
-        ["Fewest moves", dash(s.fewestMoves)],
-        ["Time played", fmtDuration(s.totalMs)],
-      ],
-    },
-    {
-      title: "Daily deal",
-      rows: [
-        // The live streak, not the stored one: a run that lapsed reads as 0 here
-        // without anything having to run at midnight to expire it.
-        ["Current streak", String(currentDailyStreak(s, todayKey()))],
-        ["Best streak", String(s.bestDailyStreak)],
-        ["Dailies won", String(s.dailyWins)],
-      ],
-    },
-  ];
-}
-
 /** The archive: the last four weeks of daily deals, ticked where they were won and
  *  clickable to play. It lives inside the statistics dialog rather than behind a new
  *  toolbar button — it *is* the daily record, the toolbar is already full, and the
@@ -572,7 +567,7 @@ function renderArchive(s: Stats): HTMLElement {
 
 function renderStats(): void {
   const nodes: HTMLElement[] = [];
-  for (const group of statGroups(loadStats())) {
+  for (const group of statGroups(loadStats(), todayKey())) {
     // A <dt> spanning both columns: still a definition list, still one grid, and the
     // heading can't drift out of step with the rows under it.
     const head = document.createElement("dt");
@@ -599,15 +594,27 @@ function renderStats(): void {
   el.statsList.append(head, wrap);
 }
 
+/** Enforce the dialog's `aria-modal="true"`, which is otherwise only a claim: without
+ *  this, Tab walks straight out of the panel into the toolbar behind it, so for anyone
+ *  driving the page by keyboard the "modal" dialog isn't modal at all. `#stats-overlay`
+ *  is a sibling of `#app` precisely so the whole app can be inerted in one line —
+ *  which also takes the board and toolbar out of the accessibility tree, so a screen
+ *  reader can't read past the dialog either. */
+function setAppInert(inert: boolean): void {
+  el.app.inert = inert;
+}
+
 function openStats(): void {
   renderStats();
   disarmReset(); // a freshly opened dialog never opens half-way through a confirmation
   el.statsOverlay.hidden = false;
+  setAppInert(true);
   el.statsClose.focus();
 }
 
 function closeStats(): void {
   el.statsOverlay.hidden = true;
+  setAppInert(false); // before the focus call below — focus can't land inside inert
   disarmReset();
   el.stats.focus(); // back to the button that opened it
 }
@@ -731,7 +738,7 @@ function beginGame(deal: () => void): void {
   syncSpareLayout();
   timerStart = null;
   elapsedFrozen = 0;
-  el.time.textContent = "0:00";
+  showClock("0:00");
   syncDealUrl();
   syncDailyButton();
   updateStats();
@@ -818,47 +825,28 @@ function syncDailyButton(): void {
   el.daily.setAttribute("aria-label", label);
 }
 
-/** The link to this board: the deal code, and the draw mode when it isn't the
- *  default. Never a `win=` — an inbound challenge is someone else's result and must
- *  not survive into the board the recipient is now playing, or a mid-game reload
- *  would greet them with a stale score to beat. */
-function dealUrl(): string {
-  const u = new URL(location.href);
-  u.searchParams.set("deal", encodeSeed(game.seed));
-  // Draw 1 is what you get with no parameter at all, so saying it adds nothing. The
-  // delete branch earns its keep: it strips an inbound `?draw=1`, and clears `draw=3`
-  // when the player switches back.
-  if (game.drawCount === 3) u.searchParams.set("draw", "3");
-  else u.searchParams.delete("draw");
-  u.searchParams.delete("win");
-  return u.toString();
-}
-
-/** What Share copies: the deal link with this game's result attached, so opening it
- *  shows the score to beat before dealing the board. */
-function shareUrl(): string {
-  const u = new URL(dealUrl());
-  u.searchParams.set("win", encodeResult({ score: game.score, moves: game.moves, elapsedMs: elapsedNow() }));
-  return u.toString();
+/** This board, as `share.ts` names it for a link. */
+function dealLink(): DealLink {
+  return { code: encodeSeed(game.seed), drawCount: game.drawCount };
 }
 
 /** Keep the deal code in the address bar. The board doesn't show it — the URL *is*
  *  the shareable thing — and this also keeps screenshots reproducible. */
 function syncDealUrl(): void {
   try {
-    history.replaceState(null, "", dealUrl());
+    history.replaceState(null, "", dealUrl(location.href, dealLink()));
   } catch {
     /* replaceState can throw on exotic origins; the game plays on regardless */
   }
 }
 
 function doUndo(): void {
-  if (busy || celebration.active) return;
+  if (boardBusy()) return;
   if (game.undo()) afterTimeTravel();
 }
 
 function doRedo(): void {
-  if (busy || celebration.active) return;
+  if (boardBusy()) return;
   if (game.redo()) {
     afterTimeTravel();
     // Unlike undo, redo can land back on a won or auto-completable board.
@@ -1011,7 +999,7 @@ function toggleEasy(): void {
 }
 
 function addTempStack(): void {
-  if (busy || celebration.active || autoCompleting) return;
+  if (boardBusy()) return;
   if (input.drag) return; // don't re-layout the board under a live drag
   if (game.addTempStack()) onChange();
 }
@@ -1095,7 +1083,7 @@ function askSolver(what: "verdict" | "hint", handle: (r: SolveResponse) => strin
     showToast("✅ Already won.");
     return;
   }
-  if (busy || celebration.active || autoCompleting) {
+  if (boardBusy()) {
     showToast("⏳ Wait for the cards to settle.", 2500);
     return;
   }
@@ -1163,7 +1151,7 @@ const WINNABLE_TRIES = 12;
  *  cost the player the game they were in the middle of. */
 function newWinnableGame(): void {
   if (solverBusy) return;
-  if (busy || celebration.active || autoCompleting || input.drag) return;
+  if (boardBusy() || input.drag) return;
 
   solverBusy = true;
   syncSolverButtons();
@@ -1292,7 +1280,7 @@ function playMove(from: PileId, fromIndex: number, to: PileId): boolean {
 
 /** Space / Enter: draw, pick up, or drop, depending on where the cursor is. */
 function activateCursor(): void {
-  if (busy || celebration.active || autoCompleting) return;
+  if (boardBusy()) return;
   const c = ensureCursor();
 
   if (c.pile.kind === "stock") {
@@ -1348,7 +1336,7 @@ function releaseHeld(why: string): void {
 
 /** F: send the focused (or held) card straight home, the keyboard's double-click. */
 function sendToFoundation(): void {
-  if (busy || celebration.active || autoCompleting) return;
+  if (boardBusy()) return;
   const c = held ?? ensureCursor();
   // The stock is face down and unplayable until drawn. `moveCards` has no face-up
   // guard for it (unlike `autoMoveToFoundation`), so without this the F key sends an
@@ -1380,7 +1368,7 @@ function sendToFoundation(): void {
 
 const input = new Input(canvas, game, animator, {
   layout: () => layout,
-  busy: () => busy || celebration.active || autoCompleting,
+  busy: () => boardBusy(),
   onChange,
 });
 
@@ -1463,6 +1451,18 @@ function boardHasKeys(): boolean {
   return !!el.statsOverlay.hidden && !!el.winOverlay.hidden;
 }
 
+/** The statistics dialog is modal, so while it is open *no* board shortcut fires —
+ *  not the single letters and not Ctrl+Z either. `boardHasKeys` alone used to gate
+ *  only the arrows, Space, F and the digits, so `n` behind an open dialog dealt a new
+ *  game and left the panel sitting over it reporting the record of the game it had
+ *  just abandoned.
+ *
+ *  The win panel is deliberately *not* modal — the cascade plays on behind it and the
+ *  toolbar stays live — so the shortcuts keep working there, exactly as they did. */
+function modalOpen(): boolean {
+  return !el.statsOverlay.hidden;
+}
+
 /** Whether a focused control should get Space/Enter instead of the board.
  *
  *  Those two keys are how a browser activates the focused element, so swallowing them
@@ -1492,6 +1492,8 @@ window.addEventListener("keydown", (e) => {
     else input.cancelDrag();
     return;
   }
+  // Escape is checked first, since closing the dialog is the one board key it owns.
+  if (modalOpen()) return;
 
   // ---- keyboard play ----
   if (!mod && !e.altKey && boardHasKeys()) {
@@ -1595,7 +1597,7 @@ if (urlDraw !== null && !resumeSaved) game.drawCount = urlDraw;
 applyEasy(resumeSaved ? saved!.state.easy : false);
 setDrawCount(game.drawCount);
 resize();
-el.time.textContent = formatClock(elapsedFrozen);
+showClock(formatClock(elapsedFrozen));
 syncDealUrl();
 syncDailyButton();
 updateStats();

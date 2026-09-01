@@ -1,5 +1,6 @@
-// What a win shares: the text the Share button puts on the clipboard, and the
-// `win=` payload its link carries so the page opens on the score to beat.
+// What a win shares: the text the Share button puts on the clipboard, the links that
+// text points at, and the `win=` payload they carry so the page opens on the score to
+// beat.
 //
 // Pure and DOM-free so it can be tested: everything it needs is passed in. The shape
 // is deliberately three short lines — a title, the result, the link — because that is
@@ -94,4 +95,38 @@ export function boardLine(b: ChallengeBoard): string {
       : `Daily deal · ${b.dailyKey}`
     : `Deal ${b.code}`;
   return `${deal} · Draw ${b.drawCount}`;
+}
+
+// ---- The links a board is shared by ----------------------------------------
+
+export interface DealLink {
+  /** The deal code for this board — `encodeSeed(game.seed)`. */
+  code: string;
+  drawCount: number;
+}
+
+/** The link to a board: the deal code, and the draw mode when it isn't the default.
+ *
+ *  Two rules earn their keep. Draw 1 is what you get with no parameter at all, so
+ *  saying it adds nothing — and the delete branch strips an inbound `?draw=1` as well
+ *  as clearing `draw=3` when the player switches back. And `win` is always removed:
+ *  it is someone else's result, and leaving it in the address would make a mid-game
+ *  reload greet the player with a stale challenge over their own board. `shareUrl` is
+ *  the one caller that puts one back. */
+export function dealUrl(href: string, deal: DealLink): string {
+  const u = new URL(href);
+  u.searchParams.set("deal", deal.code);
+  if (deal.drawCount === 3) u.searchParams.set("draw", "3");
+  else u.searchParams.delete("draw");
+  u.searchParams.delete("win");
+  return u.toString();
+}
+
+/** What Share copies: the deal link with this game's result attached, so opening it
+ *  shows the score to beat before dealing the board. Built on `dealUrl` rather than
+ *  beside it, so the two can't come to disagree about which board is being shared. */
+export function shareUrl(href: string, deal: DealLink, result: SharedResult): string {
+  const u = new URL(dealUrl(href, deal));
+  u.searchParams.set("win", encodeResult(result));
+  return u.toString();
 }

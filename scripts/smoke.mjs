@@ -178,6 +178,35 @@ try {
   });
   check("the daily archive shows four weeks with today marked",
     archive.count === 28 && archive.today === 1, `${archive.count} cells, ${archive.today} marked today`);
+
+  // Regression: the dialog claims aria-modal="true", so it has to behave like it.
+  // `boardHasKeys` used to gate only the arrows, Space, F and the digits, which let
+  // the single letters straight through — `n` behind an open dialog dealt a new game
+  // and left the panel sitting over it reporting the record it had just abandoned.
+  const dealBeforeN = new URL(page.url()).searchParams.get("deal");
+  await page.keyboard.press("n");
+  await page.waitForTimeout(600);
+  check(
+    "a board shortcut doesn't fire through the open stats dialog",
+    new URL(page.url()).searchParams.get("deal") === dealBeforeN && (await page.isVisible("#stats-panel")),
+    `deal ${dealBeforeN} -> ${new URL(page.url()).searchParams.get("deal")}`,
+  );
+
+  // The other half of modality: Tab used to walk out of the panel straight into the
+  // toolbar behind it, so for anyone driving the page by keyboard it wasn't modal at
+  // all. #app is inerted while the dialog is up, which also hides it from a reader.
+  await page.evaluate(() => document.getElementById("stats-close").focus());
+  const tabbed = [];
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press("Tab");
+    tabbed.push(await page.evaluate(() => document.activeElement?.id ?? ""));
+  }
+  check(
+    "Tab stays inside the modal dialog",
+    tabbed.every((id) => id === "" || id === "stats-reset" || id === "stats-close"),
+    tabbed.join(" -> "),
+  );
+
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
   check("Escape closes the stats dialog", !(await page.isVisible("#stats-panel")));
@@ -341,6 +370,49 @@ try {
   const deepVerdict = await page.textContent("#toast");
   check("a search deep enough to escalate still returns an answer",
     /can still be won|can't be won|Couldn't tell/.test(deepVerdict), deepVerdict);
+
+  // ---- auto-complete, and undo pressed into it ------------------------------
+  // Regression, and the reason `boardBusy()` exists. The sweep's loop *is* the
+  // `onDone` of the flight it just launched, and `animator.clear()` drops callbacks;
+  // `doUndo` checked only `busy` and `celebration.active`, so an undo mid-sweep threw
+  // that callback away and left `autoCompleting` latched on for good — which, through
+  // the same flag, killed every pointer and key for the rest of the game. The board
+  // below is A..J home with the queens and kings still out, so resuming it starts the
+  // sweep; Ctrl+Z is fired into the middle of it and the win still has to arrive.
+  await page.goto(base, { waitUntil: "load" });
+  await page.evaluate(() => {
+    // Written out rather than built through the app: a production bundle has no
+    // /src/*.ts to import. It is the same eight-card finish `win.png` is shot from,
+    // and parseGameState is what would reject it if it ever stopped being a legal board.
+    const up = (id) => id + 52;
+    const state = {
+      seed: 7, drawCount: 1, easy: false, moves: 114, score: 908,
+      stock: [], waste: [],
+      foundations: [0, 1, 2, 3].map((s) => Array.from({ length: 11 }, (_, r) => up(s * 13 + r))),
+      tableau: [[up(11)], [up(24)], [up(37)], [up(50)], [up(12)], [up(25)], [up(38), up(51)]],
+      spares: [],
+    };
+    localStorage.setItem("solitaire-game", JSON.stringify({ v: 2, elapsed: 60000, state }));
+  });
+  // Plain `base`, never a `?deal=`: one naming a different layout makes the boot rule
+  // discard the save. The resume label is what proves it was picked up.
+  await page.goto(base, { waitUntil: "load" });
+  check(
+    "the auto-complete board resumed rather than dealing fresh",
+    (await page.textContent(".start-title")) === "Resume game",
+    await page.textContent(".start-title"),
+  );
+  await page.click("#start-btn");
+  await page.waitForTimeout(450); // the sweep is under way — 8 cards at 150ms each
+  check("undo is disabled while the board auto-completes", await disabled("#btn-undo"));
+  await page.keyboard.press("Control+z"); // past the disabled button, straight at doUndo
+  await page.waitForFunction(
+    () => !document.getElementById("win-overlay").hidden,
+    null,
+    { timeout: 15000 },
+  ).catch(() => {});
+  check("undo during auto-complete doesn't strand the sweep",
+    await page.isVisible("#win-panel"));
 
   // ---- offline ----
   // The worker registering is the load-bearing bit: register() rejects silently in the

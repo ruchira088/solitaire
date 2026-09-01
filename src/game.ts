@@ -506,26 +506,38 @@ export class Game {
     return true;
   }
 
-  /** A single step of auto-complete: send one eligible card to a foundation. */
-  autoCompleteStep(): MoveResult | null {
+  /** Which card auto-complete would send home next, and where from — the single
+   *  definition of the sweep's order.
+   *
+   *  Separate from `autoCompleteStep` because the animation needs the card's *old*
+   *  screen position, which only exists before the move. main.ts used to mirror this
+   *  loop to get it, which is two copies of an ordering with nothing holding them
+   *  together; now both ask the same question and only one of them then moves. */
+  autoCompleteSource(): { from: PileId; index: number } | null {
     // Prefer tableau tops, then waste, then the temp stacks.
     const sources: PileId[] = [];
     for (let i = 0; i < 7; i++) sources.push({ kind: "tableau", index: i });
     sources.push({ kind: "waste" });
     for (let i = 0; i < this.spares.length; i++) sources.push({ kind: "spare", index: i });
-    for (const src of sources) {
-      const pile = this.getPile(src);
+    for (const from of sources) {
+      const pile = this.getPile(from);
       if (pile.length === 0) continue;
-      const card = pile[pile.length - 1];
-      const target = this.foundationTargetFor(card);
-      if (target >= 0) {
-        return this.moveCards(src, pile.length - 1, {
-          kind: "foundation",
-          index: target,
-        });
+      if (this.foundationTargetFor(pile[pile.length - 1]) >= 0) {
+        return { from, index: pile.length - 1 };
       }
     }
     return null;
+  }
+
+  /** A single step of auto-complete: send one eligible card to a foundation. */
+  autoCompleteStep(): MoveResult | null {
+    const next = this.autoCompleteSource();
+    if (!next) return null;
+    const card = this.getPile(next.from)[next.index];
+    return this.moveCards(next.from, next.index, {
+      kind: "foundation",
+      index: this.foundationTargetFor(card),
+    });
   }
 
   // ---- Persistence -------------------------------------------------------

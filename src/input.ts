@@ -17,6 +17,7 @@ import {
   tableauCardAt,
 } from "./positions";
 import { playDraw, playFlip, playPlace } from "./sound";
+import { samePile } from "./cursor";
 
 const DRAG_THRESHOLD = 6; // px before a press becomes a drag
 const DOUBLE_TAP_MS = 320;
@@ -63,13 +64,6 @@ export class Input {
     // A right-press over the board would otherwise start a drag and pop the OS menu
     // on top of it.
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-  }
-
-  /** Swap in a fresh game (after New Game) without rebinding listeners. */
-  setGame(game: Game): void {
-    this.game = game;
-    this.drag = null;
-    this.setCursor("default");
   }
 
   private eventPos(e: PointerEvent | MouseEvent): Point {
@@ -488,12 +482,4 @@ export class Input {
       });
     }
   }
-}
-
-function samePile(a: PileId, b: PileId): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === "tableau" && b.kind === "tableau") return a.index === b.index;
-  if (a.kind === "foundation" && b.kind === "foundation") return a.index === b.index;
-  if (a.kind === "spare" && b.kind === "spare") return a.index === b.index;
-  return true;
 }
