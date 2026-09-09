@@ -24,7 +24,7 @@
     "svgo": "^4.1.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   },
   "allowScripts": {
     "fsevents@2.3.3": true
