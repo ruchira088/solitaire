@@ -44,6 +44,15 @@ fixed with an `overrides` entry or by `npm audit fix`, which will happily *downg
 `aws-cdk-lib` and still land in the vulnerable range. `npm update aws-cdk-lib` is the
 lever: a newer release carries a newer bundle.
 
+`react-app-cdk-deploy` itself is a **git dependency on a moving `#v1` tag**, so
+`npm outdated` never reports it; `git ls-remote --tags` against the repo, compared
+with the commit in the lockfile, is how to tell it has moved, and `npm update
+react-app-cdk-deploy` refreshes it. Two npm 12 gates sit on that: `cdk-deploy/.npmrc`
+sets `allow-git=root` (npm 12 refuses git deps by default, and `root` permits them
+in this `package.json` only), and `allowScripts` in `package.json` is keyed on the
+**resolved commit**, so it has to move with the tag — `npm install-scripts approve
+react-app-cdk-deploy` writes the new key, then drop the old one.
+
 ## Commands
 
 ```bash

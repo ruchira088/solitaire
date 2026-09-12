@@ -19,10 +19,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up NodeJS
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -88,7 +88,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download the smoke-tested bundle
         uses: actions/download-artifact@v8
@@ -131,7 +131,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Deploys are serialised per environment, but builds are not, so a slower run
       # can reach this job after a newer commit has already shipped -- and deploying
@@ -161,7 +161,7 @@ jobs:
 
       - name: Set up NodeJS
         if: steps.tip.outputs.superseded != 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -248,7 +248,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # See deploy-to-dev: an overtaken run must not deploy its older bundle.
       - name: Check this commit is still the tip of main
@@ -273,7 +273,7 @@ jobs:
 
       - name: Set up NodeJS
         if: steps.tip.outputs.superseded != 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -310,7 +310,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # See deploy-to-dev: an overtaken run must not deploy its older bundle.
       - name: Check this commit is still the tip of main
@@ -335,7 +335,7 @@ jobs:
 
       - name: Set up NodeJS
         if: steps.tip.outputs.superseded != 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
