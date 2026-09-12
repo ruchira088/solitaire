@@ -11,6 +11,7 @@ import { Input } from "./input";
 import { cardPos } from "./positions";
 import { preloadFaceArt } from "./courtArt";
 import { onCardFaceLoad, preloadCardFaces } from "./cardFaces";
+import { initTooltips, setTip } from "./tooltip";
 import {
   getFelt,
   getThemeName,
@@ -558,7 +559,7 @@ function renderArchive(s: Stats): HTMLElement {
     cell.dataset.day = key;
     cell.textContent = String(Number(key.slice(8, 10)));
     const state = won ? "won" : "not won";
-    cell.title = `${key} — ${state}. Click to play this deal.`;
+    setTip(cell, `${key} — ${state}. Click to play this deal.`);
     cell.setAttribute("aria-label", `${key}, ${state}${isToday ? ", today" : ""}`);
     grid.appendChild(cell);
   }
@@ -821,7 +822,7 @@ function syncDailyButton(): void {
     : playing
       ? `Today's deal — in progress (${key})`
       : `Play today's deal (${key})`;
-  el.daily.title = label;
+  setTip(el.daily, label);
   el.daily.setAttribute("aria-label", label);
 }
 
@@ -887,7 +888,7 @@ function applyTheme(name: ThemeName): void {
   // themes the icon alone can no longer imply the destination.
   el.theme.textContent = getFelt().icon;
   const label = `Theme: ${getFelt().label} — click for ${themeInfo(nextTheme(name)).label}`;
-  el.theme.title = label;
+  setTip(el.theme, label);
   el.theme.setAttribute("aria-label", label);
   writeItem("solitaire-theme", name);
 }
@@ -901,10 +902,10 @@ function applySound(on: boolean): void {
   const icon = on ? "🔊" : "🔇";
   const title = on ? "Mute sound effects" : "Unmute sound effects";
   el.sound.textContent = icon;
-  el.sound.title = title;
+  setTip(el.sound, title);
   if (el.startMute) {
     el.startMute.textContent = icon;
-    el.startMute.title = title;
+    setTip(el.startMute, title);
   }
   writeItem("solitaire-sound", on ? "on" : "off");
 }
@@ -955,7 +956,7 @@ function applyChrome(hidden: boolean): void {
   chromeHidden = hidden;
   document.body.classList.toggle("chrome-hidden", hidden);
   const label = hidden ? "Show the toolbar" : "Hide the toolbar";
-  el.chrome.title = `${label} (T)`;
+  setTip(el.chrome, `${label} (T)`);
   el.chrome.setAttribute("aria-label", label);
   el.chrome.setAttribute("aria-expanded", hidden ? "false" : "true");
   writeItem("solitaire-chrome", hidden ? "hidden" : "shown");
@@ -971,7 +972,7 @@ function toggleChrome(): void {
 function applyHand(left: boolean): void {
   leftHanded = left;
   const label = left ? "Rail on the right" : "Rail on the left";
-  el.hand.title = `${label} — click to switch sides`;
+  setTip(el.hand, `${label} — click to switch sides`);
   el.hand.setAttribute("aria-label", label);
   el.hand.setAttribute("aria-pressed", left ? "true" : "false");
   writeItem("solitaire-hand", left ? "left" : "right");
@@ -988,9 +989,10 @@ function toggleHand(): void {
 function applyEasy(on: boolean): void {
   game.easyEmptyStacks = on;
   el.easy.setAttribute("aria-pressed", on ? "true" : "false");
-  el.easy.title = on
-    ? "Easy mode on: empty columns accept any card"
-    : "Easy mode: empty columns accept any card";
+  setTip(
+    el.easy,
+    on ? "Easy mode on: empty columns accept any card" : "Easy mode: empty columns accept any card",
+  );
 }
 
 function toggleEasy(): void {
@@ -1675,6 +1677,8 @@ function dismissStartOverlay(choice: StartChoice): void {
   updateStats();
   pendingCheck = true; // a restored board may already be won or auto-completable
 }
+
+initTooltips();
 
 startBtn.addEventListener("click", () => dismissStartOverlay(resuming ? "resume" : "reveal"));
 startNew.addEventListener("click", () => dismissStartOverlay("fresh"));

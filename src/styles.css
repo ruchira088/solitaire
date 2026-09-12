@@ -705,6 +705,77 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   #toast { animation: none; }
 }
 
+/* The tooltip (src/tooltip.ts): the toast's dark card, shrunk to a label. It stays
+   dark in every theme, so its colours are literal rather than the theme tokens.
+   `--arrow-x` is where the trigger's centre falls once the box has been clamped to
+   the viewport, so the arrow keeps pointing at the button. */
+#tooltip {
+  position: fixed;
+  z-index: 20;
+  --arrow-x: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(90vw, 320px);
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(8, 24, 16, 0.94);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #eafff3;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  width: max-content;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  animation: tooltip-in 0.12s ease-out;
+}
+#tooltip[hidden] {
+  display: none;
+}
+#tooltip::before {
+  content: "";
+  position: absolute;
+  left: var(--arrow-x);
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg);
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgb(8, 24, 16);
+}
+#tooltip.is-above::before {
+  top: auto;
+  bottom: -5px;
+  transform: translateX(-50%) rotate(225deg);
+}
+#tooltip kbd {
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  font: 600 11px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: #ffd34e;
+}
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+#tooltip.is-above {
+  animation-name: tooltip-in-above;
+}
+@keyframes tooltip-in-above {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #tooltip { animation: none; }
+}
+
 /* ---- Statistics dialog --------------------------------------------------- */
 
 /* A menu rather than a celebration, so this one is properly modal: it dims the board

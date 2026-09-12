@@ -87,7 +87,7 @@ there is no Prettier, and adding one would reflow a lot of hand-broken code at o
 deliberately not valid JavaScript until `vite build` substitutes them.
 
 Scope is deliberately the **pure** modules: `game.ts`, `cards.ts`, `layout.ts`,
-`storage.ts`, `share.ts`, `statsView.ts`, `cursor.ts` and `solver.ts`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
+`storage.ts`, `share.ts`, `statsView.ts`, `cursor.ts`, `solver.ts` and `tooltip.ts`'s `parseTip`. `render.ts` / `animation.ts` / `input.ts` / `main.ts` need a canvas,
 and mocking one only buys assertions about the mock.
 
 **`npm run smoke` is what covers those instead** (`scripts/smoke.mjs`). It serves the
@@ -146,6 +146,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/share.ts` | The result the win dialog copies: the text, the `?deal=`/`?draw=` links it points at, and the `win=` payload they carry — **pure**, no DOM |
 | `src/statsView.ts` | The statistics dialog's rows and duration formatting — **pure**, no DOM; main.ts only turns the rows into elements |
 | `src/cursor.ts` | Keyboard cursor: navigation and the spoken descriptions — **pure**, no DOM |
+| `src/tooltip.ts` | The custom tooltip on every `data-tip` trigger; `parseTip` (the shortcut chip) is **pure** |
 | `src/solver.ts` | Can this position be won? Depth-first search — **pure**, no DOM |
 | `src/solver.worker.ts` | Runs the solver off the main thread |
 
@@ -714,6 +715,17 @@ artifact bucket) is in `cdk-deploy/bin/cdk-deploy.ts`.
   buttons keep theirs, since there the glyph *is* the button. Without the rule a
   1280px window wraps onto a second row, which `npm run smoke` checks. On
   phones they cost a third button row (+34px); the ☰ fold is the escape hatch.
+- **Tooltips are `data-tip`, never `title`.** `tooltip.ts` draws one shared
+  `#tooltip` for every `[data-tip]` trigger, and a `title` left on a button puts the
+  browser's grey box up beside it — `npm run smoke` checks none remain. Dynamic text
+  goes through `setTip`, so no caller reaches for `.title`. A trailing `(T)` /
+  `(Ctrl+Z)` is drawn as a `<kbd>` chip; `parseTip` only takes a shortcut at the very
+  end that looks like one, so a date or prose aside in parentheses stays text. It
+  shows on mouse/pen hover (after a delay, instant while one is already up) and on
+  `:focus-visible`, never on touch — a tap has no hover to end, so it would stick.
+  The element is a sibling of `#app`, positioned `fixed`, so it floats over the
+  modal stats dialog and clamps to the viewport with the arrow still tracking the
+  trigger. Icon-only buttons keep their `aria-label`; the tip is `aria-describedby`.
 - **Only the pip faces are preloaded.** `preloadCardFaces` fetches the 40 pip/ace
   SVGs (~150 KB) up front and warms the 12 court WebPs (~850 KB) on idle, so they
   stay off the critical path. A court card needed before then loads on demand from

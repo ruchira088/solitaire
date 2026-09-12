@@ -41,30 +41,30 @@
   <body>
     <div id="app">
       <header id="toolbar">
-        <button id="btn-chrome" class="btn icon-btn chrome-toggle" type="button" aria-expanded="true" title="Hide the toolbar (T)" aria-label="Hide the toolbar">☰</button>
+        <button id="btn-chrome" class="btn icon-btn chrome-toggle" type="button" aria-expanded="true" data-tip="Hide the toolbar (T)" aria-label="Hide the toolbar">☰</button>
         <div class="brand">
           <span class="pip red">&#9829;</span><span class="pip">&#9824;</span>
           <h1>Solitaire</h1>
         </div>
         <div class="controls">
-          <button id="btn-new" class="btn" title="Start a new game"><span class="ico" aria-hidden="true">🃏</span>New Game</button>
-          <button id="btn-restart" class="btn" title="Replay this same deal from the start"><span class="ico" aria-hidden="true">🔄</span>Restart</button>
-          <button id="btn-undo" class="btn" title="Undo last move (Ctrl+Z)"><span class="ico" aria-hidden="true">↺</span>Undo</button>
-          <button id="btn-redo" class="btn" title="Redo (Ctrl+Shift+Z)"><span class="ico" aria-hidden="true">↻</span>Redo</button>
-          <div class="seg" id="draw-toggle" title="Cards drawn from the stock">
+          <button id="btn-new" class="btn" data-tip="Start a new game"><span class="ico" aria-hidden="true">🃏</span>New Game</button>
+          <button id="btn-restart" class="btn" data-tip="Replay this same deal from the start"><span class="ico" aria-hidden="true">🔄</span>Restart</button>
+          <button id="btn-undo" class="btn" data-tip="Undo last move (Ctrl+Z)"><span class="ico" aria-hidden="true">↺</span>Undo</button>
+          <button id="btn-redo" class="btn" data-tip="Redo (Ctrl+Shift+Z)"><span class="ico" aria-hidden="true">↻</span>Redo</button>
+          <div class="seg" id="draw-toggle" data-tip="Cards drawn from the stock">
             <button class="seg-btn is-active" data-draw="1">Draw 1</button>
             <button class="seg-btn" data-draw="3">Draw 3</button>
           </div>
-          <button id="btn-easy" class="btn" title="Easy mode: empty columns accept any card" aria-pressed="false"><span class="ico" aria-hidden="true">👶</span>Easy</button>
-          <button id="btn-add-stack" class="btn" title="Add a temporary ✦ stack (−50 points, max 3; it disappears when emptied)">+ Stack</button>
-          <button id="btn-hand" class="btn icon-btn" type="button" title="Move the stock and foundations to the other side" aria-label="Switch the rail to the other side">🤚</button>
-          <button id="btn-winnable" class="btn icon-btn" type="button" title="Deal a game that can be won (W)" aria-label="Deal a game that can be won">🎲</button>
-          <button id="btn-hint" class="btn icon-btn" type="button" title="Show a move from a winning line (H)" aria-label="Show a move from a winning line">💡</button>
-          <button id="btn-analyse" class="btn icon-btn" type="button" title="Can this deal still be won?" aria-label="Can this deal still be won?">🔍</button>
-          <button id="btn-daily" class="btn icon-btn" type="button" title="Play today's deal" aria-label="Play today's deal">📅</button>
-          <button id="btn-stats" class="btn icon-btn" type="button" title="Statistics" aria-label="Statistics">📊</button>
-          <button id="btn-sound" class="btn icon-btn" title="Mute sound effects" aria-label="Toggle sound">🔊</button>
-          <button id="btn-theme" class="btn icon-btn" title="Toggle light / dark theme" aria-label="Toggle theme">🌙</button>
+          <button id="btn-easy" class="btn" data-tip="Easy mode: empty columns accept any card" aria-pressed="false"><span class="ico" aria-hidden="true">👶</span>Easy</button>
+          <button id="btn-add-stack" class="btn" data-tip="Add a temporary ✦ stack (−50 points, max 3; it disappears when emptied)">+ Stack</button>
+          <button id="btn-hand" class="btn icon-btn" type="button" data-tip="Move the stock and foundations to the other side" aria-label="Switch the rail to the other side">🤚</button>
+          <button id="btn-winnable" class="btn icon-btn" type="button" data-tip="Deal a game that can be won (W)" aria-label="Deal a game that can be won">🎲</button>
+          <button id="btn-hint" class="btn icon-btn" type="button" data-tip="Show a move from a winning line (H)" aria-label="Show a move from a winning line">💡</button>
+          <button id="btn-analyse" class="btn icon-btn" type="button" data-tip="Can this deal still be won?" aria-label="Can this deal still be won?">🔍</button>
+          <button id="btn-daily" class="btn icon-btn" type="button" data-tip="Play today's deal" aria-label="Play today's deal">📅</button>
+          <button id="btn-stats" class="btn icon-btn" type="button" data-tip="Statistics" aria-label="Statistics">📊</button>
+          <button id="btn-sound" class="btn icon-btn" data-tip="Mute sound effects" aria-label="Toggle sound">🔊</button>
+          <button id="btn-theme" class="btn icon-btn" data-tip="Toggle light / dark theme" aria-label="Toggle theme">🌙</button>
         </div>
         <div class="stats">
           <div class="stat"><span class="label">Time</span><span id="stat-time" class="value">0:00</span></div>
@@ -96,8 +96,8 @@
           <p id="win-daily" hidden></p>
           <div class="dialog-actions">
             <button id="win-new" class="btn" type="button"><span class="ico" aria-hidden="true">🃏</span>New Game</button>
-            <button id="win-restart" class="btn" type="button" title="Replay this same deal from the start"><span class="ico" aria-hidden="true">🔄</span>Restart</button>
-            <button id="win-share" class="btn" type="button" title="Copy your result and a link to this deal"><span class="ico" aria-hidden="true">🔗</span><span id="win-share-label">Share</span></button>
+            <button id="win-restart" class="btn" type="button" data-tip="Replay this same deal from the start"><span class="ico" aria-hidden="true">🔄</span>Restart</button>
+            <button id="win-share" class="btn" type="button" data-tip="Copy your result and a link to this deal"><span class="ico" aria-hidden="true">🔗</span><span id="win-share-label">Share</span></button>
           </div>
         </div>
       </div>
@@ -133,8 +133,11 @@
         <span class="start-tip"><strong>Easy mode</strong> lets any card sit on an empty column — not just Kings. Stuck? <strong>+ Stack</strong> adds a temporary ✦ pile to park a run on (−50 points, up to 3); a stack vanishes once you empty it.</span>
       </button>
       <button id="start-new" class="start-alt" type="button" hidden>Start a new game instead</button>
-      <button id="start-mute" class="btn icon-btn" type="button" title="Mute sound effects" aria-label="Toggle sound">🔊</button>
+      <button id="start-mute" class="btn icon-btn" type="button" data-tip="Mute sound effects" aria-label="Toggle sound">🔊</button>
     </div>
+    <!-- The one tooltip, shared by every [data-tip] trigger (src/tooltip.ts). A
+         sibling of #app so it can float over the modal stats dialog. -->
+    <div id="tooltip" role="tooltip" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

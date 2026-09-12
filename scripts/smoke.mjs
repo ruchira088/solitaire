@@ -211,6 +211,21 @@ try {
   await page.waitForTimeout(300);
   check("Escape closes the stats dialog", !(await page.isVisible("#stats-panel")));
 
+  // Tooltips are custom, not `title` — a leftover `title` would put the browser's
+  // grey box up next to ours. Undo's tip ends in a shortcut, drawn as a key chip.
+  check("no button still carries a native title", await page.evaluate(() =>
+    document.querySelectorAll("button[title], [data-tip][title]").length === 0));
+  await page.hover("#btn-undo");
+  await page.waitForTimeout(600);
+  check("hovering a button shows the tooltip", await page.isVisible("#tooltip"));
+  check("the tooltip shows the tip with its shortcut as a key",
+    (await page.textContent("#tooltip")).includes("Undo last move") &&
+      (await page.textContent("#tooltip kbd")) === "Ctrl+Z",
+    await page.textContent("#tooltip"));
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(300);
+  check("leaving the button hides the tooltip", !(await page.isVisible("#tooltip")));
+
   // The theme button cycles a registry rather than flipping a boolean, so this
   // asserts it moved to *a different* theme, not to one particular one.
   const themeNow = () => page.evaluate(() => document.body.dataset.theme);
