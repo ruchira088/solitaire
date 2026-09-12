@@ -229,7 +229,7 @@ dealing over your progress.
 
 ## Getting started
 
-Requires **Node 20.19+ or 22.12+** (Vite 8); `.nvmrc` pins 24.
+Requires **Node 22.12+** (Vitest 5 — Vite 8 alone would still run on 20.19+); `.nvmrc` pins 24.
 
 ```bash
 npm install      # dev tooling only — Vite, TypeScript, Vitest, SVGO, playwright-core
