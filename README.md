@@ -71,6 +71,10 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   runs off the main thread, and says "couldn't tell" rather than guessing when the
   search runs long — and when the quick pass can't decide, it thinks harder rather
   than shrugging straight away.
+  You don't have to ask, either: after every move the game runs the quick pass on
+  its own, and if the position is *proven* dead a warning stays on the board until
+  you undo, turn on Easy mode, add a ✦ stack, or deal again. Only a proof triggers it
+  — "couldn't tell" stays quiet.
 - 💡 **A hint you can trust** — the **💡** button (or `H`) rings a move and draws an
   arrow to where it goes. It isn't a guess at a playable move: it's the *first move of
   a line the solver has carried all the way to 52 cards home*. If there's no such line,
@@ -263,6 +267,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
 | **Play from the keyboard** | Arrow keys move the cursor, `Space` picks up and drops, `Shift` + `↑`/`↓` changes how many cards you take, `F` sends one home, `1`–`7` jump to a column, `Esc` puts the cards back down. |
 | **Check a deal** | **🔍** searches for a winning line from the current position and reports whether one exists. |
+| **Dead-board warning** | Nothing to press: a position the solver proves can't be won shows a 🪦 warning on its own, and it stays until an undo, Easy mode, a ✦ stack or a new deal changes the position. |
 | **Ask for a hint** | **💡** (or `H`) rings the cards to move and points an arrow at where they go — the opening move of a line that actually wins. If there isn't one, it says so rather than guessing. |
 | **Start a winnable deal** | **🎲** (or `W`) shuffles until it finds a board proved winnable under your current draw mode. |
 | **Swap the rail's side** | **🤚**, on phone-portrait screens only, moves the stock, waste and foundations to the other edge for left-handed play. |

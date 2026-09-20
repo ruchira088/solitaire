@@ -699,7 +699,7 @@ function persist(): void {
 
 function onChange(): void {
   invalidate();
-  boardVersion++;
+  bumpBoard();
   if (cursor) cursor = clampCursor(game, cursor);
   syncSpareLayout();
   if (!countedPlayed && game.moves > 0) {
@@ -730,11 +730,11 @@ function beginGame(deal: () => void): void {
   resuming = false;
   animator.clear();
   invalidate();
-  boardVersion++;
   cursor = null;
   held = null;
   deal();
   applyEasy(false); // the assist doesn't carry over to the next game
+  bumpBoard(); // after the deal: the check it schedules is about the new board
   clearGame();
   syncSpareLayout();
   timerStart = null;
@@ -861,7 +861,7 @@ function afterTimeTravel(): void {
   // one path that has to bump the version itself. Without it a search started before
   // an undo lands its verdict on the position *after* it — and a hint would point at
   // cards that have moved.
-  boardVersion++;
+  bumpBoard();
   held = null; // the run it referred to may not exist in this position
   if (cursor) cursor = clampCursor(game, cursor);
   animator.clear();
@@ -998,6 +998,7 @@ function applyEasy(on: boolean): void {
 function toggleEasy(): void {
   applyEasy(!game.easyEmptyStacks);
   persist(); // the board's rules are part of the save
+  bumpBoard(); // the rules changed: a hint or a verdict about the old ones is stale
 }
 
 function addTempStack(): void {
@@ -1011,13 +1012,25 @@ function addTempStack(): void {
 let toastTimer = 0;
 
 /** A short-lived line over the board, also spoken. Used for answers that have nowhere
- *  permanent to live — the solver's verdict is the only one so far. */
+ *  permanent to live — the solver's verdicts, mostly. */
 function showToast(message: string, ms = 6000): void {
   window.clearTimeout(toastTimer);
   el.toast.textContent = message;
   el.toast.hidden = false;
   announce(message);
-  toastTimer = window.setTimeout(() => (el.toast.hidden = true), ms);
+  toastTimer = window.setTimeout(settleToast, ms);
+}
+
+/** What the toast shows when no timed line is up: the dead-board warning while the
+ *  position is dead, nothing otherwise. */
+function settleToast(): void {
+  toastTimer = 0;
+  if (deadWarned) {
+    el.toast.textContent = VERDICT.unwinnable;
+    el.toast.hidden = false;
+  } else {
+    el.toast.hidden = true;
+  }
 }
 
 // ---- Is this deal still winnable? ------------------------------------------
@@ -1039,6 +1052,81 @@ function hintView(): GameMove | null {
   return hint && hint.version === boardVersion ? hint.move : null;
 }
 
+/** The one way the version moves. Every board change also asks whether the new
+ *  position can still be won, so a bump without that check can't be written. */
+function bumpBoard(): void {
+  boardVersion++;
+  checkDead();
+}
+
+// ---- The dead-board warning ------------------------------------------------
+// Runs unasked after every change, at the fast budget only and on a worker of its own,
+// so it never competes with the 🔍/💡 buttons for the answer or greys them out. Only a
+// *proven* `unwinnable` shows anything: `unknown` is a shrug, not a warning, and the
+// buttons still escalate on demand. Dead boards are the cheap case for the search —
+// with nowhere to go the reachable space is tiny — so this costs least exactly when
+// it has something to say.
+
+let deadWorker: Worker | null = null;
+let deadChecking = false;
+/** A change landed mid-search; the answer in flight is about an older board. */
+let deadRecheck = false;
+/** Whether the warning is currently up. Dead → dead stays quiet — playing on across a
+ *  dead board doesn't re-announce it — and a bump leaves it standing until the *next*
+ *  verdict says otherwise, so it can't flicker off and on between moves. */
+let deadWarned = false;
+
+function getDeadWorker(): Worker {
+  deadWorker ??= new Worker(new URL("./solver.worker.ts", import.meta.url), { type: "module" });
+  return deadWorker;
+}
+
+function setDeadWarning(dead: boolean): void {
+  if (dead === deadWarned) return;
+  deadWarned = dead;
+  // A timed line has the toast for now; `settleToast` picks the warning up (or takes it
+  // down) when that line is done.
+  if (toastTimer !== 0) return;
+  settleToast();
+  if (dead) announce(VERDICT.unwinnable);
+}
+
+/** Ask, for the board as it is now. A won board and one under ✦ stacks or easy mode
+ *  aren't asked — and *not asking takes the warning down*: a rescue that changes the
+ *  rules retires a claim made under the old ones. */
+function checkDead(): void {
+  if (!started) return; // nothing over the start overlay; the dismissal asks
+  const state = game.serialize();
+  if (game.isWon() || !canAnalyse(state)) {
+    setDeadWarning(false);
+    return;
+  }
+  if (deadChecking) {
+    deadRecheck = true;
+    return;
+  }
+  deadChecking = true;
+  const askedAbout = boardVersion;
+  const worker = getDeadWorker();
+  worker.onmessage = (e: MessageEvent<SolveResponse>) => {
+    deadChecking = false;
+    if (deadRecheck) {
+      deadRecheck = false;
+      checkDead();
+    }
+    if (boardVersion !== askedAbout) return; // about a board the player has left
+    setDeadWarning(e.data.outcome === "unwinnable");
+  };
+  worker.onerror = () => {
+    // Quietly: a check that can't run is not a verdict, and nothing was promised.
+    deadWorker = null;
+    deadChecking = false;
+    deadRecheck = false;
+  };
+  const request: SolveRequest = { state, maxNodes: 200_000 };
+  worker.postMessage(request);
+}
+
 /** The search runs in a worker: a stubborn position can take several hundred
  *  milliseconds, which inline would drop frames and stall a drag. */
 function getSolverWorker(): Worker {
@@ -1046,9 +1134,13 @@ function getSolverWorker(): Worker {
   return solverWorker;
 }
 
+/** Every way out of a dead position that isn't just playing on. Undo first, as the one
+ *  that costs nothing; Easy and a ✦ stack change the game, New Game abandons it. */
+const RESCUES = "undo, turn on Easy mode, add a ✦ stack, or start a new game.";
+
 const VERDICT: Record<Outcome, string> = {
   solved: "✅ This deal can still be won from here.",
-  unwinnable: "🪦 This deal can't be won from here — undo, or start a new game.",
+  unwinnable: `🪦 This deal can't be won from here — ${RESCUES}`,
   // Said plainly: the search gave up, which is not the same as proving anything.
   unknown: "🤔 Couldn't tell within the time budget — it may still be winnable.",
 };
@@ -1059,7 +1151,7 @@ const VERDICT: Record<Outcome, string> = {
  *  the whole point is that it can be trusted. */
 const NO_HINT: Record<Outcome, string> = {
   solved: "💡 It's winnable, but I couldn't point at the move.",
-  unwinnable: "🪦 No move from here leads to a win — undo, or start a new game.",
+  unwinnable: `🪦 No move from here leads to a win — ${RESCUES}`,
   unknown: "🤔 Couldn't find a winning line in time, so I've no move worth trusting.",
 };
 
@@ -1444,6 +1536,7 @@ el.drawToggle.addEventListener("click", (e) => {
     setDrawCount(Number(btn.dataset.draw) as DrawCount);
     persist();
     syncDealUrl(); // the mode is part of what a shared link means
+    bumpBoard(); // the same cards under the other draw count are a different game
   }
 });
 
@@ -1668,6 +1761,7 @@ function dismissStartOverlay(choice: StartChoice): void {
   }
   if (choice === "reveal") {
     startDeal();
+    checkDead(); // dealt before the overlay, so no bump has asked about it yet
     return;
   }
   resuming = false;
@@ -1676,6 +1770,7 @@ function dismissStartOverlay(choice: StartChoice): void {
   if (game.moves > 0 && !game.isWon()) timerStart = performance.now();
   updateStats();
   pendingCheck = true; // a restored board may already be won or auto-completable
+  checkDead(); // a saved game can be as dead as it was when it was put down
 }
 
 initTooltips();

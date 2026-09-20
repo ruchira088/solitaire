@@ -365,6 +365,11 @@ try {
     /[?&]deal=DWLVHU/.test(page.url()) && !/win=/.test(page.url()),
     page.url(),
   );
+  // The dead-board check below runs on every deal; on this one, which was won for
+  // 527, it must have nothing to say.
+  await page.waitForTimeout(1500);
+  check("a live deal shows no warning",
+    await page.evaluate(() => document.getElementById("toast").hidden));
 
   // A *deep* search, specifically. Seed 8 can't be decided inside the fast budget, so
   // asking about it escalates to the 2M-node pass — several thousand levels down, on a
@@ -385,6 +390,30 @@ try {
   const deepVerdict = await page.textContent("#toast");
   check("a search deep enough to escalate still returns an answer",
     /can still be won|can't be won|Couldn't tell/.test(deepVerdict), deepVerdict);
+
+  // ---- the dead-board warning ----
+  // Seed 27 (deal R) can't be won from the first card, and the fast pass proves it in
+  // a few thousand nodes. Nothing is pressed: the warning has to arrive on its own,
+  // and then leave on its own when the player takes a rescue that changes the rules —
+  // Easy mode here — since the claim was about the rules it was made under.
+  await page.goto(`${base}?deal=R&draw=1&animate=off`, { waitUntil: "load" });
+  await page.click("#start-btn");
+  await page.waitForSelector("#start-overlay", { state: "detached" });
+  const warned = await page
+    .waitForFunction(
+      () => {
+        const t = document.getElementById("toast");
+        return !t.hidden && t.textContent.includes("can't be won");
+      },
+      null,
+      { timeout: 15000 },
+    )
+    .then(() => true, () => false);
+  check("a dead deal warns without being asked", warned, await page.textContent("#toast"));
+  await page.click("#btn-easy");
+  await page.waitForTimeout(500);
+  check("turning on Easy mode takes the warning down",
+    warned && (await page.evaluate(() => document.getElementById("toast").hidden)));
 
   // ---- auto-complete, and undo pressed into it ------------------------------
   // Regression, and the reason `boardBusy()` exists. The sweep's loop *is* the

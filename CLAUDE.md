@@ -263,6 +263,24 @@ logic, rendering, animation, and input kept cleanly separated.
   2M **only when the fast pass says `unknown`**: 29 solved, 3 dead, 8 unknown, and the
   29 boards that answer quickly never pay for it. All of which is why it runs in a
   worker rather than on the frame loop.
+- **The dead-board warning runs unasked, and only a proof shows it.** `bumpBoard()` is
+  the one place `boardVersion` moves, and it schedules `checkDead()` — so every board
+  change (moves, undo/redo, a new deal, the draw toggle, Easy on/off) is checked and a
+  path that changes the board without asking can't be written. The check runs the
+  **fast pass only** (200k nodes, no escalation, no `wantMove`) on a **worker of its
+  own**, so it never fights the 🔍/💡 buttons for `onmessage` and never greys them out;
+  `unknown` and `solved` show nothing, and the buttons still escalate on demand. Dead
+  boards are the cheap case — nowhere to go means a tiny reachable space — so the check
+  costs least when it has something to say. Its lifetime is deliberately *not* the hint
+  arrow's: a hint is about cards that move, the warning about a state that usually
+  survives a move, so it stays up until the *next* verdict says otherwise rather than
+  dropping on the bump (which flickered), and dead → dead is silent — no re-animate, no
+  re-announce. A check that is *skipped* (won, or `canAnalyse` false) takes the warning
+  down: Easy mode and a ✦ stack are two of the rescues the message offers, and taking
+  one retires a claim made under the old rules. A timed toast (a 💡 answer) borrows the
+  element and `settleToast` hands it back. The wording is shared with the 🔍/💡 dead
+  answers through `RESCUES`, and `npm run smoke` loads `?deal=R` — dead from the first
+  card, proven in ~2.5k nodes — to see the warning arrive unprompted and leave on Easy.
 - **A hint is the first move of a line that wins, or it is nothing.** `solve` already
   computed the whole line; the worker sends `moves[0]` through `toGameMove` and drops
   the rest, because a full walkthrough is a different feature and copying a few hundred
