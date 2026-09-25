@@ -106,6 +106,7 @@ let dpr = 1;
 let busy = false; // block input during the deal & celebration
 let pendingCheck = false; // re-evaluate win / auto-complete once idle
 let autoCompleting = false;
+let sweepMoves = 0; // cards the current sweep has sent home, so its end knows to save
 let timerStart: number | null = null;
 let elapsedFrozen = 0;
 let celebStarted = false;
@@ -201,8 +202,8 @@ function refreshAfterResize(): void {
   animator.clear();
   busy = false;
   if (autoCompleting) {
-    autoCompleting = false;
-    pendingCheck = true; // pick the sweep back up against the new layout
+    endAutoComplete();
+    pendingCheck = true; // the end-game sweep picks itself back up against the new layout
   }
   updateStats();
 }
@@ -236,6 +237,7 @@ const el = {
   drawToggle: document.getElementById("draw-toggle") as HTMLElement,
   easy: document.getElementById("btn-easy") as HTMLButtonElement,
   addStack: document.getElementById("btn-add-stack") as HTMLButtonElement,
+  home: document.getElementById("btn-home") as HTMLButtonElement,
   sound: document.getElementById("btn-sound") as HTMLButtonElement,
   startMute: document.getElementById("start-mute") as HTMLButtonElement,
   theme: document.getElementById("btn-theme") as HTMLButtonElement,
@@ -247,7 +249,6 @@ const el = {
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
-  analyse: document.getElementById("btn-analyse") as HTMLButtonElement,
   hint: document.getElementById("btn-hint") as HTMLButtonElement,
   winnable: document.getElementById("btn-winnable") as HTMLButtonElement,
   hand: document.getElementById("btn-hand") as HTMLButtonElement,
@@ -298,6 +299,7 @@ function updateStats(): void {
   el.undo.disabled = !game.canUndo() || boardBusy();
   el.redo.disabled = !game.canRedo() || boardBusy();
   el.addStack.disabled = boardBusy() || game.spares.length >= MAX_SPARES;
+  el.home.disabled = boardBusy() || !game.autoCompleteSource();
 }
 
 // ---- Game loop -------------------------------------------------------------
@@ -356,10 +358,33 @@ function evaluateBoard(): void {
 
 /** Leave the sweep. `updateStats` has to run again on the way out: Undo, Redo and
  *  + Stack are disabled for its duration, and the frame that ends it is not otherwise
- *  a board change, so nothing else would re-enable them. */
+ *  a board change, so nothing else would re-enable them.
+ *
+ *  A sweep that moved cards goes through `onChange` once, at the end: the 🏠 button
+ *  can stop with cards still on the table, and that board has to be saved, re-checked
+ *  for a dead end and have the cursor re-seated like any other. Only when it moved
+ *  something — `onChange` schedules `evaluateBoard`, which could otherwise restart an
+ *  empty sweep forever. */
 function endAutoComplete(): void {
   autoCompleting = false;
-  updateStats();
+  const moved = sweepMoves > 0;
+  sweepMoves = 0;
+  if (moved) onChange();
+  else updateStats();
+}
+
+/** The 🏠 button: every card that can go to a foundation, and every card that
+ *  becomes able to as the ones above it leave. The same sweep auto-complete runs,
+ *  started early — so the order is `autoCompleteSource`'s and nothing new can drift
+ *  from it. The stock is left alone; drawing is the player's call. */
+function sendAllHome(): void {
+  if (boardBusy() || input.drag) return;
+  if (!game.autoCompleteSource()) {
+    announce("nothing can go to the foundations");
+    return;
+  }
+  autoCompleting = true;
+  autoStep();
 }
 
 function autoStep(): void {
@@ -384,6 +409,7 @@ function autoStep(): void {
     endAutoComplete();
     return;
   }
+  sweepMoves++;
   // Emptying a temp stack removes its column; refresh the layout before
   // computing the flight target.
   syncSpareLayout();
@@ -727,6 +753,7 @@ function beginGame(deal: () => void): void {
   hideWinPanel();
   winRecord = null;
   autoCompleting = false;
+  sweepMoves = 0; // the old board's sweep has nothing left to save
   resuming = false;
   animator.clear();
   invalidate();
@@ -1026,7 +1053,7 @@ function showToast(message: string, ms = 6000): void {
 function settleToast(): void {
   toastTimer = 0;
   if (deadWarned) {
-    el.toast.textContent = VERDICT.unwinnable;
+    el.toast.textContent = DEAD_BOARD;
     el.toast.hidden = false;
   } else {
     el.toast.hidden = true;
@@ -1061,9 +1088,9 @@ function bumpBoard(): void {
 
 // ---- The dead-board warning ------------------------------------------------
 // Runs unasked after every change, at the fast budget only and on a worker of its own,
-// so it never competes with the 🔍/💡 buttons for the answer or greys them out. Only a
-// *proven* `unwinnable` shows anything: `unknown` is a shrug, not a warning, and the
-// buttons still escalate on demand. Dead boards are the cheap case for the search —
+// so it never competes with 💡 for the answer or greys it out. Only a
+// *proven* `unwinnable` shows anything: `unknown` is a shrug, not a warning, and 💡
+// still escalates on demand. Dead boards are the cheap case for the search —
 // with nowhere to go the reachable space is tiny — so this costs least exactly when
 // it has something to say.
 
@@ -1088,7 +1115,7 @@ function setDeadWarning(dead: boolean): void {
   // down) when that line is done.
   if (toastTimer !== 0) return;
   settleToast();
-  if (dead) announce(VERDICT.unwinnable);
+  if (dead) announce(DEAD_BOARD);
 }
 
 /** Ask, for the board as it is now. A won board and one under ✦ stacks or easy mode
@@ -1138,12 +1165,10 @@ function getSolverWorker(): Worker {
  *  that costs nothing; Easy and a ✦ stack change the game, New Game abandons it. */
 const RESCUES = "undo, turn on Easy mode, add a ✦ stack, or start a new game.";
 
-const VERDICT: Record<Outcome, string> = {
-  solved: "✅ This deal can still be won from here.",
-  unwinnable: `🪦 This deal can't be won from here — ${RESCUES}`,
-  // Said plainly: the search gave up, which is not the same as proving anything.
-  unknown: "🤔 Couldn't tell within the time budget — it may still be winnable.",
-};
+/** The dead-board warning. There is no "can this still be won?" button behind it any
+ *  more: the warning already arrives unasked whenever the answer is no, and 💡 runs the
+ *  same escalated search on demand — on a dead board it says so too. */
+const DEAD_BOARD = `🪦 This deal can't be won from here — ${RESCUES}`;
 
 /** A hint is only ever a move off a line that actually wins, so the two answers that
  *  aren't `solved` have no move to offer and say so rather than falling back to a
@@ -1155,21 +1180,16 @@ const NO_HINT: Record<Outcome, string> = {
   unknown: "🤔 Couldn't find a winning line in time, so I've no move worth trusting.",
 };
 
-/** One worker, so the three things that ask it questions take turns rather than
+/** One worker, so the two things that ask it questions take turns rather than
  *  cutting each other off mid-search. */
 function syncSolverButtons(): void {
-  el.analyse.disabled = solverBusy;
   el.hint.disabled = solverBusy;
   el.winnable.disabled = solverBusy;
 }
 
-/** Both buttons ask the same worker the same question; only what they do with the
- *  answer differs. The guards are shared so they can't come to disagree about which
- *  boards are answerable, and one flag keeps them from running two searches at once.
- *
- *  `handle` returns the line to show, and runs only when the answer is still about the
- *  board on screen. */
-function askSolver(what: "verdict" | "hint", handle: (r: SolveResponse) => string): void {
+/** 💡: the first move of a line that wins, or a plain statement of why there is none.
+ *  One flag keeps it from running two searches at once on the shared worker. */
+function requestHint(): void {
   if (solverBusy) return;
   // Order matters: a won board is mid-celebration, so the busy guard below would
   // otherwise swallow the click and leave the button looking broken.
@@ -1183,17 +1203,13 @@ function askSolver(what: "verdict" | "hint", handle: (r: SolveResponse) => strin
   }
   const state = game.serialize();
   if (!canAnalyse(state)) {
-    showToast(
-      what === "hint"
-        ? "🤔 Can't suggest a move on a board with ✦ stacks or easy mode — their rules differ."
-        : "🤔 Can't analyse a board with ✦ stacks or easy mode — their rules differ.",
-    );
+    showToast("🤔 Can't suggest a move on a board with ✦ stacks or easy mode — their rules differ.");
     return;
   }
 
   solverBusy = true;
   syncSolverButtons();
-  showToast(what === "hint" ? "💡 Looking for a move…" : "🔍 Looking for a way to win…", 60_000);
+  showToast("💡 Looking for a move…", 60_000);
 
   const worker = getSolverWorker();
   const done = (message: string): void => {
@@ -1204,10 +1220,10 @@ function askSolver(what: "verdict" | "hint", handle: (r: SolveResponse) => strin
   const askedAbout = boardVersion;
   worker.onmessage = (e: MessageEvent<SolveResponse>) => {
     if (boardVersion !== askedAbout) {
-      done(`🤔 The board changed while I was looking — press ${what === "hint" ? "💡" : "🔍"} again.`);
+      done("🤔 The board changed while I was looking — press 💡 again.");
       return;
     }
-    done(handle(e.data));
+    done(hintMessage(e.data));
   };
   worker.onerror = () => {
     // A worker that won't start shouldn't look like a verdict.
@@ -1221,13 +1237,9 @@ function askSolver(what: "verdict" | "hint", handle: (r: SolveResponse) => strin
     state,
     maxNodes: 200_000,
     escalateNodes: 2_000_000,
-    wantMove: what === "hint",
+    wantMove: true,
   };
   worker.postMessage(request);
-}
-
-function analysePosition(): void {
-  askSolver("verdict", (r) => VERDICT[r.outcome]);
 }
 
 /** How many candidate deals to test before giving up. About two thirds of random deals
@@ -1294,13 +1306,12 @@ function newWinnableGame(): void {
  *  the removed `findHint` was that, and a greedy player built on it can't win a game —
  *  but the opening move of a line the search has actually carried through to 52 cards
  *  home. That is also why it declines rather than guessing when there's no such line. */
-function requestHint(): void {
-  askSolver("hint", (r) => {
-    if (r.outcome !== "solved" || !r.next) return NO_HINT[r.outcome];
-    hint = { move: r.next, version: boardVersion };
-    invalidate();
-    return `💡 Try: ${describeHint(game, r.next.from, r.next.fromIndex, r.next.to)}.`;
-  });
+/** The line to show for an answer that is still about the board on screen. */
+function hintMessage(r: SolveResponse): string {
+  if (r.outcome !== "solved" || !r.next) return NO_HINT[r.outcome];
+  hint = { move: r.next, version: boardVersion };
+  invalidate();
+  return `💡 Try: ${describeHint(game, r.next.from, r.next.fromIndex, r.next.to)}.`;
 }
 
 // ---- Keyboard play ---------------------------------------------------------
@@ -1503,7 +1514,6 @@ el.newGame.addEventListener("click", newGame);
 el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
 el.restart.addEventListener("click", restartDeal);
-el.analyse.addEventListener("click", analysePosition);
 el.hint.addEventListener("click", requestHint);
 el.winnable.addEventListener("click", newWinnableGame);
 el.hand.addEventListener("click", toggleHand);
@@ -1530,6 +1540,7 @@ el.sound.addEventListener("click", toggleSound);
 el.startMute.addEventListener("click", toggleSound);
 el.easy.addEventListener("click", toggleEasy);
 el.addStack.addEventListener("click", addTempStack);
+el.home.addEventListener("click", sendAllHome);
 el.drawToggle.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (btn) {
@@ -1634,6 +1645,8 @@ window.addEventListener("keydown", (e) => {
     requestHint();
   } else if (key === "w") {
     newWinnableGame();
+  } else if (key === "a") {
+    sendAllHome();
   } else if (key === "t") {
     toggleChrome();
   }

@@ -58,7 +58,9 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   score, moves and clock. The opening screen offers **Resume game**, or a fresh
   deal if you'd rather start over, and your recent moves can still be undone.
 - 🖱️ **Mouse & touch** — drag-and-drop, click-to-draw, and double-click /
-  double-tap to auto-send a card to its foundation. While you drag, the pile
+  double-tap to auto-send a card to its foundation — or **🏠** (`A`) to send every
+  card that can go, one after another, including ones freed as the cards above them
+  leave. While you drag, the pile
   you'd land on lights up, the cursor shows what's grabbable, and `Esc` puts
   the cards back.
 - ⌨️ **Playable without a mouse** — arrow keys move a cursor around the board,
@@ -66,15 +68,11 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   sends a card home, and `H` asks for a hint. Every move is announced to screen readers through a live region,
   so the game is playable without seeing it. The cursor only appears once you use the
   keyboard, and goes away the moment you touch the mouse.
-- 🔍 **Is this still winnable?** — a solver searches the position and tells you
-  whether a win is still reachable, so a hopeless deal doesn't waste your evening. It
-  runs off the main thread, and says "couldn't tell" rather than guessing when the
-  search runs long — and when the quick pass can't decide, it thinks harder rather
-  than shrugging straight away.
-  You don't have to ask, either: after every move the game runs the quick pass on
-  its own, and if the position is *proven* dead a warning stays on the board until
-  you undo, turn on Easy mode, add a ✦ stack, or deal again. Only a proof triggers it
-  — "couldn't tell" stays quiet.
+- 🪦 **A dead board tells you so** — after every move a solver searches the position
+  off the main thread, and if it *proves* no win is reachable a warning stays on the
+  board until you undo, turn on Easy mode, add a ✦ stack, or deal again, so a hopeless
+  deal doesn't waste your evening. Only a proof triggers it — a search that runs out
+  of time stays quiet rather than guessing.
 - 💡 **A hint you can trust** — the **💡** button (or `H`) rings a move and draws an
   arrow to where it goes. It isn't a guess at a playable move: it's the *first move of
   a line the solver has carried all the way to 52 cards home*. If there's no such line,
@@ -263,12 +261,12 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Draw from stock** | Click the stock pile (top-left). Toggle **Draw 1 / Draw 3** in the toolbar. When the stock is empty, click it again to recycle the waste. |
 | **Move a card / run** | Drag a card — or a valid descending, alternating-colour run — between tableau columns. Empty columns accept a King. |
 | **Send to a foundation** | Drag an Ace (or the next card in sequence) onto a foundation, or **double-click** (double-tap on touch) a card to auto-send it. |
+| **Send everything home** | **🏠** (or `A`) sends every card that can go to the foundations, one after another — including cards that only become playable as the ones above them leave. It never draws from the stock. |
 | **Park a stack** | Click **+ Stack** in the toolbar (−50 points, up to 3), then drag a card or run onto the ✦ pile to set it aside and reveal the card underneath. The pile disappears once you empty it. |
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
 | **Play from the keyboard** | Arrow keys move the cursor, `Space` picks up and drops, `Shift` + `↑`/`↓` changes how many cards you take, `F` sends one home, `1`–`7` jump to a column, `Esc` puts the cards back down. |
-| **Check a deal** | **🔍** searches for a winning line from the current position and reports whether one exists. |
 | **Dead-board warning** | Nothing to press: a position the solver proves can't be won shows a 🪦 warning on its own, and it stays until an undo, Easy mode, a ✦ stack or a new deal changes the position. |
-| **Ask for a hint** | **💡** (or `H`) rings the cards to move and points an arrow at where they go — the opening move of a line that actually wins. If there isn't one, it says so rather than guessing. |
+| **Ask for a hint** | **💡** (or `H`) rings the cards to move and points an arrow at where they go — the opening move of a line that actually wins. If there isn't one, it says so rather than guessing, and it searches harder than the automatic warning when the quick pass can't tell. |
 | **Start a winnable deal** | **🎲** (or `W`) shuffles until it finds a board proved winnable under your current draw mode. |
 | **Swap the rail's side** | **🤚**, on phone-portrait screens only, moves the stock, waste and foundations to the other edge for left-handed play. |
 | **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. Opening that link shows the score, time and moves to beat, then deals the same board. |

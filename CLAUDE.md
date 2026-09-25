@@ -268,8 +268,8 @@ logic, rendering, animation, and input kept cleanly separated.
   change (moves, undo/redo, a new deal, the draw toggle, Easy on/off) is checked and a
   path that changes the board without asking can't be written. The check runs the
   **fast pass only** (200k nodes, no escalation, no `wantMove`) on a **worker of its
-  own**, so it never fights the 🔍/💡 buttons for `onmessage` and never greys them out;
-  `unknown` and `solved` show nothing, and the buttons still escalate on demand. Dead
+  own**, so it never fights 💡 for `onmessage` and never greys it out;
+  `unknown` and `solved` show nothing, and 💡 still escalates on demand. Dead
   boards are the cheap case — nowhere to go means a tiny reachable space — so the check
   costs least when it has something to say. Its lifetime is deliberately *not* the hint
   arrow's: a hint is about cards that move, the warning about a state that usually
@@ -278,7 +278,7 @@ logic, rendering, animation, and input kept cleanly separated.
   re-announce. A check that is *skipped* (won, or `canAnalyse` false) takes the warning
   down: Easy mode and a ✦ stack are two of the rescues the message offers, and taking
   one retires a claim made under the old rules. A timed toast (a 💡 answer) borrows the
-  element and `settleToast` hands it back. The wording is shared with the 🔍/💡 dead
+  element and `settleToast` hands it back. The wording is shared with 💡's dead
   answers through `RESCUES`, and `npm run smoke` loads `?deal=R` — dead from the first
   card, proven in ~2.5k nodes — to see the warning arrive unprompted and leave on Easy.
 - **A hint is the first move of a line that wins, or it is nothing.** `solve` already
@@ -457,6 +457,17 @@ logic, rendering, animation, and input kept cleanly separated.
   copies with nothing holding them together. Now both ask the same method and only one
   of them then moves; `game.test.ts` pins that what it names is what the next
   `autoCompleteStep` moves.
+  **🏠 (`A`) is that same sweep, started early** — `sendAllHome` sets `autoCompleting`
+  and calls `autoStep`, so it inherits the order, the `boardBusy()` lock and the
+  resize handling rather than growing a second loop. It follows chains (a card freed
+  by one going home goes next) and never draws from the stock. What it added is that
+  **the sweep now ends through `onChange`** when it moved anything: the end-game sweep
+  always finished in a win and never needed to save, but a 🏠 sweep stops mid-game and
+  that board must persist, re-check for a dead end and re-seat the cursor. Only when
+  `sweepMoves > 0`, since `onChange` schedules `evaluateBoard`, which could otherwise
+  restart an empty sweep forever. It replaced the 🔍 verdict button in the toolbar —
+  the dead-board warning answers that unasked, and 💡 escalates on demand — so the
+  1280 row kept its width; measured there, the row has ~22px spare.
 - **Two dialogs, two behaviours.** The win panel is *not* modal — no backdrop, wrapper
   `pointer-events: none` — because the cascade is the reward. The stats dialog
   (`#stats-overlay`) is: it dims the board, and a backdrop click or Escape closes it.

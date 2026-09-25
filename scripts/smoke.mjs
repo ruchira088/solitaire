@@ -319,20 +319,20 @@ try {
   check("an idle board stops drawing entirely", idleDraws === 0, `${idleDraws} card draws in 1s while idle`);
 
   // ---- the solver ----
-  // A verdict at all is the check: the worker has to start, the search has to finish,
-  // and the answer has to come back. Which of the three verdicts it is depends on the
-  // deal, so it isn't asserted.
-  await page.click("#btn-analyse");
-  check("analysing disables the button while it thinks",
-    await page.evaluate(() => document.getElementById("btn-analyse").disabled));
+  // An answer at all is the check: the worker has to start, the search has to finish,
+  // and the answer has to come back. Whether it is a move or one of the three reasons
+  // there isn't one depends on the deal, so it isn't asserted.
+  const HINT_ANSWER = /Try:|winnable, but|No move from here|Couldn't find a winning line|Already won/;
+  await page.click("#btn-hint");
+  check("asking for a hint disables the button while it thinks",
+    await page.evaluate(() => document.getElementById("btn-hint").disabled));
   await page.waitForFunction(
     () => !document.getElementById("toast").textContent.includes("Looking"),
     null,
     { timeout: 30000 },
   );
   const verdict = await page.textContent("#toast");
-  check("the solver returns a verdict",
-    /can still be won|can't be won|Couldn't tell|Already won/.test(verdict), verdict);
+  check("the solver returns an answer", HINT_ANSWER.test(verdict), verdict);
 
   // ---- a shared win ----
   // What the Share button copies now opens on the sender's result rather than straight
@@ -377,11 +377,11 @@ try {
   // move, and a worker's stack is smaller than the main thread's, which is smaller than
   // Node's. The verdict above never reached that depth, so a stack overflow shipped
   // green locally and only failed in CI. The search keeps its own stack now, which is
-  // why this can hold. `💡` shares the same worker and budget, so it is covered too.
+  // why this can hold.
   await page.goto(`${base}?deal=8&draw=1&animate=off`, { waitUntil: "load" });
   await page.click("#start-btn");
   await page.waitForSelector("#start-overlay", { state: "detached" });
-  await page.click("#btn-analyse");
+  await page.click("#btn-hint");
   await page.waitForFunction(
     () => !document.getElementById("toast").textContent.includes("Looking"),
     null,
@@ -389,7 +389,29 @@ try {
   );
   const deepVerdict = await page.textContent("#toast");
   check("a search deep enough to escalate still returns an answer",
-    /can still be won|can't be won|Couldn't tell/.test(deepVerdict), deepVerdict);
+    HINT_ANSWER.test(deepVerdict), deepVerdict);
+
+  // ---- 🏠 sends cards home ----
+  // Deal I shows three aces, and the sweep sends a fourth card after them that only
+  // becomes playable once one of those has gone — so 4, not 3, is what shows the button
+  // follows the chain rather than taking one snapshot of the tops. Moves stand in for
+  // the foundations, which aren't in the DOM: every card home is exactly one move.
+  await page.goto(`${base}?deal=I&draw=1&animate=off`, { waitUntil: "load" });
+  await page.click("#start-btn");
+  await page.waitForSelector("#start-overlay", { state: "detached" });
+  await page.waitForFunction(() => !document.getElementById("btn-home").disabled, null, { timeout: 10000 });
+  await page.click("#btn-home");
+  // Undo is greyed for exactly the sweep's duration (boardBusy), so it coming back is
+  // the sweep ending — 🏠 alone can't say, being disabled both mid-sweep and after.
+  const swept = await page.waitForFunction(
+    () => document.getElementById("stat-moves").textContent !== "0" &&
+      !document.getElementById("btn-undo").disabled,
+    null,
+    { timeout: 10000 },
+  ).then(() => true, () => false);
+  check("🏠 sends every card it can to the foundations, and hands the board back",
+    swept && (await moves()) === "4", `${await moves()} moves`);
+  check("…leaving 🏠 disabled with nothing left to send", await disabled("#btn-home"));
 
   // ---- the dead-board warning ----
   // Seed 27 (deal R) can't be won from the first card, and the fast pass proves it in
