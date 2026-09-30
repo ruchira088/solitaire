@@ -19,12 +19,12 @@
     "cards:optimize": "svgo -f public/cards --config svgo.config.mjs"
   },
   "devDependencies": {
-    "oxlint": "^1.82.0",
+    "oxlint": "^1.85.0",
     "playwright-core": "^1.63.0",
     "svgo": "^4.1.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.0",
-    "vitest": "^5.0.0"
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
   },
   "allowScripts": {
     "fsevents@2.3.3": true
