@@ -55,3 +55,7 @@ What the theme registry owns, how the three on-board highlights stay distinguish
   worth knowing: headless Chrome reports a light scheme, so `shoot-screenshots.mjs`
   pins `colorScheme: "dark"` to keep every unthemed shot what it has always been; and
   the button shows 🌓 rather than a theme's icon while on Auto.
+- **Haptics ride on the sound toggle.** `haptics.ts`'s `buzz` is called from inside
+  `sound.ts`'s play functions, gated on the same `enabled` flag, so no call site has to
+  remember a second effect and 🔇 means "stop this device reacting". The pulses are a
+  few milliseconds, and the deal's 28 ticks deliberately don't vibrate.

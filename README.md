@@ -58,6 +58,8 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   `localStorage`, so closing the tab or refreshing brings back the same board,
   score, moves and clock. The opening screen offers **Resume game**, or a fresh
   deal if you'd rather start over, and your recent moves can still be undone.
+- 📳 **Feels like cards on a phone** — on devices that can vibrate, a draw, a drop
+  and a win each give a tiny tick. It follows the 🔊 toggle, and the deal stays still.
 - 🖱️ **Mouse & touch** — drag-and-drop, click-to-draw, and double-click /
   double-tap to auto-send a card to its foundation — or **🏠** (`A`) to send every
   card that can go, one after another, including ones freed as the cards above them
@@ -346,6 +348,7 @@ src/
   solver.worker.ts  runs the solver off the main thread
   deadCheck.ts   the dead-board warning: when to ask, which answers to believe
   preferences.ts theme, sound, toolbar fold and rail side: buttons + saved values
+  haptics.ts     the vibration tick that rides along with the card sounds
   statsDialog.ts / winPanel.ts / startOverlay.ts   the three DOM panels
 public/
   cards/         52 card faces (vector-playing-cards, public domain):

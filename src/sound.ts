@@ -2,6 +2,11 @@
 // asset files needed. Each sound is a short filtered noise burst that evokes
 // a card sliding / flicking. The AudioContext is created lazily on the first
 // user gesture (browsers block audio until then).
+//
+// The same calls carry the haptic tick (haptics.ts), so the 🔊 toggle governs both and
+// no call site has to remember the second.
+
+import { buzz } from "./haptics";
 
 let ctx: AudioContext | null = null;
 let enabled = true;
@@ -57,6 +62,7 @@ function noiseBurst(
 
 /** Card drawn from the stock — a crisp flick. */
 export function playDraw(): void {
+  if (enabled) buzz(6);
   const ac = ensureCtx();
   if (!ac) return;
   noiseBurst(ac, { duration: 0.12, freq: 1800, q: 0.8, gain: 0.18 });
@@ -64,6 +70,7 @@ export function playDraw(): void {
 
 /** Card placed onto a pile — a softer, lower "tap". */
 export function playPlace(): void {
+  if (enabled) buzz(10);
   const ac = ensureCtx();
   if (!ac) return;
   noiseBurst(ac, { duration: 0.1, freq: 1100, q: 0.7, gain: 0.14 });
@@ -103,6 +110,7 @@ export function isSoundEnabled(): boolean {
  *  moving. A win is the one moment that deserves a pitch, so this uses oscillators —
  *  still synthesised, still no asset files. */
 export function playFanfare(): void {
+  if (enabled) buzz([30, 60, 30, 60, 80]);
   const ac = ensureCtx();
   if (!ac) return;
   // C major triad up to the octave, then the fifth above: simple and unambiguous.

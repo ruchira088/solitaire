@@ -95,7 +95,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/keyboard.ts` | What a key press means, and when it means nothing — **pure** |
 | `src/theme.ts` | Theme registry (felt, placeholders, card backs) and the Auto preference |
 | `src/preferences.ts` | Theme, sound, toolbar fold, rail side: the buttons and their saved values |
-| `src/sound.ts` | WebAudio sound effects (deal tick, etc.) |
+| `src/sound.ts` / `src/haptics.ts` | WebAudio effects; the vibration tick that rides on them |
 | `src/storage.ts` | `localStorage`: preferences, the game save, stats |
 | `src/share.ts` | The shared result's text, links and `win=` payload — **pure** |
 | `src/statsView.ts` | The stats dialog's rows and formatting — **pure** |

@@ -99,7 +99,7 @@ export class Preferences {
   applySound(on: boolean): void {
     setSoundEnabled(on);
     const icon = on ? "🔊" : "🔇";
-    const title = on ? "Mute sound effects" : "Unmute sound effects";
+    const title = on ? "Mute sound and vibration" : "Unmute sound and vibration";
     for (const btn of [this.soundBtn, this.startMute]) {
       btn.textContent = icon;
       setTip(btn, title);
