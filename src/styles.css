@@ -912,6 +912,37 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   box-shadow: 0 0 0 2px var(--text);
 }
 
+/* Challenges received: the board on the left, where you stand and a Play button on
+   the right. Beaten ones take the accent, like a won day in the archive. */
+#stats-list .challenge-board {
+  font-size: 13px;
+}
+#stats-list .challenge-standing {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 13px;
+}
+#stats-list .challenge-standing.is-beaten {
+  color: var(--accent);
+}
+.challenge-play {
+  appearance: none;
+  padding: 2px 8px;
+  border: 1px solid var(--btn-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.challenge-play:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 /* The Vegas switch, lit while the next deal will be played under it. */
 #stats-vegas[aria-pressed="true"] {
   background: var(--accent);

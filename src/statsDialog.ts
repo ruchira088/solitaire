@@ -1,7 +1,7 @@
-// The statistics dialog: the lifetime record, the archive of daily deals, and the
-// Vegas switch. All DOM, so it isn't unit-tested — the words it shows come from
-// statsView.ts, which is — and `npm run smoke` checks it opens, closes, and is
-// genuinely modal.
+// The statistics dialog: the lifetime record, the archive of daily deals, the
+// challenges you've been sent, and the Vegas switch. All DOM, so it isn't unit-tested
+// — the words it shows come from statsView.ts and challenges.ts, which are — and
+// `npm run smoke` checks it opens, closes, and is genuinely modal.
 //
 // The modality is enforced here, not merely claimed by `aria-modal="true"`: `#app` is
 // made inert while it is up, which stops Tab walking out of the panel into the toolbar
@@ -9,9 +9,10 @@
 // `#app` precisely so that is one line. main.ts's key handling asks `isOpen()` so no
 // board shortcut fires through it either.
 
+import { Challenge, challengeRow } from "./challenges";
 import { recentDailyKeys } from "./rng";
 import { statGroups } from "./statsView";
-import { hasWonDaily, loadStats, resetStats, Stats } from "./storage";
+import { hasWonDaily, loadChallenges, loadStats, resetStats, Stats } from "./storage";
 import { setTip } from "./tooltip";
 
 /** How far back the archive looks — four weeks in the grid, and the same window
@@ -22,6 +23,7 @@ export const ARCHIVE_WINDOW = 28;
 export interface StatsDialogDeps {
   today: () => string;
   playDay: (key: string) => void;
+  playChallenge: (c: Challenge) => void;
   /** After a reset: the 📅 button's ✓ was drawn from the record just wiped. */
   afterReset: () => void;
   vegas: {
@@ -44,6 +46,8 @@ export class StatsDialog {
   private readonly app = byId("app");
   private resetArmed = false;
   private resetTimer = 0;
+  /** The challenges as last drawn, so a Play click can find its entry by index. */
+  private shown: Challenge[] = [];
 
   constructor(private deps: StatsDialogDeps) {
     this.button.addEventListener("click", () => this.open());
@@ -54,10 +58,14 @@ export class StatsDialog {
       this.syncVegas();
     });
     this.list.addEventListener("click", (e) => {
-      const day = (e.target as HTMLElement).closest<HTMLButtonElement>(".archive-day")?.dataset.day;
-      if (!day) return;
+      const target = e.target as HTMLElement;
+      const day = target.closest<HTMLButtonElement>(".archive-day")?.dataset.day;
+      const pick = target.closest<HTMLButtonElement>(".challenge-play")?.dataset.index;
+      const challenge = pick === undefined ? undefined : this.shown[Number(pick)];
+      if (!day && !challenge) return;
       this.close();
-      deps.playDay(day);
+      if (day) deps.playDay(day);
+      else if (challenge) deps.playChallenge(challenge);
     });
     // A click on the backdrop — not the panel — dismisses it, as a modal should.
     this.overlay.addEventListener("click", (e) => {
@@ -118,6 +126,25 @@ export class StatsDialog {
     wrap.className = "archive-cell";
     wrap.appendChild(this.archive(stats, today));
     nodes.push(heading("dt", "archive-cell", "Last 4 weeks"), wrap);
+
+    this.shown = loadChallenges();
+    if (this.shown.length > 0) {
+      nodes.push(heading("dt", "stats-group challenges-head", "Challenges received"));
+      this.shown.forEach((c, i) => {
+        const row = challengeRow(c, today);
+        const dt = heading("dt", "challenge-board", row.board);
+        const dd = heading("dd", "challenge-standing", row.standing);
+        dd.classList.toggle("is-beaten", row.standing.endsWith("✓"));
+        const play = document.createElement("button");
+        play.type = "button";
+        play.className = "challenge-play";
+        play.dataset.index = String(i);
+        play.textContent = "Play";
+        play.setAttribute("aria-label", `Play ${row.board}`);
+        dd.appendChild(play);
+        nodes.push(dt, dd);
+      });
+    }
     this.list.replaceChildren(...nodes);
   }
 

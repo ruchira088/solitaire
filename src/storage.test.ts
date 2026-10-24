@@ -462,6 +462,22 @@ describe("with working storage", () => {
     expect(store.loadStats()).toMatchObject({ vegasBank: 0, vegasGames: 0 });
   });
 
+  it("keeps the challenges received, and the reset wipes them too", () => {
+    const c = {
+      seed: 5, drawCount: 1 as const, vegas: false, score: 500, moves: 90,
+      elapsedMs: 120_000, received: "2026-10-24", best: 0,
+    };
+    store.saveChallenges([c]);
+    expect(store.loadChallenges()).toEqual([c]);
+    store.resetStats();
+    expect(store.loadChallenges()).toEqual([]);
+  });
+
+  it("reads an unparseable challenge list as empty", () => {
+    mem.setItem("solitaire-challenges", "{not json");
+    expect(store.loadChallenges()).toEqual([]);
+  });
+
   describe("currentDailyStreak", () => {
     /** The stored run, as left by winning `day`. */
     const after = (day: string, run: number): ReturnType<Store["loadStats"]> => {

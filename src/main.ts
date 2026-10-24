@@ -26,6 +26,7 @@ import {
 import {
   clearGame,
   currentDailyStreak,
+  loadChallenges,
   loadGame,
   loadStats,
   readItem,
@@ -33,6 +34,7 @@ import {
   recordGameStart,
   recordVegas,
   recordWin,
+  saveChallenges,
   saveGame,
   Stats,
   writeItem,
@@ -78,6 +80,7 @@ import { ARCHIVE_WINDOW, StatsDialog } from "./statsDialog";
 import { WinPanel } from "./winPanel";
 import { Preferences } from "./preferences";
 import { StartChoice, StartOverlay } from "./startOverlay";
+import { Challenge, receiveChallenge, recordBoardWin } from "./challenges";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -420,7 +423,7 @@ function autoStep(): void {
 function startCelebration(): void {
   if (celebration.active) return;
   clearGame(); // a finished game shouldn't resume on the next load
-  // The solver's win is the solver's: it banks nothing.
+  // The solver's win is the solver's: it banks nothing and beats nobody.
   winRecord = demoGame
     ? null
     : recordWin({
@@ -431,7 +434,11 @@ function startCelebration(): void {
         // Only today's extends the streak; an archived win just ticks that day off.
         daily: dailyOfCurrentGame(),
       });
-  if (!demoGame && game.vegas) recordVegas(game.vegasDollars());
+  if (!demoGame) {
+    if (game.vegas) recordVegas(game.vegasDollars());
+    const board = { seed: game.seed, drawCount: game.drawCount, vegas: game.vegas };
+    saveChallenges(recordBoardWin(loadChallenges(), board, game.score));
+  }
   syncDailyButton();
   if (timerStart !== null) {
     elapsedFrozen += performance.now() - timerStart;
@@ -599,8 +606,8 @@ function beginGame(deal: () => void): void {
   invalidate();
   cursor = null;
   held = null;
-  // Before `deal`, so a caller that deals a particular board — the replay — can set
-  // the rules it is played under.
+  // Before `deal`, so a caller that deals a particular board — a challenge — can
+  // set the rules that board was scored under.
   game.vegas = vegasNext;
   deal();
   applyEasy(false); // the assist doesn't carry over to the next game
@@ -695,6 +702,16 @@ function syncDailyButton(): void {
 /** This board, as `share.ts` names it for a link. */
 function dealLink(): DealLink {
   return { code: encodeSeed(game.seed), drawCount: game.drawCount, vegas: game.vegas };
+}
+
+/** Play a board someone sent you, under the draw count and rules it was scored with. */
+function playChallenge(c: Challenge): void {
+  if (busy || autoCompleting || input.drag) return;
+  beginGame(() => {
+    game.vegas = c.vegas;
+    game.deal(c.seed);
+    setDrawCount(c.drawCount);
+  });
 }
 
 /** The board is still untouched, so its rules can still be changed. */
@@ -1506,6 +1523,7 @@ const winPanel = new WinPanel({ newGame, restart: restartDeal });
 const statsDialog = new StatsDialog({
   today: todayKey,
   playDay: playArchivedDay,
+  playChallenge,
   afterReset: syncDailyButton,
   vegas: { next: vegasShown, toggle: toggleVegas },
 });
@@ -1526,6 +1544,18 @@ if (challenge) {
       dailyKey: dailyDayForSeed(game.seed, todayKey()),
       todayKey: todayKey(),
       vegas: game.vegas,
+    }),
+  );
+  // Filed straight away, so the score stays listed in the stats dialog after the
+  // start screen has gone — whether or not the challenge is taken up now. A resumed
+  // board isn't the one the link named unless the seeds match, hence the link's rules.
+  saveChallenges(
+    receiveChallenge(loadChallenges(), {
+      ...challenge,
+      seed: urlSeed!,
+      drawCount: urlDraw ?? 1,
+      vegas: params.get("vegas") === "1",
+      received: todayKey(),
     }),
   );
 }

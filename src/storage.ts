@@ -2,6 +2,7 @@
 // best-effort — storage can be absent (private browsing) or full, in which case the
 // game simply runs without persistence.
 
+import { Challenge, parseChallenges } from "./challenges";
 import { GameState, parseGameState } from "./game";
 import { isDailyKey } from "./rng";
 
@@ -9,6 +10,7 @@ const GAME_KEY = "solitaire-game";
 const STATS_KEY = "solitaire-stats";
 /** Pre-dates `solitaire-stats`, which absorbed it; read once to keep an old record. */
 const BEST_KEY = "solitaire-best";
+const CHALLENGES_KEY = "solitaire-challenges";
 
 /** Bumped whenever the meaning of `GameState` changes; older saves are discarded
  *  rather than migrated. */
@@ -227,9 +229,11 @@ function saveStats(s: Stats): void {
   writeItem(STATS_KEY, JSON.stringify({ v: STATS_SCHEMA, ...s }));
 }
 
-/** Both keys, or resetting would resurrect the old best score from the pre-stats one. */
+/** All three keys: the legacy best, or resetting would resurrect the old best score
+ *  from the pre-stats one; and the challenges, whose "beaten" marks are part of the
+ *  record being wiped. */
 export function resetStats(): void {
-  for (const key of [STATS_KEY, BEST_KEY]) {
+  for (const key of [STATS_KEY, BEST_KEY, CHALLENGES_KEY]) {
     try {
       localStorage.removeItem(key);
     } catch {
@@ -320,4 +324,20 @@ export function recordVegas(dollars: number): Stats {
   s.vegasGames += 1;
   saveStats(s);
   return s;
+}
+
+// ---- Challenges received ---------------------------------------------------
+
+export function loadChallenges(): Challenge[] {
+  const raw = readItem(CHALLENGES_KEY);
+  if (raw === null) return [];
+  try {
+    return parseChallenges(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+export function saveChallenges(list: Challenge[]): void {
+  writeItem(CHALLENGES_KEY, JSON.stringify(list));
 }

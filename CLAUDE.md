@@ -58,7 +58,7 @@ visual or behavioural, run the app and look at it (see Verifying).
 gate CI ahead of every deploy (the `build-and-typecheck` job).
 
 - **Vitest covers the pure modules only**: `game`, `cards`, `rng`, `layout`, `storage`,
-  `share`, `statsView`, `cursor`, `solver`, `theme`, `keyboard`,
+  `share`, `statsView`, `cursor`, `solver`, `theme`, `challenges`, `keyboard`,
   `deadCheck`, `replay`, and `tooltip.ts`'s `parseTip`. Canvas/DOM modules aren't
   mocked — that only buys assertions about the mock.
 - **`npm run smoke` covers the rest**, against the *built* bundle in real Chrome, every
@@ -96,8 +96,9 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/theme.ts` | Theme registry (felt, placeholders, card backs) and the Auto preference |
 | `src/preferences.ts` | Theme, sound, toolbar fold, rail side: the buttons and their saved values |
 | `src/sound.ts` / `src/haptics.ts` | WebAudio effects; the vibration tick that rides on them |
-| `src/storage.ts` | `localStorage`: preferences, the game save, stats |
+| `src/storage.ts` | `localStorage`: preferences, the game save, stats, received challenges |
 | `src/share.ts` | The shared result's text, links and `win=` payload — **pure** |
+| `src/challenges.ts` | Challenge links opened, and whether they've been beaten — **pure** |
 | `src/statsView.ts` | The stats dialog's rows and formatting — **pure** |
 | `src/statsDialog.ts` / `src/winPanel.ts` / `src/startOverlay.ts` | The three DOM panels |
 | `src/cursor.ts` | Keyboard cursor: navigation and spoken descriptions — **pure** |
@@ -177,7 +178,7 @@ logic, rendering, animation, and input kept cleanly separated.
 - **A winnable deal is screened, not generated**, at the current draw count, and never
   under Vegas.
 - **"Show a solution" replays a line from the *deal*, and nothing it does counts**
-  (`demoGame`: no start, save, win or Vegas settlement; no auto-complete
+  (`demoGame`: no start, save, win, Vegas settlement or challenge mark; no auto-complete
   sweep under it). Escape re-deals the same board fresh.
 
 → [solver](docs/decisions/solver.md)
@@ -186,7 +187,8 @@ logic, rendering, animation, and input kept cleanly separated.
 
 - **A shared win links back with its result attached, and the address bar never keeps
   it.** `parseResult` treats `win=` as untrusted; `dealUrl()` deletes `win`, and only
-  `shareUrl()` adds it back.
+  `shareUrl()` adds it back. Every challenge opened is kept (`challenges.ts`) and marked
+  beaten per board — seed, draw count *and* rules.
   → [sharing](docs/decisions/sharing.md)
 - **The archive can't back-fill a streak**: `recordWin` takes
   `daily: { key, extendsStreak }` and only main.ts decides which case it is.
@@ -241,6 +243,7 @@ All through `src/storage.ts`, best-effort.
 - **Lifetime stats** (`solitaire-stats`, `STATS_SCHEMA` only for changes of *meaning*):
   a deal is *played* from its first move; `pending` persists across sessions; every
   field is sanitised on read; the daily streak is read through `currentDailyStreak`.
+- **Challenges received** (`solitaire-challenges`), newest 20; Reset stats clears them.
 
 → [persistence](docs/decisions/persistence.md), [daily and stats](docs/decisions/daily-and-stats.md)
 

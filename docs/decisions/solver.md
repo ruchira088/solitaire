@@ -108,7 +108,7 @@
   still landing. Each move goes through `playMove` / `input.drawStock`, the paths a
   player's take.
   `demoGame` is what keeps it out of the record: no `recordGameStart`, no `persist`, no
-  `recordWin`, no Vegas settlement, and `evaluateBoard`
+  `recordWin`, no Vegas settlement, no challenge marked beaten, and `evaluateBoard`
   starts no auto-complete sweep under it (the sweep would take the cards the line's
   next moves are about). `boardBusy()` includes `replay.active`, so nothing else moves
   the board meanwhile. Escape stops it and re-deals the same board fresh — the board

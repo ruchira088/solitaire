@@ -35,8 +35,9 @@ Results add up across games in a bank.
   the same reason the draw toggle is refused mid-game under Vegas: the draw count sets
   the pass limit.
 - **Vegas is part of what a link means.** `dealUrl` writes `vegas=1` (absent when off,
-  like Draw 1), and `boardLine` names it. A link names its rules; only an unnamed fresh
-  boot falls back to the preference.
+  like Draw 1), `boardLine` names it, and challenges compare only within the same
+  rules. A link names its rules; only an unnamed fresh boot falls back to the
+  preference.
 - **The solver doesn't model the pass limit, so it doesn't answer.** `canAnalyse` is
   false under Vegas — a search that recycles freely could call a dead board winnable —
   which takes down the dead-board warning and makes 💡 say why. 🎲 refuses while the

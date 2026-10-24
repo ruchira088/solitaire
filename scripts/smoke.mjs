@@ -371,6 +371,20 @@ try {
   check("a live deal shows no warning",
     await page.evaluate(() => document.getElementById("toast").hidden));
 
+  // The challenge outlives the start screen: it is filed the moment the link opens, and
+  // the stats dialog lists it with the score to beat and a way back to the board.
+  await page.click("#btn-stats");
+  const filed = await page.evaluate(() => ({
+    board: document.querySelector(".challenge-board")?.textContent,
+    standing: document.querySelector(".challenge-standing")?.textContent,
+  }));
+  check(
+    "the challenge is kept in the stats dialog",
+    filed.board === "Deal DWLVHU · Draw 1" && filed.standing?.startsWith("527 to beat"),
+    JSON.stringify(filed),
+  );
+  await page.keyboard.press("Escape");
+
   // A *deep* search, specifically. Seed 8 can't be decided inside the fast budget, so
   // asking about it escalates to the 2M-node pass — several thousand levels down, on a
   // worker thread. That is exactly where the search used to die: it recursed once per

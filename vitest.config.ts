@@ -27,6 +27,7 @@ export default defineConfig({
         "src/cursor.ts",
         "src/solver.ts",
         "src/theme.ts",
+        "src/challenges.ts",
         "src/keyboard.ts",
         "src/deadCheck.ts",
         "src/replay.ts",

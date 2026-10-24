@@ -47,6 +47,8 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   a solution**: the deal is dealt again and the solver plays a winning line out, move
   by move, so you can see where the game turned. `Esc` stops it and hands you the
   same deal, fresh. Nothing it does counts as your game.
+- 🥊 **Challenges kept** — every challenge link you open is filed in the statistics
+  dialog with the score to beat, a **Play** button, and a ✓ once you've beaten it.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
@@ -210,7 +212,7 @@ does.
 
 The dialog is also where **Vegas rules** are switched on — they apply to the deal on
 screen if you haven't moved yet, and from the next deal otherwise — and where the
-Vegas bank is kept.
+Vegas bank and the challenges you've been sent are listed.
 
 ![Statistics](screenshots/stats.png)
 
@@ -243,6 +245,11 @@ ride in `&win=`, and whether it was a daily is worked out from the seed. Accepti
 challenge clears the result from the address bar, so the link you share back is yours.
 Already part-way through that same deal? The button offers to resume it instead of
 dealing over your progress.
+
+Every challenge you open is kept, newest first, in the **📊** statistics dialog: the
+board, the score to beat, a **Play** button, and — once you've won that board for more —
+a ✓ with the score that beat it. It's a leaderboard without a server; the links are
+the transport.
 
 ---
 
@@ -369,6 +376,7 @@ src/
   solver.worker.ts  runs the solver off the main thread
   deadCheck.ts   the dead-board warning: when to ask, which answers to believe
   replay.ts      paces a winning line out on the board, move by move
+  challenges.ts  the challenge links you've opened, and whether you've beaten them (pure)
   preferences.ts theme, sound, toolbar fold and rail side: buttons + saved values
   haptics.ts     the vibration tick that rides along with the card sounds
   statsDialog.ts / winPanel.ts / startOverlay.ts   the three DOM panels
