@@ -39,6 +39,7 @@ npm run typecheck     # tsc --noEmit (strict mode)
 npm test              # vitest run — the pure-logic suite
 npm run test:watch    # vitest in watch mode
 npm run build         # tsc + vite build → dist/
+npm run size          # gzipped size budget per built asset (needs a build; CI runs it)
 npm run preview       # serve the production build
 npm run smoke         # boot dist/ in Chrome and check the game works (needs a build)
 npm run screenshots   # reshoot screenshots/*.png (one-off; output is committed)
@@ -49,7 +50,7 @@ visual or behavioural, run the app and look at it (see Verifying).
 
 ### Tests
 
-`npm run lint`, `npm test`, `npm run typecheck` and `npm run smoke` all
+`npm run lint`, `npm test`, `npm run typecheck`, `npm run size` and `npm run smoke` all
 gate CI ahead of every deploy (the `build-and-typecheck` job).
 
 - **Vitest covers the pure modules only**: `game`, `cards`, `rng`, `layout`, `storage`,
@@ -66,7 +67,7 @@ gate CI ahead of every deploy (the `build-and-typecheck` job).
   latches off after a failed write. `vitest.config.ts` stays separate from
   `vite.config.ts`.
 
-→ [testing](docs/decisions/testing.md)
+→ [testing](docs/decisions/testing.md) (including the size budget)
 
 ## Architecture
 

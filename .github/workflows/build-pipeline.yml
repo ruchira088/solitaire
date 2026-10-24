@@ -45,6 +45,12 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      # Zero runtime dependencies is a weight constraint too, and nothing else measures
+      # it: a stray import of something large passes lint, types and tests untouched.
+      # Each emitted asset is gzipped and held to the ceiling in scripts/check-size.mjs.
+      - name: Check the bundle size budget
+        run: npm run size
+
       # `npm test` is the pure-logic suite by design, which leaves render/input/
       # animation/main -- over half the source -- checked by nothing but tsc. This
       # boots the bundle just built in the runner's preinstalled Chrome and asserts

@@ -241,8 +241,9 @@ npm run dev      # start the dev server with hot reload (opens the browser)
 Production build & preview:
 
 ```bash
-npm run build    # type-check + bundle to dist/  (~13 kB gzipped)
+npm run build    # type-check + bundle to dist/  (~33 kB gzipped, with the solver worker)
 npm run preview  # serve the production build locally
+npm run size     # hold each built asset to its gzipped budget (CI runs this)
 ```
 
 Tests:
@@ -343,6 +344,8 @@ public/
 art/
   cards-src/     the original court-card SVGs the WebPs are rendered from
 scripts/
+  smoke.mjs             boots the built bundle in Chrome and checks it plays (CI)
+  check-size.mjs        gzipped size budget per built asset (CI)
   rasterize-cards.mjs   one-off court-card rasteriser
 ```
 
@@ -482,7 +485,8 @@ ENVIRONMENT=production npm run deploy   # production → solitaire.ruchij.com
 - **No runtime dependencies** — the shipped bundle is pure vanilla JS/Canvas, and
   `package.json` has no `dependencies` block at all. Everything installed
   (TypeScript, Vite, Vitest, plus SVGO and `playwright-core` for the smoke test and
-  the one-off card-art and screenshot tooling) is build-time only.
+  the one-off card-art and screenshot tooling) is build-time only — and
+  `npm run size` holds the bundle to a gzipped budget, so it stays that way.
 
 ## Credits
 

@@ -54,3 +54,11 @@ Conventions worth keeping:
 - `vitest.config.ts` is kept separate from `vite.config.ts`: `defineConfig` from
   `"vite"` doesn't type a `test` key, and merging them would put test config on the
   path of every production build.
+
+## The size budget
+
+- **`npm run size` holds each built asset to a gzipped ceiling** (`check-size.mjs`),
+  roughly 15% over what it measured when last set, and runs in CI after the build.
+  A budget that matches no asset, or an emitted script or stylesheet with no budget,
+  fails too — a renamed or split chunk must not quietly fall out of the check.
+  Raising a ceiling is allowed; it should be a decision made with the number in view.
