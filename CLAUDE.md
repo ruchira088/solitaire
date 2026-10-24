@@ -59,7 +59,7 @@ gate CI ahead of every deploy (the `build-and-typecheck` job).
 
 - **Vitest covers the pure modules only**: `game`, `cards`, `rng`, `layout`, `storage`,
   `share`, `statsView`, `cursor`, `solver`, `theme`, `keyboard`,
-  `deadCheck`, and `tooltip.ts`'s `parseTip`. Canvas/DOM modules aren't
+  `deadCheck`, `replay`, and `tooltip.ts`'s `parseTip`. Canvas/DOM modules aren't
   mocked — that only buys assertions about the mock.
 - **`npm run smoke` covers the rest**, against the *built* bundle in real Chrome, every
   assertion through the DOM and every action through a toolbar button or key. Its
@@ -81,7 +81,7 @@ logic, rendering, animation, and input kept cleanly separated.
 
 | File | Responsibility |
 | --- | --- |
-| `src/main.ts` | Bootstrap, HiDPI canvas sizing, the game loop, deal / auto-complete / win sequences, toolbar wiring |
+| `src/main.ts` | Bootstrap, HiDPI canvas sizing, the game loop, deal / auto-complete / win / replay sequences, toolbar wiring |
 | `src/game.ts` | Klondike rules, draw modes, Vegas passes, undo snapshots, win / auto-complete — **pure, no DOM** |
 | `src/cards.ts` | Card model, deck construction, Fisher–Yates shuffle |
 | `src/rng.ts` | Seeded PRNG, deal codes + the daily deal's date→seed — **a frozen wire format** |
@@ -102,9 +102,10 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/statsDialog.ts` / `src/winPanel.ts` / `src/startOverlay.ts` | The three DOM panels |
 | `src/cursor.ts` | Keyboard cursor: navigation and spoken descriptions — **pure** |
 | `src/tooltip.ts` | The custom tooltip on every `data-tip` trigger; `parseTip` is **pure** |
-| `src/solver.ts` | Can this position be won? Iterative DFS — **pure** |
+| `src/solver.ts` | Can this position be won? Iterative DFS; `toGameLine` for replays — **pure** |
 | `src/solver.worker.ts` | Runs the solver off the main thread |
 | `src/deadCheck.ts` | The dead-board warning's bookkeeping, behind an injected `ask` |
+| `src/replay.ts` | Paces a winning line out on the board |
 
 ### Key design invariants
 
@@ -175,6 +176,9 @@ logic, rendering, animation, and input kept cleanly separated.
 - **A hint is the first move of a line that wins, or it is nothing.**
 - **A winnable deal is screened, not generated**, at the current draw count, and never
   under Vegas.
+- **"Show a solution" replays a line from the *deal*, and nothing it does counts**
+  (`demoGame`: no start, save, win or Vegas settlement; no auto-complete
+  sweep under it). Escape re-deals the same board fresh.
 
 → [solver](docs/decisions/solver.md)
 
@@ -200,8 +204,8 @@ logic, rendering, animation, and input kept cleanly separated.
   hint) and differ in colour, weight *and* extent.
 - **The ☰ toggle only exists when the bar wraps**, measured with the button in flow; a
   hidden toolbar still leaves a fake-felt strip, on purpose.
-- **Dark-in-every-theme surfaces re-declare the dark button palette**: the win panel
-  and the stats panel.
+- **Dark-in-every-theme surfaces re-declare the dark button palette**: the win panel,
+  the stats panel, and the toast's action button.
 
 → [themes and chrome](docs/decisions/themes-and-chrome.md)
 
@@ -212,7 +216,7 @@ logic, rendering, animation, and input kept cleanly separated.
 **Busy, sweeps and the win**
 
 - **`boardBusy()` is the one answer to "are the cards moving?"** — the deal, the
-  auto-complete sweep and the cascade. Every in-place mutation asks it;
+  auto-complete sweep, the cascade and the replay. Every in-place mutation asks it;
   actions that *replace* the board don't. `Game.autoCompleteSource()` is the single
   definition of the sweep's order, and 🏠 is that sweep started early, ending through
   `onChange` only when it moved something. → [board busy](docs/decisions/board-busy.md)
@@ -255,7 +259,9 @@ No `chromium-cli` or Playwright browsers are installed here, but system Chrome
 is. Drive a Vite dev server with Playwright pointed at the Chrome executable
 (`executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'`),
 navigate, click `#start-btn` to deal, and screenshot. Always check the browser
-console for errors before declaring success.
+console for errors before declaring success. Check **both** a dark and a light theme
+and a phone viewport for anything drawn over the board — a dark-on-dark button was
+only ever caught that way.
 
 ### The README screenshots
 

@@ -1,8 +1,8 @@
 // Bootstrap: canvas + HiDPI scaling, the game loop, the deal / auto-complete /
 // win animations, and the toolbar wiring. The parts with rules of their own live
 // beside it — key precedence in keyboard.ts, the dead-board warning's lifetime in
-// deadCheck.ts — and the two DOM panels that are self-contained in statsDialog.ts and
-// startOverlay.ts.
+// deadCheck.ts, the replay's pacing in replay.ts — and the two DOM panels that are
+// self-contained in statsDialog.ts and startOverlay.ts.
 
 import "./styles.css";
 import { Card } from "./cards";
@@ -73,6 +73,7 @@ import {
 } from "./cursor";
 import { Command, keyCommand } from "./keyboard";
 import { DeadCheck } from "./deadCheck";
+import { Replay } from "./replay";
 import { ARCHIVE_WINDOW, StatsDialog } from "./statsDialog";
 import { WinPanel } from "./winPanel";
 import { Preferences } from "./preferences";
@@ -118,6 +119,10 @@ let countedPlayed = false;
  *  this only changes before the first move — switching rules part-way through would be
  *  a way to buy passes. */
 let vegasNext = false;
+/** The board on screen is the solver playing a winning line, not the player. Nothing
+ *  it does is recorded — not a start, a win, a save or a Vegas result — and it only
+ *  ends with a new board. */
+let demoGame = false;
 /** The board needs repainting. Solitaire spends most of its life as a completely
  *  static picture while the player thinks, and redrawing it 120 times a second to
  *  produce an identical frame is pure battery. So the loop paints only when something
@@ -240,6 +245,8 @@ const el = {
   winnable: document.getElementById("btn-winnable") as HTMLButtonElement,
   daily: document.getElementById("btn-daily") as HTMLButtonElement,
   toast: document.getElementById("toast") as HTMLElement,
+  toastText: document.getElementById("toast-text") as HTMLElement,
+  toastAction: document.getElementById("toast-action") as HTMLButtonElement,
 };
 
 const prefs = new Preferences({
@@ -264,7 +271,7 @@ const prefs = new Preferences({
  *  deliberately don't ask: the win panel offers two of them while the cascade is still
  *  running, and starting a new game is always allowed to interrupt. */
 function boardBusy(): boolean {
-  return busy || celebration.active || autoCompleting;
+  return busy || celebration.active || autoCompleting || replay.active;
 }
 
 /** The toolbar clock, written only when it actually changes. */
@@ -334,7 +341,9 @@ function frame(now: number): void {
 function evaluateBoard(): void {
   if (game.isWon()) {
     startCelebration();
-  } else if (game.canAutoComplete() && !autoCompleting) {
+  } else if (game.canAutoComplete() && !autoCompleting && !demoGame) {
+    // Not under a replay: the line it plays already ends with every card home, and a
+    // sweep running underneath would take the cards its next moves are about.
     autoCompleting = true;
     autoStep();
   }
@@ -411,15 +420,18 @@ function autoStep(): void {
 function startCelebration(): void {
   if (celebration.active) return;
   clearGame(); // a finished game shouldn't resume on the next load
-  winRecord = recordWin({
-    score: game.score,
-    elapsedMs: elapsedNow(),
-    moves: game.moves,
-    // Which day's board this is — today's, an archived one, or not a daily at all.
-    // Only today's extends the streak; an archived win just ticks that day off.
-    daily: dailyOfCurrentGame(),
-  });
-  if (game.vegas) recordVegas(game.vegasDollars());
+  // The solver's win is the solver's: it banks nothing.
+  winRecord = demoGame
+    ? null
+    : recordWin({
+        score: game.score,
+        elapsedMs: elapsedNow(),
+        moves: game.moves,
+        // Which day's board this is — today's, an archived one, or not a daily at all.
+        // Only today's extends the streak; an archived win just ticks that day off.
+        daily: dailyOfCurrentGame(),
+      });
+  if (!demoGame && game.vegas) recordVegas(game.vegasDollars());
   syncDailyButton();
   if (timerStart !== null) {
     elapsedFrozen += performance.now() - timerStart;
@@ -477,11 +489,12 @@ function showWinPanel(): void {
   const result: SharedResult = { score: game.score, moves: game.moves, elapsedMs: elapsedNow() };
   prefs.syncBarHeight();
   winPanel.show({
+    demo: demoGame,
     score: game.score,
     record: winRecord?.isRecord ?? false,
     best: winRecord ? winRecord.stats.bestScore : game.score,
     dailyStreak: daily?.streak ?? 0,
-    vegas: game.vegas ? { game: game.vegasDollars(), bank: loadStats().vegasBank } : null,
+    vegas: game.vegas && !demoGame ? { game: game.vegasDollars(), bank: loadStats().vegasBank } : null,
     shareText: shareText({
       ...result,
       url: shareUrl(location.href, dealLink(), result),
@@ -541,7 +554,7 @@ function elapsedNow(): number {
 /** Autosave. The save exists exactly while there is an in-progress game worth
  *  coming back to, so New Game and winning clear it simply by falling through here. */
 function persist(): void {
-  if (!started || game.moves === 0 || game.isWon() || celebration.active) return;
+  if (!started || demoGame || game.moves === 0 || game.isWon() || celebration.active) return;
   saveGame(game.serialize(), elapsedNow());
 }
 
@@ -550,7 +563,7 @@ function onChange(): void {
   bumpBoard();
   if (cursor) cursor = clampCursor(game, cursor);
   syncSpareLayout();
-  if (!countedPlayed && game.moves > 0) {
+  if (!countedPlayed && game.moves > 0 && !demoGame) {
     countedPlayed = true;
     recordGameStart();
   }
@@ -574,6 +587,8 @@ function beginGame(deal: () => void): void {
     if (game.vegas) recordVegas(game.vegasDollars());
   }
   countedPlayed = false;
+  replay.stop();
+  demoGame = false;
   celebration.stop();
   celebStarted = false;
   winPanel.hide();
@@ -584,7 +599,9 @@ function beginGame(deal: () => void): void {
   invalidate();
   cursor = null;
   held = null;
-  game.vegas = vegasNext; // the mode, like the draw count: it outlives the old board
+  // Before `deal`, so a caller that deals a particular board — the replay — can set
+  // the rules it is played under.
+  game.vegas = vegasNext;
   deal();
   applyEasy(false); // the assist doesn't carry over to the next game
   bumpBoard(); // after the deal: the check it schedules is about the new board
@@ -788,12 +805,27 @@ function addTempStack(): void {
 
 let toastTimer = 0;
 
+/** Something the toast's line offers to do. One at most: the toast is a message with
+ *  a way forward, not a menu. */
+interface ToastAction {
+  label: string;
+  run: () => void;
+}
+let toastRun: (() => void) | null = null;
+
+function setToast(message: string, action?: ToastAction): void {
+  el.toastText.textContent = message;
+  el.toastAction.hidden = !action;
+  el.toastAction.textContent = action?.label ?? "";
+  toastRun = action?.run ?? null;
+  el.toast.hidden = false;
+}
+
 /** A short-lived line over the board, also spoken. Used for answers that have nowhere
  *  permanent to live — the solver's verdicts, mostly. */
-function showToast(message: string, ms = 6000): void {
+function showToast(message: string, ms = 6000, action?: ToastAction): void {
   window.clearTimeout(toastTimer);
-  el.toast.textContent = message;
-  el.toast.hidden = false;
+  setToast(message, action);
   announce(message);
   toastTimer = window.setTimeout(settleToast, ms);
 }
@@ -803,10 +835,10 @@ function showToast(message: string, ms = 6000): void {
 function settleToast(): void {
   toastTimer = 0;
   if (deadCheck.warned) {
-    el.toast.textContent = DEAD_BOARD;
-    el.toast.hidden = false;
+    setToast(DEAD_BOARD, SHOW_SOLUTION);
   } else {
     el.toast.hidden = true;
+    toastRun = null;
   }
 }
 
@@ -890,6 +922,9 @@ const RESCUES = "undo, turn on Easy mode, add a ✦ stack, or start a new game."
  *  same escalated search on demand — on a dead board it says so too. */
 const DEAD_BOARD = `🪦 This deal can't be won from here — ${RESCUES}`;
 
+/** Offered alongside a dead board: watch the solver win this deal from the start. */
+const SHOW_SOLUTION: ToastAction = { label: "▶ Show a solution", run: () => showSolution() };
+
 /** A hint is only ever a move off a line that actually wins, so the two answers that
  *  aren't `solved` have no move to offer and say so rather than falling back to a
  *  plausible-looking one. A guess dressed as a hint is the one thing this must not do:
@@ -945,7 +980,14 @@ function requestHint(): void {
       done("🤔 The board changed while I was looking — press 💡 again.");
       return;
     }
-    done(hintMessage(e.data));
+    const message = hintMessage(e.data);
+    if (e.data.outcome === "unwinnable") {
+      solverBusy = false;
+      syncSolverButtons();
+      showToast(message, 9000, SHOW_SOLUTION);
+      return;
+    }
+    done(message);
   };
   worker.onerror = () => {
     // A worker that won't start shouldn't look like a verdict.
@@ -1040,6 +1082,86 @@ function hintMessage(r: SolveResponse): string {
   hint = { move: r.next, version: boardVersion };
   invalidate();
   return `💡 Try: ${describeHint(game, r.next.from, r.next.fromIndex, r.next.to)}.`;
+}
+
+// ---- Showing a winning line -------------------------------------------------
+// The answer to a dead board that isn't "undo": watch the solver win this same deal
+// from the start. It solves the *opening* position, not this one — this one is dead,
+// which is why the offer was made. The board is re-dealt (so the game in progress is
+// abandoned, as Restart would), then the line is played out move by move through the
+// same paths a player's moves take. Nothing it does is recorded; see `demoGame`.
+
+const replay = new Replay({
+  step: (m) =>
+    m.from.kind === "stock" || m.to.kind === "stock"
+      ? input.drawStock()
+      : playMove(m.from, m.fromIndex, m.to),
+  settled: () => !busy && !animator.isAnimating() && !autoCompleting,
+  onEnd: (finished) => {
+    if (!finished) showToast("🤔 The line went wrong part-way — Restart to play it yourself.");
+    else settleToast();
+  },
+});
+
+function showSolution(): void {
+  if (solverBusy || celebration.active || input.drag) return;
+  // The opening position, under the rules the solver models.
+  const opening = new Game(game.drawCount, game.seed).serialize();
+  if (!canAnalyse(opening)) return;
+
+  solverBusy = true;
+  syncSolverButtons();
+  showToast("▶ Looking for a winning line from the deal…", 60_000);
+  const worker = getSolverWorker();
+  const done = (message: string): void => {
+    solverBusy = false;
+    syncSolverButtons();
+    showToast(message);
+  };
+  const seed = game.seed;
+  worker.onmessage = (e: MessageEvent<SolveResponse>) => {
+    if (game.seed !== seed) {
+      done("🤔 The deal changed while I was looking.");
+      return;
+    }
+    const { outcome, line } = e.data;
+    if (outcome !== "solved" || !line) {
+      done(
+        outcome === "unwinnable"
+          ? "🪦 Not even from the start — this deal can't be won at all."
+          : "🤔 Couldn't find a winning line for this deal in time.",
+      );
+      return;
+    }
+    solverBusy = false;
+    syncSolverButtons();
+    beginGame(() => {
+      game.vegas = false; // the line was found under the rules the solver models
+      game.restartDeal();
+    });
+    demoGame = true;
+    replay.start(line);
+    updateStats();
+    showToast(`▶ Playing a ${line.length}-move win — press Esc to stop.`, 86_400_000);
+  };
+  worker.onerror = () => {
+    solverWorker = null;
+    done("🤔 Couldn't run the search.");
+  };
+  const request: SolveRequest = {
+    state: opening,
+    maxNodes: 200_000,
+    escalateNodes: 2_000_000,
+    wantLine: true,
+  };
+  worker.postMessage(request);
+}
+
+/** Esc during a replay: stop watching and get the deal back, fresh, to play. */
+function stopSolution(): void {
+  replay.stop();
+  beginGame(() => game.restartDeal());
+  showToast("Your turn — same deal, from the start.", 3000);
 }
 
 // ---- Keyboard play ---------------------------------------------------------
@@ -1239,6 +1361,7 @@ el.restart.addEventListener("click", restartDeal);
 el.hint.addEventListener("click", requestHint);
 el.winnable.addEventListener("click", newWinnableGame);
 el.daily.addEventListener("click", playDaily);
+el.toastAction.addEventListener("click", () => toastRun?.());
 el.easy.addEventListener("click", toggleEasy);
 el.addStack.addEventListener("click", addTempStack);
 el.home.addEventListener("click", sendAllHome);
@@ -1276,10 +1399,11 @@ function focusOwnsActivation(): boolean {
   return active.closest("button, a[href], input, select, textarea, [contenteditable]") !== null;
 }
 
-/** Escape, in order of what it is most likely to mean: close the dialog, put down
- *  what the cursor holds, cancel a drag. */
+/** Escape, in order of what it is most likely to mean: close the dialog, stop the
+ *  replay, put down what the cursor holds, cancel a drag. */
 function escape(): void {
   if (statsDialog.isOpen()) statsDialog.close();
+  else if (replay.active) stopSolution();
   else if (held) releaseHeld("put down");
   else input.cancelDrag();
 }

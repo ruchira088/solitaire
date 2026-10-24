@@ -29,6 +29,7 @@ export default defineConfig({
         "src/theme.ts",
         "src/keyboard.ts",
         "src/deadCheck.ts",
+        "src/replay.ts",
       ],
       reporter: ["text", "html"],
       reportsDirectory: "coverage",

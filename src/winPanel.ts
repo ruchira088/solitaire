@@ -9,6 +9,8 @@
 import { fmtDollars } from "./statsView";
 
 export interface WinView {
+  /** The solver played this one (the replay): no score of yours, nothing to share. */
+  demo: boolean;
   score: number;
   /** Beat the best score; shown as its own line and colour. */
   record: boolean;
@@ -25,6 +27,7 @@ const byId = <T extends HTMLElement>(id: string): T => document.getElementById(i
 
 export class WinPanel {
   private readonly overlay = byId("win-overlay");
+  private readonly title = byId("win-title");
   private readonly scoreLine = byId("win-score");
   private readonly daily = byId("win-daily");
   private readonly vegas = byId("win-vegas");
@@ -46,16 +49,20 @@ export class WinPanel {
 
   show(v: WinView): void {
     this.text = v.shareText;
-    this.scoreLine.textContent = v.record
-      ? `🏆 New best score — ${v.score}`
-      : `Score ${v.score}  ·  Best ${v.best}`;
-    this.scoreLine.classList.toggle("is-record", v.record);
+    this.title.textContent = v.demo ? "That's one way to win it" : "You Win! 🎉";
+    this.scoreLine.textContent = v.demo
+      ? "🤖 Played by the solver — Restart to try it yourself."
+      : v.record
+        ? `🏆 New best score — ${v.score}`
+        : `Score ${v.score}  ·  Best ${v.best}`;
+    this.scoreLine.classList.toggle("is-record", v.record && !v.demo);
     this.daily.hidden = v.dailyStreak === 0;
     this.daily.textContent = `📅 Daily deal · ${v.dailyStreak}-day streak`;
     this.vegas.hidden = !v.vegas;
     if (v.vegas) {
       this.vegas.textContent = `💵 Vegas ${fmtDollars(v.vegas.game)} · bank ${fmtDollars(v.vegas.bank)}`;
     }
+    this.share.hidden = v.demo; // there is no result of yours to share
     this.resetShareLabel();
     this.overlay.hidden = false;
     this.newBtn.focus(); // so Enter/Space plays again without reaching for the mouse

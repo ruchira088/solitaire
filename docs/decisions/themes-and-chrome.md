@@ -55,6 +55,9 @@ What the theme registry owns, how the three on-board highlights stay distinguish
   worth knowing: headless Chrome reports a light scheme, so `shoot-screenshots.mjs`
   pins `colorScheme: "dark"` to keep every unthemed shot what it has always been; and
   the button shows 🌓 rather than a theme's icon while on Auto.
+- **The toast's one action button carries the dark palette.** The toast is dark in
+  every theme, like the two panels, and a `.btn` inside it under a light theme came out
+  dark-on-dark — seen on a phone screenshot, not by any check.
 - **Haptics ride on the sound toggle.** `haptics.ts`'s `buzz` is called from inside
   `sound.ts`'s play functions, gated on the same `enabled` flag, so no call site has to
   remember a second effect and 🔇 means "stop this device reacting". The pulses are a

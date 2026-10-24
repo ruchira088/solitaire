@@ -95,3 +95,23 @@
   two thirds pass, so it almost always ends on the first or second try; `WINNABLE_TRIES`
   is a ceiling for when something has gone wrong, and a search that comes up empty
   leaves the board alone rather than costing the player the game they were in.
+
+- **"Show a solution" replays a line from the *deal*, and nothing it does counts.** The
+  dead-board warning (and 💡's dead answer) offers it through the toast's one action
+  button. It solves the *opening* position — this one is dead, which is why the offer
+  was made — under the rules the solver models (so `game.vegas` is forced off for the
+  replay), asks the worker for the whole line with `wantLine` (the one asker that reads
+  past `moves[0]`; `toGameLine` walks it through a real `Game` and returns null rather
+  than a line the rules refuse), re-deals through `beginGame` (abandoning the game in
+  progress, as Restart would) and hands the line to `Replay`. `Replay` only paces: it
+  waits on `settled` rather than a fixed delay, so no move is ever made under a flight
+  still landing. Each move goes through `playMove` / `input.drawStock`, the paths a
+  player's take.
+  `demoGame` is what keeps it out of the record: no `recordGameStart`, no `persist`, no
+  `recordWin`, no Vegas settlement, and `evaluateBoard`
+  starts no auto-complete sweep under it (the sweep would take the cards the line's
+  next moves are about). `boardBusy()` includes `replay.active`, so nothing else moves
+  the board meanwhile. Escape stops it and re-deals the same board fresh — the board
+  the solver advanced is not one the player should be able to finish and bank. The
+  smoke test runs it on deal R's dead position under seed 33 (deal X), which the fast
+  pass solves at once: `parseGameState` doesn't tie a board to its seed.

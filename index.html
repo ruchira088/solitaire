@@ -85,7 +85,7 @@
       <div id="a11y-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
       <!-- Transient messages over the board. Announced through the live region too,
            so the answer reaches both audiences. -->
-      <div id="toast" hidden></div>
+      <div id="toast" hidden><span id="toast-text"></span><button id="toast-action" class="btn" type="button" hidden></button></div>
       <!-- Sits over the board while the cards cascade. No backdrop, and the wrapper
            passes pointer events through, so the celebration keeps running and the
            toolbar stays usable behind it. -->

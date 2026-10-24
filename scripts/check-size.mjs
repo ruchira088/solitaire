@@ -21,9 +21,9 @@ const assets = join(dirname(fileURLToPath(import.meta.url)), "..", "dist", "asse
 
 /** Gzipped bytes allowed per asset kind, matched on the hashed file name. */
 const BUDGETS = [
-  { name: "app script", match: /^index-.*\.js$/, max: 30_600 },
-  { name: "solver worker", match: /^solver\.worker-.*\.js$/, max: 2_700 },
-  { name: "stylesheet", match: /^index-.*\.css$/, max: 4_200 },
+  { name: "app script", match: /^index-.*\.js$/, max: 34_000 },
+  { name: "solver worker", match: /^solver\.worker-.*\.js$/, max: 5_200 },
+  { name: "stylesheet", match: /^index-.*\.css$/, max: 4_400 },
 ];
 
 let files;

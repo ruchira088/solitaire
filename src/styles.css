@@ -621,6 +621,11 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   display: none;
 }
 
+/* `.btn` sets a display, which would otherwise beat the [hidden] the solver's win uses. */
+#win-share[hidden] {
+  display: none;
+}
+
 /* Confirmation that the result reached the clipboard. Green rather than the yellow
    accent, which on this panel already means "new record". */
 #win-share.is-copied {
@@ -697,6 +702,25 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   animation: toast-in 0.18s ease-out;
 }
 #toast[hidden] {
+  display: none;
+}
+/* The one way forward a message can offer (the dead board's "show a way to win it").
+   The toast itself passes pointer events through so it never blocks a card; the
+   button is the exception, and sits on its own line under the text. */
+#toast-action {
+  /* The toast is dark in every theme, so — like the two panels — it carries the dark
+     button palette; the light theme's would be dark-on-dark here. */
+  --text: #eafff3;
+  --btn-bg-1: rgba(255, 255, 255, 0.16);
+  --btn-bg-2: rgba(255, 255, 255, 0.05);
+  --btn-border: rgba(255, 255, 255, 0.16);
+  display: block;
+  margin: 8px auto 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  pointer-events: auto;
+}
+#toast-action[hidden] {
   display: none;
 }
 @keyframes toast-in {

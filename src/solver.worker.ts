@@ -2,7 +2,7 @@
 // several hundred on a stubborn one — long enough to drop frames and freeze a drag if
 // it ran inline, which is the whole reason this file exists.
 
-import { GameMove, solve, SolveResult, toGameMove } from "./solver";
+import { GameMove, solve, SolveResult, toGameLine, toGameMove } from "./solver";
 import { GameState } from "./game";
 import { Outcome } from "./solver";
 
@@ -17,6 +17,9 @@ export interface SolveRequest {
   /** Ask for the first move of the winning line, translated into board terms. The rest
    *  of the line is deliberately left behind — see below. */
   wantMove?: boolean;
+  /** Ask for the whole winning line — the replay, which actually plays it out. Only
+   *  that asks, so a hint still pays for one move. */
+  wantLine?: boolean;
 }
 
 export interface SolveResponse {
@@ -26,24 +29,29 @@ export interface SolveResponse {
   moves: number;
   /** The first move of that line, when `wantMove` asked for it and there is one. */
   next?: GameMove | null;
+  /** The whole line, when `wantLine` asked for it and there is one. */
+  line?: GameMove[] | null;
 }
 
 self.addEventListener("message", (e: MessageEvent<SolveRequest>) => {
-  const { state, maxNodes, escalateNodes, wantMove } = e.data;
+  const { state, maxNodes, escalateNodes, wantMove, wantLine } = e.data;
   let result: SolveResult = solve(state, { maxNodes });
   if (result.outcome === "unknown" && escalateNodes && escalateNodes > (maxNodes ?? 0)) {
     result = solve(state, { maxNodes: escalateNodes });
   }
-  // Only ever the *first* move: the rest of the line is a walkthrough of the whole
-  // game, which is a different feature from a hint, and copying a few hundred moves
-  // through postMessage for something nothing reads is pure cost.
+  // A hint gets only the *first* move: copying a few hundred moves through
+  // postMessage for something nothing reads is pure cost. The replay is the one asker
+  // that reads the rest, and it says so with `wantLine`.
   const next =
     wantMove && result.moves.length > 0 ? toGameMove(state, result.moves[0]) : undefined;
+  const line =
+    wantLine && result.outcome === "solved" ? toGameLine(state, result.moves) : undefined;
   const response: SolveResponse = {
     outcome: result.outcome,
     nodes: result.nodes,
     moves: result.moves.length,
     ...(next === undefined ? {} : { next }),
+    ...(line === undefined ? {} : { line }),
   };
   self.postMessage(response);
 });

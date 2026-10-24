@@ -43,6 +43,10 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   costs $52, every card home pays $5 back, and the stock allows one pass at Draw 1 or
   three at Draw 3. The money takes the score's place in the toolbar, and a running
   **bank** across games lives in the statistics.
+- ▶️ **Watch it solved** — when the warning says a board is dead, it offers to **show
+  a solution**: the deal is dealt again and the solver plays a winning line out, move
+  by move, so you can see where the game turned. `Esc` stops it and hands you the
+  same deal, fresh. Nothing it does counts as your game.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
@@ -254,7 +258,7 @@ npm run dev      # start the dev server with hot reload (opens the browser)
 Production build & preview:
 
 ```bash
-npm run build    # type-check + bundle to dist/  (~33 kB gzipped, with the solver worker)
+npm run build    # type-check + bundle to dist/  (~38 kB gzipped, with the solver worker)
 npm run preview  # serve the production build locally
 npm run size     # hold each built asset to its gzipped budget (CI runs this)
 ```
@@ -282,6 +286,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
 | **Play from the keyboard** | Arrow keys move the cursor, `Space` picks up and drops, `Shift` + `↑`/`↓` changes how many cards you take, `F` sends one home, `1`–`7` jump to a column, `Esc` puts the cards back down. |
 | **Dead-board warning** | Nothing to press: a position the solver proves can't be won shows a 🪦 warning on its own, and it stays until an undo, Easy mode, a ✦ stack or a new deal changes the position. |
+| **Watch a solution** | The warning's **▶ Show a solution** button re-deals the board and has the solver play a winning line out. `Esc` stops it and gives you the same deal to play. If the deal can't be won even from the start, it says so. |
 | **Vegas rules** | **💵 Vegas** in the **📊** dialog, or `V`. $52 a deal, $5 a card home; one pass through the stock at Draw 1, three at Draw 3. |
 | **Ask for a hint** | **💡** (or `H`) rings the cards to move and points an arrow at where they go — the opening move of a line that actually wins. If there isn't one, it says so rather than guessing, and it searches harder than the automatic warning when the quick pass can't tell. |
 | **Start a winnable deal** | **🎲** (or `W`) shuffles until it finds a board proved winnable under your current draw mode. |
@@ -329,7 +334,7 @@ ordinary score is still kept underneath, for your best-score record.
 | `Space` / `Enter` | Draw, pick up, or drop |
 | `F` | Send the card to its foundation |
 | `1`–`7` | Jump to a tableau column |
-| `Esc` | Put down the cards, or cancel a drag |
+| `Esc` | Put down the cards, cancel a drag, or stop a solution replay |
 | `H` | Hint: show a move from a winning line |
 | `N` | New game |
 | `W` | Deal a game that can be won |
@@ -363,6 +368,7 @@ src/
   solver.ts      can this position be won? depth-first search (pure)
   solver.worker.ts  runs the solver off the main thread
   deadCheck.ts   the dead-board warning: when to ask, which answers to believe
+  replay.ts      paces a winning line out on the board, move by move
   preferences.ts theme, sound, toolbar fold and rail side: buttons + saved values
   haptics.ts     the vibration tick that rides along with the card sounds
   statsDialog.ts / winPanel.ts / startOverlay.ts   the three DOM panels

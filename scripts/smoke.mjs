@@ -437,6 +437,62 @@ try {
   check("turning on Easy mode takes the warning down",
     warned && (await page.evaluate(() => document.getElementById("toast").hidden)));
 
+  // ---- showing a winning line ----
+  // The warning's offer: watch the solver win this deal from the start. Deal R is no
+  // use for that — it is dead from the first card, and the offer must say so rather
+  // than pretend — so the replay itself is run on a board that is dead *now* but whose
+  // deal can be won: deal R's position under deal X's seed (33), which the fast pass
+  // solves at once. parseGameState doesn't tie a board to its seed, so the save is
+  // legal; it is built by buying a ✦ stack (the one toolbar move) and dropping it.
+  await page.click("#btn-easy"); // back off: the warning returns, with its offer
+  const offered = await page
+    .waitForFunction(() => !document.getElementById("toast-action").hidden, null, { timeout: 15000 })
+    .then(() => true, () => false);
+  check("the dead-board warning offers to show a way to win", offered);
+  await page.click("#toast-action");
+  const verdictR = await page
+    .waitForFunction(() => document.getElementById("toast-text").textContent.includes("at all"), null, {
+      timeout: 15000,
+    })
+    .then(() => true, () => false);
+  check("…and on a deal dead from the start, says so instead", verdictR, await page.textContent("#toast"));
+
+  await page.click("#btn-add-stack");
+  const deadSave = await page.evaluate(() => localStorage.getItem("solitaire-game"));
+  // Written from a page still behind its start overlay: leaving a page in play saves
+  // its game on the way out (visibilitychange), which would overwrite this one.
+  await page.goto(`${base}?animate=off`, { waitUntil: "load" });
+  await page.evaluate((raw) => {
+    const saved = JSON.parse(raw);
+    saved.state.seed = 33;
+    saved.state.spares = [];
+    saved.state.history = [];
+    localStorage.setItem("solitaire-game", JSON.stringify(saved));
+  }, deadSave);
+  await page.goto(`${base}?animate=off`, { waitUntil: "load" });
+  await page.click("#start-btn");
+  await page.waitForSelector("#start-overlay", { state: "detached" });
+  await page.waitForFunction(() => !document.getElementById("toast-action").hidden, null, {
+    timeout: 15000,
+  });
+  await page.click("#toast-action");
+  const playing = await page
+    .waitForFunction(() => document.getElementById("toast-text").textContent.startsWith("▶ Playing"), null, {
+      timeout: 15000,
+    })
+    .then(() => true, () => false);
+  await page.waitForTimeout(3000);
+  const replayMoves = Number(await moves());
+  check("…and on a winnable deal, plays the line out", playing && replayMoves > 3,
+    `${replayMoves} moves after 3s; ${await page.textContent("#toast")}`);
+  check("the board is locked while it plays", await disabled("#btn-undo"));
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+  check("Escape stops it and hands back the same deal, fresh",
+    (await moves()) === "0" && /[?&]deal=X\b/.test(page.url()), `${await moves()} moves, ${page.url()}`);
+  check("nothing it did was saved as the player's game",
+    await page.evaluate(() => localStorage.getItem("solitaire-game") === null));
+
   // ---- Vegas ----
   // A link names its rules, the money takes the score's slot, and V turns the rules
   // off again while the deal is untouched — dropping them from the address with it.

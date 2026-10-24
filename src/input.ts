@@ -399,19 +399,21 @@ export class Input {
     }
   }
 
-  private drawStock(): void {
+  /** Draw (or recycle) with the flight a click gives it. Public so the solution
+   *  replay draws exactly the way a player's click does. */
+  drawStock(): boolean {
     const layout = this.cb.layout();
     const g = this.game;
     const recycling = g.stock.length === 0;
     const result = g.drawFromStock();
-    if (!result) return;
+    if (!result) return false;
 
     playDraw();
 
     if (recycling) {
       // Whole waste snaps back to the stock; a quick fade is enough.
       this.cb.onChange();
-      return;
+      return true;
     }
 
     // Fly each drawn card from the stock to its place in the waste fan,
@@ -431,6 +433,7 @@ export class Input {
       });
     }
     this.cb.onChange();
+    return true;
   }
 
   // ---- Animation helpers -------------------------------------------------

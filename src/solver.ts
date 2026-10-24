@@ -19,7 +19,7 @@
 // solver that quietly ignored them would answer a different question from the one the
 // board is asking — `analyse` returns `unknown` for those positions instead.
 
-import { GameState, PileId } from "./game";
+import { Game, GameState, PileId } from "./game";
 
 /** id 0..51, laid out by cards.ts: suit = id / 13 (spades, hearts, diamonds, clubs),
  *  rank = id % 13 + 1. */
@@ -166,6 +166,30 @@ export function toGameMove(state: GameState, m: Move): GameMove | null {
           };
     }
   }
+}
+
+/** A whole winning line in the game's terms, for playing it out on the board.
+ *
+ *  `toGameMove` translates one move against one position, so the line is walked on a
+ *  real `Game`: each move is translated against the board it applies to, then made.
+ *  Making it through `Game` rather than trusting the translation is the point — a move
+ *  the game refuses means the line and the rules disagree, and the answer is null
+ *  rather than a replay that would stall half-way with the cards in a heap. */
+export function toGameLine(state: GameState, moves: Move[]): GameMove[] | null {
+  const game = new Game(state.drawCount, state.seed);
+  game.restore({ ...state, history: [], future: [] });
+  const line: GameMove[] = [];
+  for (const m of moves) {
+    const gm = toGameMove(game.serialize(), m);
+    if (!gm) return null;
+    const ok =
+      gm.from.kind === "stock" || gm.to.kind === "stock"
+        ? game.drawFromStock() !== null
+        : game.moveCards(gm.from, gm.fromIndex, gm.to) !== null;
+    if (!ok) return null;
+    line.push(gm);
+  }
+  return game.isWon() ? line : null;
 }
 
 function toState(g: GameState): State {

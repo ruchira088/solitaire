@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { Game, GameState } from "./game";
-import { canAnalyse, legalMoves, Move, solve, toGameMove } from "./solver";
+import { canAnalyse, legalMoves, Move, solve, toGameLine, toGameMove } from "./solver";
 
 const UP = 52;
 const [S, H, D, C] = [0, 1, 2, 3];
@@ -423,3 +423,42 @@ function toSolverState(g: GameState): Parameters<typeof legalMoves>[0] {
     drawCount: g.drawCount,
   };
 }
+
+describe("the whole line, in the game's terms", () => {
+  /** The first few deals the fast pass solves — found rather than hard-coded, so a
+   *  change to the search's ordering can't leave this testing nothing. */
+  function solvedDeal(): { opening: GameState; moves: Move[] } {
+    for (let seed = 1; seed < 40; seed++) {
+      const opening = new Game(1, seed).serialize();
+      const r = solve(opening, { maxNodes: 200_000 });
+      if (r.outcome === "solved") return { opening, moves: r.moves };
+    }
+    throw new Error("no solvable deal in the first 40 seeds");
+  }
+
+  it("plays out to a won game when made move by move", () => {
+    const { opening, moves } = solvedDeal();
+    const line = toGameLine(opening, moves)!;
+    expect(line).toHaveLength(moves.length);
+    const g = new Game(opening.drawCount, opening.seed);
+    g.restore(opening);
+    for (const m of line) {
+      const ok =
+        m.from.kind === "stock" || m.to.kind === "stock"
+          ? g.drawFromStock()
+          : g.moveCards(m.from, m.fromIndex, m.to);
+      expect(ok).not.toBeNull();
+    }
+    expect(g.isWon()).toBe(true);
+  });
+
+  it("is null for a line that stops short of a win", () => {
+    const { opening, moves } = solvedDeal();
+    expect(toGameLine(opening, moves.slice(0, -1))).toBeNull();
+  });
+
+  it("is null for a line the game refuses", () => {
+    const { opening } = solvedDeal();
+    expect(toGameLine(opening, [{ kind: "foundationToTableau", suit: 0, col: 0 }])).toBeNull();
+  });
+});
