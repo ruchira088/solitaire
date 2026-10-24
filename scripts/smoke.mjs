@@ -500,6 +500,23 @@ try {
   check("no console errors on desktop", logged.length === 0, logged.join(" | "));
   await page.close();
 
+  // ---- following the system theme -----------------------------------------
+  // A fresh profile has no saved theme, so it follows the OS — and keeps following
+  // it when the OS setting changes, without a reload.
+  const themed = await browser.newPage({ colorScheme: "light", viewport: { width: 1000, height: 700 } });
+  const themedLogged = watch(themed, "theme");
+  await themed.goto(base, { waitUntil: "load" });
+  const lightTheme = await themed.evaluate(() => document.body.dataset.theme);
+  await themed.emulateMedia({ colorScheme: "dark" });
+  await themed
+    .waitForFunction(() => document.body.dataset.theme === "dark", null, { timeout: 3000 })
+    .catch(() => undefined); // the check below reports what it found
+  const darkTheme = await themed.evaluate(() => document.body.dataset.theme);
+  check("an unset theme follows the OS, live", lightTheme === "light" && darkTheme === "dark",
+    `${lightTheme} → ${darkTheme}`);
+  check("no console errors with the theme page", themedLogged.length === 0, themedLogged.join("; "));
+  await themed.close();
+
   // ---- phone portrait ------------------------------------------------------
   // The vertical layout is a separate code path in layout.ts, so it gets its own boot.
   const phone = await browser.newPage({

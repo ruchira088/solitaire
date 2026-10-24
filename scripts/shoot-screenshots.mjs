@@ -252,6 +252,10 @@ try {
       deviceScaleFactor: spec.dpr ?? 1,
       isMobile: !!spec.mobile,
       hasTouch: !!spec.mobile,
+      // A fresh profile's theme is "auto", which follows the OS — and headless Chrome
+      // reports a light scheme. Dark is what every shot without a ?theme= has always
+      // shown, so say so rather than inherit whatever the machine running this prefers.
+      colorScheme: "dark",
     });
     page.on("pageerror", (e) => problems.push(`${name}: pageerror ${e.message}`));
     page.on("console", (m) => { if (m.type() === "error") problems.push(`${name}: ${m.text()}`); });

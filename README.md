@@ -44,7 +44,8 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   ✦ **parking stacks** (50 points each) to break a stalemate.
 - 🎨 **Six table themes** — Midnight, Bright, Claret, Ocean, Violet and Parchment.
   Each restyles the felt, the chrome *and the card backs*, and the toolbar button
-  cycles through them; your choice is remembered.
+  cycles through them; your choice is remembered. Until you choose, **Auto** follows
+  your system's light or dark setting — live, without a reload.
 - 🙈 **Hideable toolbar** — when the window is too narrow to fit the buttons and
   the stats on one row, a **☰** button (or `T`) folds the buttons away and gives
   the height to the board; the clock, moves and score stay on screen. Wide
@@ -108,16 +109,18 @@ canvas:
 
 ## Themes
 
-The toolbar button cycles through six tables — **Midnight**, **Bright**, **Claret**,
-**Ocean**, **Violet** and **Parchment** — and says which one is next. The felt, vignette, pile outlines,
+The toolbar button cycles through **Auto** and six tables — **Midnight**, **Bright**,
+**Claret**, **Ocean**, **Violet** and **Parchment** — and says which one is next.
+**Auto** (🌓) is where everyone starts: Bright under a light system theme, Midnight
+under a dark one, switching the moment the system does. The felt, vignette, pile outlines,
 toolbar *and the card backs* all change together; the backs matter most, since the
 felt spends the game mostly covered by cards.
 
 Your choice is saved to `localStorage`, and any theme can be deep-linked:
 `?theme=dark` (Midnight), `?theme=light` (Bright), `?theme=claret`,
-`?theme=ocean`, `?theme=violet`, `?theme=parchment`. The first two keep their original names so links and saved
-preferences from before the other themes existed still work. An unrecognised name
-falls back to Midnight rather than failing.
+`?theme=ocean`, `?theme=violet`, `?theme=parchment`, and `?theme=auto`. The first two
+keep their original names so links and saved preferences from before the other themes
+existed still work. An unrecognised name falls back to Auto rather than failing.
 
 ![Light theme](screenshots/gameplay-light.png)
 

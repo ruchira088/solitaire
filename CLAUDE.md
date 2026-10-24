@@ -58,7 +58,7 @@ visual or behavioural, run the app and look at it (see Verifying).
 gate CI ahead of every deploy (the `build-and-typecheck` job).
 
 - **Vitest covers the pure modules only**: `game`, `cards`, `rng`, `layout`, `storage`,
-  `share`, `statsView`, `cursor`, `solver`, `keyboard`,
+  `share`, `statsView`, `cursor`, `solver`, `theme`, `keyboard`,
   `deadCheck`, and `tooltip.ts`'s `parseTip`. Canvas/DOM modules aren't
   mocked — that only buys assertions about the mock.
 - **`npm run smoke` covers the rest**, against the *built* bundle in real Chrome, every
@@ -93,7 +93,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/animation.ts` | Tween engine, card flights, win-celebration physics |
 | `src/input.ts` | Pointer drag & drop, click-to-draw, double-click auto-move |
 | `src/keyboard.ts` | What a key press means, and when it means nothing — **pure** |
-| `src/theme.ts` | Theme registry: felt, placeholders **and card backs** |
+| `src/theme.ts` | Theme registry (felt, placeholders, card backs) and the Auto preference |
 | `src/preferences.ts` | Theme, sound, toolbar fold, rail side: the buttons and their saved values |
 | `src/sound.ts` | WebAudio sound effects (deal tick, etc.) |
 | `src/storage.ts` | `localStorage`: preferences, the game save, stats |
@@ -189,7 +189,8 @@ logic, rendering, animation, and input kept cleanly separated.
   else cache-first, and **every lookup passes `ignoreVary: true`**. The build fails if
   the stamped `sw.js` isn't valid JavaScript. → [offline](docs/decisions/offline.md)
 - **Themes are a registry, and they own the card back.** A new theme is one `THEMES`
-  entry plus one `body[data-theme]` CSS block.
+  entry plus one `body[data-theme]` CSS block. **Auto is a preference, not a theme**,
+  resolved to Bright/Midnight from the OS and followed live.
 - **Three pile highlights answer different questions** (drop target, keyboard cursor,
   hint) and differ in colour, weight *and* extent.
 - **The ☰ toggle only exists when the bar wraps**, measured with the button in flow; a
@@ -220,7 +221,7 @@ logic, rendering, animation, and input kept cleanly separated.
 
 All through `src/storage.ts`, best-effort.
 
-- **Settings**: theme (`solitaire-theme`), sound, toolbar fold, rail
+- **Settings**: theme (`solitaire-theme`, may be `auto`), sound, toolbar fold, rail
   side. `?theme=`, `?animate=off`, `?deal=`, `?draw=1|3` (only `3` is ever written)
   and `?win=` (read only).
 - **Easy mode is not a setting** — per-game, off on every fresh deal.
@@ -255,7 +256,8 @@ console for errors before declaring success.
 
 `npm run screenshots` (`scripts/shoot-screenshots.mjs`) — committed, not run in CI, and
 it also writes `public/og.png`. **Any change to the toolbar dates every board shot**:
-rerun the script, don't patch an image. → [screenshots](docs/decisions/screenshots.md)
+rerun the script, don't patch an image. It pins `colorScheme: "dark"` (headless Chrome
+reports light, and Auto would follow it). → [screenshots](docs/decisions/screenshots.md)
 
 ## Git workflow
 

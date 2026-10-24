@@ -44,3 +44,14 @@ What the theme registry owns, how the three on-board highlights stay distinguish
   phone-portrait layout the stock sits in the board's top-left corner, and a
   button there would swallow its clicks. Nothing has to re-measure the board —
   the canvas `ResizeObserver` already does.
+
+- **"Auto" is a preference, not a theme.** It has no felt of its own; `resolveTheme`
+  turns it into Bright or Midnight from `prefers-color-scheme`, and the renderer and the
+  CSS only ever see a concrete `ThemeName`. Keeping it out of `THEMES` is what keeps
+  `ThemeName` meaning "something that can be painted". It is the default for anyone who
+  has never chosen, it is first in the button's cycle, and `Preferences` watches the
+  media query so it follows an OS change live, the same way reduced motion is watched.
+  An unrecognised saved or `?theme=` value now falls back to Auto. Two consequences
+  worth knowing: headless Chrome reports a light scheme, so `shoot-screenshots.mjs`
+  pins `colorScheme: "dark"` to keep every unthemed shot what it has always been; and
+  the button shows 🌓 rather than a theme's icon while on Auto.

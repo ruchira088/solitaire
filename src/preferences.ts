@@ -7,13 +7,14 @@
 import { isSoundEnabled, setSoundEnabled } from "./sound";
 import { readItem, writeItem } from "./storage";
 import {
+  AUTO_ICON,
   getFelt,
-  getThemeName,
-  isThemeName,
-  nextTheme,
+  isThemePref,
+  nextThemePref,
+  resolveTheme,
   setTheme,
-  themeInfo,
-  ThemeName,
+  themePrefLabel,
+  ThemePref,
 } from "./theme";
 import { setTip } from "./tooltip";
 
@@ -34,6 +35,11 @@ export class Preferences {
   private readonly handBtn = byId<HTMLButtonElement>("btn-hand");
   private readonly toolbar = byId("toolbar");
   private readonly controls = document.querySelector(".controls") as HTMLElement;
+  /** The OS colour scheme, watched so "Auto" follows it live — the same pattern as
+   *  reduced motion in main.ts, and for the same reason: changing the OS setting
+   *  shouldn't need a reload. */
+  private readonly prefersLight = window.matchMedia("(prefers-color-scheme: light)");
+  private themePref: ThemePref = "auto";
   private chromeHidden = false; // toolbar folded down to its toggle
   /** Portrait only: which edge the stock/waste/foundation rail sits on. The hand
    *  holding a phone covers the side it's on, and the stock is the pile you tap most. */
@@ -45,6 +51,9 @@ export class Preferences {
     this.startMute.addEventListener("click", () => this.toggleSound());
     this.chromeBtn.addEventListener("click", () => this.toggleChrome());
     this.handBtn.addEventListener("click", () => this.applyHand(!this.leftHanded));
+    this.prefersLight.addEventListener("change", () => {
+      if (this.themePref === "auto") this.applyTheme("auto");
+    });
     // Whether the bar fits on one row is a function of its width, so re-ask on resize
     // (and on orientation change, which fires the same event). This only measures the
     // toolbar — the height it may change feeds the canvas observer, which is debounced.
@@ -54,17 +63,20 @@ export class Preferences {
   /** Restore everything saved. The order matters: the toolbar before the hand, since
    *  the hand rebuilds the board and it must be measured against the bar the player
    *  left behind. `?theme=` wins over the saved theme, and anything unrecognised — a
-   *  hand-edited value, or a theme from an older build — falls back to Midnight. */
+   *  hand-edited value, or a theme from an older build — falls back to "auto", which
+   *  is also the default for anyone who has never chosen. */
   load(): void {
     const urlTheme = new URLSearchParams(location.search).get("theme");
-    const savedTheme = isThemeName(urlTheme) ? urlTheme : readItem("solitaire-theme");
-    this.applyTheme(isThemeName(savedTheme) ? savedTheme : "dark");
+    const savedTheme = isThemePref(urlTheme) ? urlTheme : readItem("solitaire-theme");
+    this.applyTheme(isThemePref(savedTheme) ? savedTheme : "auto");
     this.applySound(readItem("solitaire-sound") !== "off");
     this.applyChrome(readItem("solitaire-chrome") === "hidden");
     this.applyHand(readItem("solitaire-hand") === "left");
   }
 
-  applyTheme(name: ThemeName): void {
+  applyTheme(pref: ThemePref): void {
+    this.themePref = pref;
+    const name = resolveTheme(pref, this.prefersLight.matches);
     setTheme(name);
     this.deps.repaint();
     // One attribute rather than a class per theme: CSS keys its chrome palette off it,
@@ -72,15 +84,16 @@ export class Preferences {
     document.body.dataset.theme = name;
     // The button shows where you are and says where you'd go, since with more than two
     // themes the icon alone can no longer imply the destination.
-    this.themeBtn.textContent = getFelt().icon;
-    const label = `Theme: ${getFelt().label} — click for ${themeInfo(nextTheme(name)).label}`;
+    this.themeBtn.textContent = pref === "auto" ? AUTO_ICON : getFelt().icon;
+    const here = pref === "auto" ? `Auto (${getFelt().label})` : getFelt().label;
+    const label = `Theme: ${here} — click for ${themePrefLabel(nextThemePref(pref))}`;
     setTip(this.themeBtn, label);
     this.themeBtn.setAttribute("aria-label", label);
-    writeItem("solitaire-theme", name);
+    writeItem("solitaire-theme", pref);
   }
 
   toggleTheme(): void {
-    this.applyTheme(nextTheme(getThemeName()));
+    this.applyTheme(nextThemePref(this.themePref));
   }
 
   applySound(on: boolean): void {

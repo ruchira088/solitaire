@@ -174,7 +174,7 @@ const THEMES = {
 
 export type ThemeName = keyof typeof THEMES;
 
-/** Declaration order is also cycle order, so the ☀️/🌙 button walks the list. */
+/** Declaration order is also cycle order, so the theme button walks the list. */
 export const THEME_NAMES = Object.keys(THEMES) as ThemeName[];
 
 export function isThemeName(v: unknown): v is ThemeName {
@@ -193,16 +193,40 @@ export function themeInfo(name: ThemeName): FeltTheme {
   return THEMES[name] as FeltTheme;
 }
 
-export function getThemeName(): ThemeName {
-  return current;
-}
-
 export function setTheme(name: ThemeName): void {
   current = name;
 }
 
-/** The one after this, wrapping — what the toggle button does and what its label
- *  should promise. */
-export function nextTheme(name: ThemeName = current): ThemeName {
-  return THEME_NAMES[(THEME_NAMES.indexOf(name) + 1) % THEME_NAMES.length];
+// ---- Following the system ---------------------------------------------------
+//
+// "Auto" is a *preference*, not a theme: it has no felt of its own, it picks one of
+// two real themes from the OS's colour scheme. Keeping it out of THEMES means the
+// renderer and the CSS only ever see a concrete name, and `ThemeName` stays exactly
+// the set of things that can be painted.
+
+export type ThemePref = ThemeName | "auto";
+
+export const AUTO_ICON = "🌓";
+
+export function isThemePref(v: unknown): v is ThemePref {
+  return v === "auto" || isThemeName(v);
+}
+
+/** The theme a preference paints as. Auto follows the OS: Bright in a light scheme,
+ *  Midnight otherwise — the two that were the game's original pair. */
+export function resolveTheme(pref: ThemePref, prefersLight: boolean): ThemeName {
+  if (pref !== "auto") return pref;
+  return prefersLight ? "light" : "dark";
+}
+
+/** The button's cycle: Auto first, then every theme in registry order, then round. */
+export function nextThemePref(pref: ThemePref): ThemePref {
+  if (pref === "auto") return THEME_NAMES[0];
+  const i = THEME_NAMES.indexOf(pref);
+  return i === THEME_NAMES.length - 1 ? "auto" : THEME_NAMES[i + 1];
+}
+
+/** What the button calls a preference. */
+export function themePrefLabel(pref: ThemePref): string {
+  return pref === "auto" ? "Auto" : themeInfo(pref).label;
 }
