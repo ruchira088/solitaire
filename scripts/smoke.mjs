@@ -437,6 +437,23 @@ try {
   check("turning on Easy mode takes the warning down",
     warned && (await page.evaluate(() => document.getElementById("toast").hidden)));
 
+  // ---- Vegas ----
+  // A link names its rules, the money takes the score's slot, and V turns the rules
+  // off again while the deal is untouched — dropping them from the address with it.
+  await page.goto(`${base}?deal=X&vegas=1&animate=off`, { waitUntil: "load" });
+  await page.click("#start-btn");
+  await page.waitForSelector("#start-overlay", { state: "detached" });
+  const vegas = await page.evaluate(() => ({
+    label: document.getElementById("stat-score-label").textContent,
+    score: document.getElementById("stat-score").textContent,
+  }));
+  check("a Vegas link plays under Vegas, showing the stake",
+    vegas.label === "Vegas" && vegas.score === "−$52" && /vegas=1/.test(page.url()), JSON.stringify(vegas));
+  await page.keyboard.press("v");
+  check("V turns it off before the first move",
+    (await page.textContent("#stat-score-label")) === "Score" && !/vegas=/.test(page.url()), page.url());
+  await page.evaluate(() => localStorage.removeItem("solitaire-vegas"));
+
   // ---- auto-complete, and undo pressed into it ------------------------------
   // Regression, and the reason `boardBusy()` exists. The sweep's loop *is* the
   // `onDone` of the flight it just launched, and `animator.clear()` drops callbacks;

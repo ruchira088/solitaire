@@ -334,6 +334,68 @@ describe("drawFromStock", () => {
   });
 });
 
+describe("Vegas rules", () => {
+  it("allows no recycle at Draw 1", () => {
+    const g = boardOf({ vegas: true, stock: [], waste: [up(S, 2), up(S, 3)] });
+    expect(g.canRecycle()).toBe(false);
+    expect(g.drawFromStock()).toBeNull();
+    // Refused before history is touched, like the empty-stock guard: no move, no undo.
+    expect(g.canUndo()).toBe(false);
+    expect(g.moves).toBe(0);
+  });
+
+  it("allows two recycles at Draw 3, and counts them", () => {
+    const g = boardOf({ vegas: true, drawCount: 3, stock: [], waste: [up(S, 2)] });
+    expect(g.drawFromStock()).not.toBeNull(); // recycle 1
+    g.drawFromStock(); // draw it back out
+    expect(g.drawFromStock()).not.toBeNull(); // recycle 2
+    g.drawFromStock();
+    expect(g.recycles).toBe(2);
+    expect(g.drawFromStock()).toBeNull(); // the third pass is spent
+  });
+
+  it("gives a pass back when the recycle is undone", () => {
+    const g = boardOf({ vegas: true, drawCount: 3, recycles: 2, stock: [], waste: [up(S, 2)] });
+    expect(g.canRecycle()).toBe(false);
+    g.restore({ ...g.serialize(), recycles: 1 });
+    g.drawFromStock();
+    expect(g.recycles).toBe(2);
+    g.undo();
+    expect(g.recycles).toBe(1);
+    expect(g.canRecycle()).toBe(true);
+  });
+
+  it("recycles freely outside Vegas, while still counting", () => {
+    const g = boardOf({ stock: [], waste: [up(S, 2)] });
+    for (let i = 0; i < 5; i++) {
+      expect(g.drawFromStock()).not.toBeNull();
+      g.drawFromStock();
+    }
+    expect(g.recycles).toBe(5);
+  });
+
+  it("prices the game from the cards home: −52 to deal, +5 a card", () => {
+    expect(boardOf().vegasDollars()).toBe(-52);
+    const g = boardOf({ foundations: [[up(S, 1), up(S, 2)], [up(H, 1)], [], []] });
+    expect(g.vegasDollars()).toBe(-37);
+  });
+
+  it("keeps the mode across a new deal, but resets the passes", () => {
+    const g = boardOf({ vegas: true, recycles: 1 });
+    g.deal(7);
+    expect(g.vegas).toBe(true);
+    expect(g.recycles).toBe(0);
+  });
+
+  it("round-trips through serialize / restore", () => {
+    const g = boardOf({ vegas: true, recycles: 1 });
+    const back = new Game(1);
+    back.restore(g.serialize());
+    expect(back.vegas).toBe(true);
+    expect(back.recycles).toBe(1);
+  });
+});
+
 describe("scoring", () => {
   it("gives 10 for a card sent to a foundation", () => {
     const g = boardOf({ tableau: [[up(S, 1)], [], [], [], [], [], []] });

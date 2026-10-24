@@ -158,6 +158,8 @@ describe("with working storage", () => {
       bestDailyStreak: 0,
       lastDailyWin: "",
       dailyWonDays: [],
+      vegasBank: 0,
+      vegasGames: 0,
     });
   });
 
@@ -447,6 +449,17 @@ describe("with working storage", () => {
       lastDailyWin: "",
       dailyWonDays: [],
     });
+  });
+
+  it("banks Vegas results, losses included, and counts the games", () => {
+    store.recordVegas(-37);
+    store.recordVegas(13);
+    expect(store.loadStats()).toMatchObject({ vegasBank: -24, vegasGames: 2 });
+  });
+
+  it("reads a hand-edited bank that isn't an integer as empty", () => {
+    mem.setItem("solitaire-stats", JSON.stringify({ v: 1, vegasBank: 1.5, vegasGames: -2 }));
+    expect(store.loadStats()).toMatchObject({ vegasBank: 0, vegasGames: 0 });
   });
 
   describe("currentDailyStreak", () => {

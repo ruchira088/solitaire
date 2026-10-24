@@ -608,14 +608,16 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   color: var(--accent);
 }
 
-#win-daily {
+#win-daily,
+#win-vegas {
   margin: 0;
   font-size: 13px;
   font-weight: 700;
   color: var(--accent);
 }
 
-#win-daily[hidden] {
+#win-daily[hidden],
+#win-vegas[hidden] {
   display: none;
 }
 
@@ -884,6 +886,13 @@ body.chrome-hidden .chrome-toggle:focus-visible {
 /* Today is ringed whether or not it has been won. */
 .archive-day.is-today {
   box-shadow: 0 0 0 2px var(--text);
+}
+
+/* The Vegas switch, lit while the next deal will be played under it. */
+#stats-vegas[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #2a1d00;
 }
 
 /* Resetting is destructive, so the button asks once. */

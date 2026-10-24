@@ -82,7 +82,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | File | Responsibility |
 | --- | --- |
 | `src/main.ts` | Bootstrap, HiDPI canvas sizing, the game loop, deal / auto-complete / win sequences, toolbar wiring |
-| `src/game.ts` | Klondike rules, draw modes, undo snapshots, win / auto-complete — **pure, no DOM** |
+| `src/game.ts` | Klondike rules, draw modes, Vegas passes, undo snapshots, win / auto-complete — **pure, no DOM** |
 | `src/cards.ts` | Card model, deck construction, Fisher–Yates shuffle |
 | `src/rng.ts` | Seeded PRNG, deal codes + the daily deal's date→seed — **a frozen wire format** |
 | `src/layout.ts` | Responsive pile positions, tall-column offset compression |
@@ -119,6 +119,10 @@ logic, rendering, animation, and input kept cleanly separated.
   `Animator.flyCard` animates from old screen positions to new. Logic never waits.
 - **Foundations are not suit-locked.** Any ace starts any foundation; the ♠♥♦♣ glyphs
   are decoration, so `pileName` numbers an empty foundation rather than naming a suit.
+- **Vegas: the dollars are derived from the board, the passes ride in every undo
+  snapshot, and the switch changes the deal in play only before its first move.** A
+  game settles into the bank once, when it ends, and only if it was played.
+  → [vegas](docs/decisions/vegas.md)
 
 **Rendering**
 
@@ -160,8 +164,8 @@ logic, rendering, animation, and input kept cleanly separated.
   class absent from both sides of that comparison is unchecked, not agreed.
 - **"Unwinnable" is a claim, so the move set must be complete** — including
   foundation→tableau onto an empty column, deduplicated *per card*. Anything a budget
-  cuts short is `unknown`. ✦ stacks and easy mode aren't modelled: `canAnalyse` is
-  false and the UI says so.
+  cuts short is `unknown`. ✦ stacks, easy mode and Vegas aren't modelled: `canAnalyse`
+  is false and the UI says so.
 - **Three budgets, all failing to `unknown`; the search keeps its own stack** (never
   recursion — a worker's stack is smaller than Node's) and the visited key stays an
   exact string.
@@ -169,7 +173,8 @@ logic, rendering, animation, and input kept cleanly separated.
   on its own worker, scheduled by `bumpBoard()`, the one place `boardVersion` moves.
   Dead → dead is silent; a skipped check takes it down.
 - **A hint is the first move of a line that wins, or it is nothing.**
-- **A winnable deal is screened, not generated**, at the current draw count.
+- **A winnable deal is screened, not generated**, at the current draw count, and never
+  under Vegas.
 
 → [solver](docs/decisions/solver.md)
 
@@ -222,13 +227,13 @@ logic, rendering, animation, and input kept cleanly separated.
 All through `src/storage.ts`, best-effort.
 
 - **Settings**: theme (`solitaire-theme`, may be `auto`), sound, toolbar fold, rail
-  side. `?theme=`, `?animate=off`, `?deal=`, `?draw=1|3` (only `3` is ever written)
-  and `?win=` (read only).
+  side, and Vegas for the next deal (`solitaire-vegas`). `?theme=`, `?animate=off`,
+  `?deal=`, `?draw=1|3` (only `3` is ever written), `?vegas=1` and `?win=` (read only).
 - **Easy mode is not a setting** — per-game, off on every fresh deal.
 - **The game in progress** (`solitaire-game`, schema-versioned `SCHEMA`): validated by
   `parseGameState`, rejected saves dropped; history capped at `PERSISTED_HISTORY` (40)
-  and held to the same `parseBoardState`; an optional field (`history`)
-  needs no bump. The save exists exactly while there's a game in progress.
+  and held to the same `parseBoardState`; optional fields (`history`, `vegas`,
+  `recycles`) need no bump. The save exists exactly while there's a game in progress.
 - **Lifetime stats** (`solitaire-stats`, `STATS_SCHEMA` only for changes of *meaning*):
   a deal is *played* from its first move; `pending` persists across sessions; every
   field is sanitised on read; the daily streak is read through `currentDailyStreak`.
@@ -292,7 +297,8 @@ artifact bucket) is in `cdk-deploy/bin/cdk-deploy.ts`.
 - **Button icons are decoration, and they cost width.** Labels keep the accessible
   name (`<span class="ico" aria-hidden="true">`); icon-only buttons need an
   `aria-label`. Below 1340px `.btn .ico` is hidden — that is what keeps 1280 on one
-  row, which the smoke test checks. A new toolbar button needs a measurement first.
+  row, which the smoke test checks. A new toolbar button needs a measurement first; the
+  Vegas switch went into the stats dialog for that reason.
 - **Tooltips are `data-tip`, never `title`** (the smoke test checks); dynamic text goes
   through `setTip`. Never shown on touch.
 - **Only the pip faces are preloaded**; `getCardFace` returning null is normal.

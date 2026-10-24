@@ -82,6 +82,22 @@ describe("parseGameState — accepts", () => {
     expect(parseGameState(s)).not.toBeNull();
   });
 
+  it("a save from before Vegas existed, as an ordinary game", () => {
+    const s = valid() as unknown as Record<string, unknown>;
+    delete s.vegas;
+    delete s.recycles;
+    const parsed = parseGameState(s)!;
+    expect(parsed.vegas).toBe(false);
+    expect(parsed.recycles).toBe(0);
+  });
+
+  it("a Vegas game part-way through its passes", () => {
+    const s = valid();
+    s.vegas = true;
+    s.recycles = 2;
+    expect(parseGameState(s)).toMatchObject({ vegas: true, recycles: 2 });
+  });
+
   it("and returns a value that round-trips back into a Game", () => {
     const s = valid();
     s.moves = 9;
@@ -135,6 +151,19 @@ describe("parseGameState — rejects bad scalars", () => {
   it.each(["true", 1, 0, null, undefined])("easy %p", (v) => {
     const s = valid() as unknown as Record<string, unknown>;
     s.easy = v;
+    expect(parseGameState(s)).toBeNull();
+  });
+
+  // `undefined` is absent, which is an older save and reads as off — so it isn't here.
+  it.each(["true", 1, 0, null])("vegas %p", (v) => {
+    const s = valid() as unknown as Record<string, unknown>;
+    s.vegas = v;
+    expect(parseGameState(s)).toBeNull();
+  });
+
+  it.each([-1, 1.5, NaN, "1", null])("recycles %p", (v) => {
+    const s = valid() as unknown as Record<string, unknown>;
+    s.recycles = v;
     expect(parseGameState(s)).toBeNull();
   });
 });

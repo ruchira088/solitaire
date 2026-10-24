@@ -157,6 +157,12 @@ describe("boardLine", () => {
     expect(boardLine({ code: "DWLVHU", drawCount: 3 })).toBe("Deal DWLVHU · Draw 3");
   });
 
+  it("names Vegas rules, another game again", () => {
+    expect(boardLine({ code: "DWLVHU", drawCount: 3, vegas: true })).toBe(
+      "Deal DWLVHU · Draw 3 · Vegas",
+    );
+  });
+
   it("says today's daily when the board is today's", () => {
     expect(
       boardLine({ code: "X", drawCount: 1, dailyKey: "2026-08-20", todayKey: "2026-08-20" }),
@@ -197,6 +203,11 @@ describe("dealUrl", () => {
 
   it("never writes draw=1, which is what no parameter already means", () => {
     expect(dealUrl(`${SITE}?draw=1`, deal)).toBe(`${SITE}?deal=UA2WB9`);
+  });
+
+  it("writes vegas=1 for a Vegas board, and strips it otherwise", () => {
+    expect(dealUrl(SITE, { ...deal, vegas: true })).toBe(`${SITE}?deal=UA2WB9&vegas=1`);
+    expect(dealUrl(`${SITE}?vegas=1`, deal)).toBe(`${SITE}?deal=UA2WB9`);
   });
 
   it("clears draw=3 when the player switches back to Draw 1", () => {

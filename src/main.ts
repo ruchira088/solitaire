@@ -28,11 +28,14 @@ import {
   currentDailyStreak,
   loadGame,
   loadStats,
+  readItem,
   recordAbandon,
   recordGameStart,
+  recordVegas,
   recordWin,
   saveGame,
   Stats,
+  writeItem,
 } from "./storage";
 import {
   dailyDayForSeed,
@@ -52,6 +55,7 @@ import {
   SharedResult,
   shareUrl,
 } from "./share";
+import { fmtDollars } from "./statsView";
 import { canAnalyse, GameMove, Outcome } from "./solver";
 import type { SolveRequest, SolveResponse } from "./solver.worker";
 import {
@@ -109,6 +113,11 @@ let winRecord: { stats: Stats; isRecord: boolean } | null = null;
 /** This deal has been counted in `played`. Undo can take the move count back to 0, so
  *  the flag — not `game.moves` — is what stops a game being counted twice. */
 let countedPlayed = false;
+/** What the next deal is played under. A preference, unlike Easy: someone who plays
+ *  Vegas plays it every game. The board in play carries its own `game.vegas`, which
+ *  this only changes before the first move — switching rules part-way through would be
+ *  a way to buy passes. */
+let vegasNext = false;
 /** The board needs repainting. Solitaire spends most of its life as a completely
  *  static picture while the player thinks, and redrawing it 120 times a second to
  *  produce an identical frame is pure battery. So the loop paints only when something
@@ -225,6 +234,7 @@ const el = {
   time: document.getElementById("stat-time") as HTMLElement,
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
+  scoreLabel: document.getElementById("stat-score-label") as HTMLElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
   hint: document.getElementById("btn-hint") as HTMLButtonElement,
   winnable: document.getElementById("btn-winnable") as HTMLButtonElement,
@@ -264,7 +274,10 @@ function showClock(text: string): void {
 
 function updateStats(): void {
   el.moves.textContent = String(game.moves);
-  el.score.textContent = String(game.score);
+  // Under Vegas the number that matters is the money, so it takes the score's slot
+  // rather than a new one — the toolbar has no width for a fourth stat.
+  el.scoreLabel.textContent = game.vegas ? "Vegas" : "Score";
+  el.score.textContent = game.vegas ? fmtDollars(game.vegasDollars()) : String(game.score);
   // Disabled, not merely ignored: a button that looks live and does nothing is how a
   // player finds the guard in the first place.
   el.undo.disabled = !game.canUndo() || boardBusy();
@@ -406,6 +419,7 @@ function startCelebration(): void {
     // Only today's extends the streak; an archived win just ticks that day off.
     daily: dailyOfCurrentGame(),
   });
+  if (game.vegas) recordVegas(game.vegasDollars());
   syncDailyButton();
   if (timerStart !== null) {
     elapsedFrozen += performance.now() - timerStart;
@@ -450,7 +464,9 @@ function runCelebrationFrame(): void {
 }
 
 /** The win dialog's contents. The daily line reads the streak back out of the record
- *  just written, so a replayed daily correctly doesn't claim another day. */
+ *  just written, so a replayed daily correctly doesn't claim another day; the Vegas
+ *  bank is read fresh, since `winRecord` was read before `recordVegas` wrote this game
+ *  in. */
 function showWinPanel(): void {
   const daily =
     winRecord && isDailyGame()
@@ -465,6 +481,7 @@ function showWinPanel(): void {
     record: winRecord?.isRecord ?? false,
     best: winRecord ? winRecord.stats.bestScore : game.score,
     dailyStreak: daily?.streak ?? 0,
+    vegas: game.vegas ? { game: game.vegasDollars(), bank: loadStats().vegasBank } : null,
     shareText: shareText({
       ...result,
       url: shareUrl(location.href, dealLink(), result),
@@ -550,8 +567,12 @@ function onChange(): void {
 /** Shared by New Game and Restart, so the two can't drift. `deal` either shuffles a
  *  fresh layout or replays the current seed. */
 function beginGame(deal: () => void): void {
-  // Walking away from a game in progress is a loss, and its time still counts.
-  if (countedPlayed && !game.isWon()) recordAbandon(elapsedNow());
+  // Walking away from a game in progress is a loss, and its time still counts — and
+  // under Vegas, so does its money: the stake is gone whatever made it home.
+  if (countedPlayed && !game.isWon()) {
+    recordAbandon(elapsedNow());
+    if (game.vegas) recordVegas(game.vegasDollars());
+  }
   countedPlayed = false;
   celebration.stop();
   celebStarted = false;
@@ -563,6 +584,7 @@ function beginGame(deal: () => void): void {
   invalidate();
   cursor = null;
   held = null;
+  game.vegas = vegasNext; // the mode, like the draw count: it outlives the old board
   deal();
   applyEasy(false); // the assist doesn't carry over to the next game
   bumpBoard(); // after the deal: the check it schedules is about the new board
@@ -655,7 +677,41 @@ function syncDailyButton(): void {
 
 /** This board, as `share.ts` names it for a link. */
 function dealLink(): DealLink {
-  return { code: encodeSeed(game.seed), drawCount: game.drawCount };
+  return { code: encodeSeed(game.seed), drawCount: game.drawCount, vegas: game.vegas };
+}
+
+/** The board is still untouched, so its rules can still be changed. */
+function vegasStillOpen(): boolean {
+  return started && game.moves === 0 && !boardBusy();
+}
+
+/** What the 💵 switch shows: this deal's rules while they can still change, otherwise
+ *  what the next deal will be played under. */
+function vegasShown(): boolean {
+  return vegasStillOpen() ? game.vegas : vegasNext;
+}
+
+/** The 💵 switch in the stats dialog (and V). It always sets what the *next* deal is
+ *  played under; it changes this one too only while no move has been made, since
+ *  turning the pass limit off mid-game is a way to buy passes. Flipping what's *shown*
+ *  rather than the stored preference matters on a `?vegas=1` link, where the two
+ *  differ: the switch must turn off the rules the player can see are on. */
+function toggleVegas(): void {
+  vegasNext = !vegasShown();
+  writeItem("solitaire-vegas", vegasNext ? "on" : "off");
+  if (vegasStillOpen()) {
+    game.vegas = vegasNext;
+    invalidate(); // the stock counter shows the passes
+    syncDealUrl();
+    bumpBoard();
+    updateStats();
+    showToast(vegasNext ? "💵 Vegas rules on for this deal." : "Vegas rules off for this deal.", 3000);
+  } else {
+    showToast(
+      vegasNext ? "💵 Vegas rules from your next deal." : "Vegas rules off from your next deal.",
+      3000,
+    );
+  }
 }
 
 /** Keep the deal code in the address bar. The board doesn't show it — the URL *is*
@@ -868,7 +924,7 @@ function requestHint(): void {
   const state = game.serialize();
   if (!canAnalyse(state)) {
     showToast(
-      "🤔 Can't suggest a move on a board with ✦ stacks or easy mode — their rules differ.",
+      "🤔 Can't suggest a move on a board with ✦ stacks, easy mode or Vegas rules — their rules differ.",
     );
     return;
   }
@@ -924,6 +980,12 @@ const WINNABLE_TRIES = 12;
 function newWinnableGame(): void {
   if (solverBusy) return;
   if (boardBusy() || input.drag) return;
+  // The search recycles freely, so its "winnable" is a claim about a game without
+  // Vegas's pass limit — not the one that would be dealt.
+  if (vegasNext) {
+    showToast("🤔 Can't vouch for a deal under Vegas rules — the solver doesn't model the pass limit.");
+    return;
+  }
 
   solverBusy = true;
   syncSolverButtons();
@@ -1183,6 +1245,12 @@ el.home.addEventListener("click", sendAllHome);
 el.drawToggle.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (btn) {
+    // Under Vegas the draw count sets the pass limit, so switching it part-way through
+    // would hand out passes. Before the first move it's still just choosing the game.
+    if (game.vegas && game.moves > 0 && Number(btn.dataset.draw) !== game.drawCount) {
+      showToast("💵 Vegas rules fix the draw count once the game is under way.", 3000);
+      return;
+    }
     setDrawCount(Number(btn.dataset.draw) as DrawCount);
     persist();
     syncDealUrl(); // the mode is part of what a shared link means
@@ -1231,6 +1299,7 @@ function runCommand(c: Command): void {
     case "winnable": return newWinnableGame();
     case "home": return sendAllHome();
     case "chrome": return prefs.toggleChrome();
+    case "vegas": return toggleVegas();
   }
 }
 
@@ -1272,6 +1341,7 @@ prefs.load();
 const params = new URLSearchParams(location.search);
 const urlSeed = parseSeed(params.get("deal"));
 const urlDraw = params.get("draw") === "3" ? 3 : params.get("draw") === "1" ? 1 : null;
+vegasNext = readItem("solitaire-vegas") === "on";
 // A shared win: someone's result, on the deal named alongside it. Only a challenge
 // when the link carries both — a score with no board is nothing to be challenged to.
 const challenge = urlSeed === null ? null : parseResult(params.get("win"));
@@ -1288,6 +1358,8 @@ if (resumeSaved) {
   game.deal(urlSeed);
 }
 if (urlDraw !== null && !resumeSaved) game.drawCount = urlDraw;
+// A link names its rules; only an unnamed fresh deal falls back to the preference.
+if (!resumeSaved) game.vegas = urlSeed !== null ? params.get("vegas") === "1" : vegasNext;
 // A resumed board is only coherent under the rules it was played with; a fresh deal
 // always starts with the assist off.
 applyEasy(resumeSaved ? saved!.state.easy : false);
@@ -1311,6 +1383,7 @@ const statsDialog = new StatsDialog({
   today: todayKey,
   playDay: playArchivedDay,
   afterReset: syncDailyButton,
+  vegas: { next: vegasShown, toggle: toggleVegas },
 });
 
 // The opening deal waits for a click so its sound can play (browsers block
@@ -1328,6 +1401,7 @@ if (challenge) {
       drawCount: game.drawCount,
       dailyKey: dailyDayForSeed(game.seed, todayKey()),
       todayKey: todayKey(),
+      vegas: game.vegas,
     }),
   );
 }

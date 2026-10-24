@@ -39,6 +39,10 @@ with smooth, physics-flavoured animations throughout. Zero runtime dependencies.
   streak, best score, fastest win, fewest moves, total time played, and your daily
   streak, all kept in `localStorage`. The win dialog calls out a new best score, and
   the stats can be reset whenever you want a clean slate.
+- 💵 **Vegas rules** — switch them on in the **📊** dialog (or press `V`): every deal
+  costs $52, every card home pays $5 back, and the stock allows one pass at Draw 1 or
+  three at Draw 3. The money takes the score's place in the toolbar, and a running
+  **bank** across games lives in the statistics.
 - 🆘 **Easy mode & temp stacks** — toggle a friendlier ruleset where empty
   columns accept any card (not just Kings), and buy up to three temporary
   ✦ **parking stacks** (50 points each) to break a stalemate.
@@ -200,6 +204,10 @@ doesn't dent your win rate — and walking away from a game in progress counts a
 loss and breaks the streak. **Reset stats** wipes the lot, and asks once before it
 does.
 
+The dialog is also where **Vegas rules** are switched on — they apply to the deal on
+screen if you haven't moved yet, and from the next deal otherwise — and where the
+Vegas bank is kept.
+
 ![Statistics](screenshots/stats.png)
 
 ## Win celebration
@@ -266,7 +274,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 
 | Action | How |
 | --- | --- |
-| **Draw from stock** | Click the stock pile (top-left). Toggle **Draw 1 / Draw 3** in the toolbar. When the stock is empty, click it again to recycle the waste. |
+| **Draw from stock** | Click the stock pile (top-left). Toggle **Draw 1 / Draw 3** in the toolbar. When the stock is empty, click it again to recycle the waste — under Vegas rules only while passes remain (shown as `↻` under the stock; a ✕ means they're spent). |
 | **Move a card / run** | Drag a card — or a valid descending, alternating-colour run — between tableau columns. Empty columns accept a King. |
 | **Send to a foundation** | Drag an Ace (or the next card in sequence) onto a foundation, or **double-click** (double-tap on touch) a card to auto-send it. |
 | **Send everything home** | **🏠** (or `A`) sends every card that can go to the foundations, one after another — including cards that only become playable as the ones above them leave. It never draws from the stock. |
@@ -274,13 +282,14 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Undo / redo** | The **Undo** / **Redo** buttons, or `Ctrl/Cmd + Z` and `Ctrl/Cmd + Shift + Z` (`Ctrl + Y` also redoes). |
 | **Play from the keyboard** | Arrow keys move the cursor, `Space` picks up and drops, `Shift` + `↑`/`↓` changes how many cards you take, `F` sends one home, `1`–`7` jump to a column, `Esc` puts the cards back down. |
 | **Dead-board warning** | Nothing to press: a position the solver proves can't be won shows a 🪦 warning on its own, and it stays until an undo, Easy mode, a ✦ stack or a new deal changes the position. |
+| **Vegas rules** | **💵 Vegas** in the **📊** dialog, or `V`. $52 a deal, $5 a card home; one pass through the stock at Draw 1, three at Draw 3. |
 | **Ask for a hint** | **💡** (or `H`) rings the cards to move and points an arrow at where they go — the opening move of a line that actually wins. If there isn't one, it says so rather than guessing, and it searches harder than the automatic warning when the quick pass can't tell. |
 | **Start a winnable deal** | **🎲** (or `W`) shuffles until it finds a board proved winnable under your current draw mode. |
 | **Swap the rail's side** | **🤚**, on phone-portrait screens only, moves the stock, waste and foundations to the other edge for left-handed play. |
 | **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. Opening that link shows the score, time and moves to beat, then deals the same board. |
 | **New game** | The **New Game** button, or `N`. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
-| **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…`), plus `&draw=3` when you're playing Draw 3. A result is never in it: only the **Share** button adds `&win=…`, and accepting a challenge clears it again. |
+| **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…`), plus `&draw=3` when you're playing Draw 3 and `&vegas=1` under Vegas rules. A result is never in it: only the **Share** button adds `&win=…`, and accepting a challenge clears it again. |
 | **Hide the toolbar** | The **☰** button at the far left of the bar, or `T` — offered when the bar can't fit on one row. The board grows into the freed space, the stats stay visible, and everything stays playable with the buttons folded away. |
 
 **Tableau rules:** cards stack in descending rank and alternating colour
@@ -303,6 +312,12 @@ The per-move point is what makes a *short* win beat a long one: sending a card h
 nets +9, while shuffling cards about for no reason just bleeds. The score never goes
 below zero, so a game that's already at 0 can't be dug deeper.
 
+Under **Vegas rules** the toolbar shows money instead: the deal costs **$52** and each
+card on a foundation is worth **$5**, so eleven cards home is the break-even point and a
+full win is +$208. The result settles into your bank when the game ends — won, or walked
+away from — and only once you've made a move, so passing over a deal costs nothing. The
+ordinary score is still kept underneath, for your best-score record.
+
 ### Keyboard shortcuts
 
 | Key | Action |
@@ -320,6 +335,7 @@ below zero, so a game that's already at 0 can't be dug deeper.
 | `W` | Deal a game that can be won |
 | `D` | Today's daily deal |
 | `T` | Show / hide the toolbar |
+| `V` | Vegas rules on / off |
 
 ---
 

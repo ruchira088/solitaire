@@ -29,6 +29,7 @@ interface Snapshot {
   spares: Card[][];
   moves: number;
   score: number;
+  recycles: number;
 }
 
 /** The piles of a board, as plain JSON-safe data: arrays of encoded cards (see
@@ -47,6 +48,9 @@ export interface BoardState {
 export interface SnapshotState extends BoardState {
   moves: number;
   score: number;
+  /** Optional for the same reason as `GameState.history`: a snapshot written before
+   *  Vegas existed recycled freely, which is what 0 means outside Vegas anyway. */
+  recycles?: number;
 }
 
 /** A whole game as plain JSON-safe data. */
@@ -63,6 +67,11 @@ export interface GameState extends BoardState {
    *  and no one lost a game in progress to the upgrade. */
   history?: SnapshotState[];
   future?: SnapshotState[];
+  /** Vegas rules: a limited number of passes through the stock. Optional, and absent
+   *  reads as off, so an older save needs no schema bump. */
+  vegas?: boolean;
+  /** Times the waste has been turned back into the stock this game. */
+  recycles?: number;
 }
 
 const MAX_HISTORY = 200;
@@ -80,6 +89,16 @@ export const MAX_SPARES = 3;
  *  a productive move still pays (a card to a foundation nets +9), big enough that
  *  shuffling cards about pointlessly bleeds points. */
 const MOVE_COST = 1;
+
+/** What a Vegas deal costs and what each card home pays back, in dollars. */
+export const VEGAS_STAKE = 52;
+export const VEGAS_PER_CARD = 5;
+
+/** How many times the waste may go back into the stock under Vegas rules: none at
+ *  Draw 1, twice at Draw 3 — one pass and three passes through the deck. */
+export function vegasRecycleLimit(drawCount: DrawCount): number {
+  return drawCount === 1 ? 0 : 2;
+}
 
 function cloneCard(c: Card): Card {
   return { id: c.id, suit: c.suit, rank: c.rank, faceUp: c.faceUp };
@@ -106,6 +125,7 @@ function encodeSnapshot(s: Snapshot): SnapshotState {
     spares: s.spares.map(encodePile),
     moves: s.moves,
     score: s.score,
+    recycles: s.recycles,
   };
 }
 
@@ -118,6 +138,7 @@ function decodeSnapshot(s: SnapshotState): Snapshot {
     spares: s.spares.map(decodePile),
     moves: s.moves,
     score: s.score,
+    recycles: s.recycles ?? 0,
   };
 }
 
@@ -198,9 +219,10 @@ function parseSnapshotState(data: unknown): SnapshotState | null {
   const d = data as Record<string, unknown>;
   const moves = asCount(d.moves);
   const score = asCount(d.score);
-  if (moves === null || score === null) return null;
+  const recycles = d.recycles === undefined ? 0 : asCount(d.recycles);
+  if (moves === null || score === null || recycles === null) return null;
   const board = parseBoardState(d);
-  return board && { ...board, moves, score };
+  return board && { ...board, moves, score, recycles };
 }
 
 /** A run of undo entries. One bad entry drops the *whole* stack rather than leaving a
@@ -233,6 +255,10 @@ export function parseGameState(data: unknown): GameState | null {
   const { easy } = d;
   if (seed === null || drawCount === null || moves === null || score === null) return null;
   if (typeof easy !== "boolean") return null;
+  // Both optional: a save from before Vegas existed is an ordinary game.
+  const vegas = d.vegas === undefined ? false : d.vegas;
+  const recycles = d.recycles === undefined ? 0 : asCount(d.recycles);
+  if (typeof vegas !== "boolean" || recycles === null) return null;
 
   const board = parseBoardState(d);
   if (!board) return null;
@@ -246,7 +272,7 @@ export function parseGameState(data: unknown): GameState | null {
   // replaying the game on every load, and neither can produce anything worse than a
   // legal board — Restart lays out a different game; Undo lands on a position you
   // couldn't have reached.
-  return { seed, drawCount, easy, moves, score, ...board, history, future };
+  return { seed, drawCount, easy, moves, score, ...board, history, future, vegas, recycles };
 }
 
 export class Game {
@@ -267,6 +293,12 @@ export class Game {
   /** The seed this board was dealt from. Every game has one, so Restart and the
    *  shareable deal code are always available. */
   seed = 0;
+  /** Vegas rules: the stock can only be recycled `vegasRecycleLimit` times. Like
+   *  `drawCount` it survives `deal()` — it's the mode, not the board. */
+  vegas = false;
+  /** Times the waste has gone back into the stock this game. Undo restores it, so
+   *  taking back a recycle gives the pass back. */
+  recycles = 0;
 
   private history: Snapshot[] = [];
   /** Undone snapshots, awaiting redo. Bounded by MAX_HISTORY for free: every entry
@@ -292,6 +324,7 @@ export class Game {
     this.spares = [];
     this.moves = 0;
     this.score = 0;
+    this.recycles = 0;
     this.history = [];
     this.future = [];
 
@@ -460,14 +493,22 @@ export class Game {
     });
   }
 
+  /** Whether turning the waste back over is allowed: always outside Vegas, and only
+   *  until the passes run out inside it. */
+  canRecycle(): boolean {
+    return !this.vegas || this.recycles < vegasRecycleLimit(this.drawCount);
+  }
+
   /** Draw from stock to waste; recycle waste back to stock when empty. */
   drawFromStock(): MoveResult | null {
     // Guard before recording history, not after: pushing and then popping would
     // still have cleared the redo stack, so a click on a dead stock would silently
     // throw away everything you could redo.
     if (this.stock.length === 0 && this.waste.length === 0) return null;
+    if (this.stock.length === 0 && !this.canRecycle()) return null;
     this.pushHistory();
     if (this.stock.length === 0) {
+      this.recycles++;
       // Recycle: waste back to stock, face down, original order restored.
       while (this.waste.length > 0) {
         const c = this.waste.pop()!;
@@ -493,6 +534,15 @@ export class Game {
 
   isWon(): boolean {
     return this.foundations.every((f) => f.length === 13);
+  }
+
+  /** This game's Vegas result so far: the stake paid to deal, less what the cards on
+   *  the foundations have earned back. Derived from the board rather than kept, so
+   *  undo, a resumed save and a foundation card pulled back down all agree with it
+   *  without any bookkeeping of their own. */
+  vegasDollars(): number {
+    const home = this.foundations.reduce((n, f) => n + f.length, 0);
+    return home * VEGAS_PER_CARD - VEGAS_STAKE;
   }
 
   /** True when the remaining game can be finished purely by sending cards to
@@ -547,6 +597,8 @@ export class Game {
       seed: this.seed,
       drawCount: this.drawCount,
       easy: this.easyEmptyStacks,
+      vegas: this.vegas,
+      recycles: this.recycles,
       moves: this.moves,
       score: this.score,
       stock: encodePile(this.stock),
@@ -568,6 +620,8 @@ export class Game {
     this.seed = state.seed;
     this.drawCount = state.drawCount;
     this.easyEmptyStacks = state.easy;
+    this.vegas = state.vegas ?? false;
+    this.recycles = state.recycles ?? 0;
     this.moves = state.moves;
     this.score = state.score;
     this.stock = decodePile(state.stock);
@@ -618,6 +672,7 @@ export class Game {
       spares: this.spares.map(clonePile),
       moves: this.moves,
       score: this.score,
+      recycles: this.recycles,
     };
   }
 
@@ -629,6 +684,7 @@ export class Game {
     this.spares = s.spares;
     this.moves = s.moves;
     this.score = s.score;
+    this.recycles = s.recycles;
   }
 
   private pushHistory(): void {

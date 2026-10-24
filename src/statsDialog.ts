@@ -1,6 +1,7 @@
-// The statistics dialog: the lifetime record and the archive of daily deals. All DOM,
-// so it isn't unit-tested — the words it shows come from statsView.ts, which is — and
-// `npm run smoke` checks it opens, closes, and is genuinely modal.
+// The statistics dialog: the lifetime record, the archive of daily deals, and the
+// Vegas switch. All DOM, so it isn't unit-tested — the words it shows come from
+// statsView.ts, which is — and `npm run smoke` checks it opens, closes, and is
+// genuinely modal.
 //
 // The modality is enforced here, not merely claimed by `aria-modal="true"`: `#app` is
 // made inert while it is up, which stops Tab walking out of the panel into the toolbar
@@ -23,6 +24,11 @@ export interface StatsDialogDeps {
   playDay: (key: string) => void;
   /** After a reset: the 📅 button's ✓ was drawn from the record just wiped. */
   afterReset: () => void;
+  vegas: {
+    /** What the next deal will be played under — what the switch shows. */
+    next: () => boolean;
+    toggle: () => void;
+  };
 }
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -34,6 +40,7 @@ export class StatsDialog {
   private readonly reset = byId<HTMLButtonElement>("stats-reset");
   private readonly resetLabel = byId("stats-reset-label");
   private readonly closeBtn = byId<HTMLButtonElement>("stats-close");
+  private readonly vegasBtn = byId<HTMLButtonElement>("stats-vegas");
   private readonly app = byId("app");
   private resetArmed = false;
   private resetTimer = 0;
@@ -42,6 +49,10 @@ export class StatsDialog {
     this.button.addEventListener("click", () => this.open());
     this.closeBtn.addEventListener("click", () => this.close());
     this.reset.addEventListener("click", () => this.armOrReset());
+    this.vegasBtn.addEventListener("click", () => {
+      deps.vegas.toggle();
+      this.syncVegas();
+    });
     this.list.addEventListener("click", (e) => {
       const day = (e.target as HTMLElement).closest<HTMLButtonElement>(".archive-day")?.dataset.day;
       if (!day) return;
@@ -61,6 +72,7 @@ export class StatsDialog {
   open(): void {
     this.render();
     this.disarm(); // a freshly opened dialog never opens half-way through a confirmation
+    this.syncVegas();
     this.overlay.hidden = false;
     this.app.inert = true;
     this.closeBtn.focus();
@@ -71,6 +83,22 @@ export class StatsDialog {
     this.app.inert = false; // before the focus call below — focus can't land inside inert
     this.disarm();
     this.button.focus(); // back to the button that opened it
+  }
+
+  /** Re-draw while open — a Vegas game settling changes the bank under it. */
+  refresh(): void {
+    if (this.isOpen()) this.render();
+  }
+
+  private syncVegas(): void {
+    const on = this.deps.vegas.next();
+    this.vegasBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    setTip(
+      this.vegasBtn,
+      on
+        ? "Vegas rules on: $52 a deal, $5 a card home, limited passes through the stock (V)"
+        : "Vegas rules: $52 a deal, $5 a card home, limited passes through the stock (V)",
+    );
   }
 
   private render(): void {

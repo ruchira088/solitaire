@@ -109,6 +109,11 @@ export interface Stats {
    *  uncapped list would grow forever in a 5 MB store. `dailyWins` is the real total
    *  and is not capped, so trimming this can't cost you a counter. */
   dailyWonDays: string[];
+  /** Vegas: the running total in dollars across every Vegas game settled — the one
+   *  stat that can go negative, since a game that sends fewer than 11 cards home loses
+   *  money — and how many games it is over. */
+  vegasBank: number;
+  vegasGames: number;
 }
 
 /** A bit over a year of history — comfortably more than the archive shows. */
@@ -135,6 +140,8 @@ const EMPTY_STATS: Stats = {
   bestDailyStreak: 0,
   lastDailyWin: "",
   dailyWonDays: [],
+  vegasBank: 0,
+  vegasGames: 0,
 };
 
 /** Whole days from `a` to `b`, both YYYY-MM-DD. Parsed at UTC midnight so that a
@@ -165,6 +172,11 @@ export function hasWonDaily(s: Stats, key: string): boolean {
  *  hand-edited, negative, fractional, missing — reads as "nothing recorded". */
 function count(v: unknown): number {
   return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0;
+}
+
+/** Any integer, or 0 — the bank's sanitiser, since it alone may be negative. */
+function signed(v: unknown): number {
+  return typeof v === "number" && Number.isSafeInteger(v) ? v : 0;
 }
 
 /** The pre-stats best score, kept only so an existing record survives the upgrade. */
@@ -206,6 +218,8 @@ export function loadStats(): Stats {
     dailyWonDays: Array.isArray(d.dailyWonDays)
       ? [...new Set(d.dailyWonDays.filter(isDailyKey))].sort().reverse().slice(0, WON_DAYS_KEPT)
       : [],
+    vegasBank: signed(d.vegasBank),
+    vegasGames: count(d.vegasGames),
   };
 }
 
@@ -294,4 +308,16 @@ export function recordWin(game: {
   }
   saveStats(s);
   return { stats: s, isRecord };
+}
+
+/** Settle one Vegas game into the bank: the stake it cost and what its cards home won
+ *  back. Called once per game that was played — on the win, or when it's walked away
+ *  from — so a deal looked at and passed over costs nothing, the same rule that keeps
+ *  it out of `played`. */
+export function recordVegas(dollars: number): Stats {
+  const s = loadStats();
+  s.vegasBank += Math.round(dollars) || 0;
+  s.vegasGames += 1;
+  saveStats(s);
+  return s;
 }

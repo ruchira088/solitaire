@@ -14,7 +14,8 @@
 // a winnable game dead. Anything the node budget cuts short reports `unknown`, never
 // `unsolvable`.
 //
-// Not modelled: ✦ spare stacks and easy mode. Both change what a legal move is, and a
+// Not modelled: ✦ spare stacks, easy mode and Vegas's limited passes. All three change
+// what a legal move is, and a
 // solver that quietly ignored them would answer a different question from the one the
 // board is asking — `analyse` returns `unknown` for those positions instead.
 
@@ -60,10 +61,11 @@ export interface SolveResult {
   nodes: number;
 }
 
-/** Positions this search understands. A board with ✦ stacks or easy mode on plays by
- *  different rules, and the honest answer there is "I don't know". */
+/** Positions this search understands. A board with ✦ stacks, easy mode or Vegas's
+ *  pass limit plays by different rules, and the honest answer there is "I don't know"
+ *  — the search recycles freely, so under Vegas it could call a dead board winnable. */
 export function canAnalyse(state: GameState): boolean {
-  return state.spares.length === 0 && !state.easy;
+  return state.spares.length === 0 && !state.easy && !state.vegas;
 }
 
 /** Where a move starts and ends in the *game's* terms, which is what the board can

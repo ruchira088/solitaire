@@ -136,6 +136,10 @@ describe("what it refuses to answer", () => {
     expect(solve(g).outcome).toBe("unknown");
   });
 
+  it("won't analyse a Vegas board, whose pass limit it doesn't model", () => {
+    expect(canAnalyse({ ...new Game(1, 42).serialize(), vegas: true })).toBe(false);
+  });
+
   it("analyses an ordinary board", () => {
     expect(canAnalyse(new Game(1, 42).serialize())).toBe(true);
   });

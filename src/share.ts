@@ -84,6 +84,8 @@ export interface ChallengeBoard {
   /** Which day's daily this board is (`dailyDayForSeed`), or null for an ordinary deal. */
   dailyKey?: string | null;
   todayKey?: string;
+  /** Vegas's limited passes make it a different game again, so it is named too. */
+  vegas?: boolean;
 }
 
 /** Which board the challenge is on. The draw mode is part of it: the same cards under
@@ -94,7 +96,7 @@ export function boardLine(b: ChallengeBoard): string {
       ? "Today's daily deal"
       : `Daily deal · ${b.dailyKey}`
     : `Deal ${b.code}`;
-  return `${deal} · Draw ${b.drawCount}`;
+  return `${deal} · Draw ${b.drawCount}${b.vegas ? " · Vegas" : ""}`;
 }
 
 // ---- The links a board is shared by ----------------------------------------
@@ -103,6 +105,8 @@ export interface DealLink {
   /** The deal code for this board — `encodeSeed(game.seed)`. */
   code: string;
   drawCount: number;
+  /** Vegas rules, written as `vegas=1` — and, like Draw 1, simply absent when off. */
+  vegas?: boolean;
 }
 
 /** The link to a board: the deal code, and the draw mode when it isn't the default.
@@ -118,6 +122,8 @@ export function dealUrl(href: string, deal: DealLink): string {
   u.searchParams.set("deal", deal.code);
   if (deal.drawCount === 3) u.searchParams.set("draw", "3");
   else u.searchParams.delete("draw");
+  if (deal.vegas) u.searchParams.set("vegas", "1");
+  else u.searchParams.delete("vegas");
   u.searchParams.delete("win");
   return u.toString();
 }

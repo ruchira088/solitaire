@@ -6,6 +6,8 @@
 // stays usable. main.ts decides what the panel says (`WinView`); this only puts it on
 // screen and runs the Share button.
 
+import { fmtDollars } from "./statsView";
+
 export interface WinView {
   score: number;
   /** Beat the best score; shown as its own line and colour. */
@@ -13,6 +15,8 @@ export interface WinView {
   best: number;
   /** The daily run as it now stands, or 0 when this wasn't today's deal. */
   dailyStreak: number;
+  /** This game's Vegas result and the bank after it, when played under Vegas. */
+  vegas: { game: number; bank: number } | null;
   /** What Share copies — built once, since the clock stopped with the win. */
   shareText: string;
 }
@@ -23,6 +27,7 @@ export class WinPanel {
   private readonly overlay = byId("win-overlay");
   private readonly scoreLine = byId("win-score");
   private readonly daily = byId("win-daily");
+  private readonly vegas = byId("win-vegas");
   private readonly share = byId<HTMLButtonElement>("win-share");
   private readonly shareLabel = byId("win-share-label");
   private readonly newBtn = byId<HTMLButtonElement>("win-new");
@@ -47,6 +52,10 @@ export class WinPanel {
     this.scoreLine.classList.toggle("is-record", v.record);
     this.daily.hidden = v.dailyStreak === 0;
     this.daily.textContent = `📅 Daily deal · ${v.dailyStreak}-day streak`;
+    this.vegas.hidden = !v.vegas;
+    if (v.vegas) {
+      this.vegas.textContent = `💵 Vegas ${fmtDollars(v.vegas.game)} · bank ${fmtDollars(v.vegas.bank)}`;
+    }
     this.resetShareLabel();
     this.overlay.hidden = false;
     this.newBtn.focus(); // so Enter/Space plays again without reaching for the mouse

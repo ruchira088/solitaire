@@ -65,7 +65,7 @@ describe("keyCommand", () => {
   });
 
   it("maps every single-letter shortcut", () => {
-    const letters = { n: "newGame", d: "daily", h: "hint", w: "winnable", a: "home", t: "chrome" };
+    const letters = { n: "newGame", d: "daily", h: "hint", w: "winnable", a: "home", t: "chrome", v: "vegas" };
     for (const [k, kind] of Object.entries(letters)) {
       expect(keyCommand(press(k), BOARD), k).toEqual({ kind });
       expect(keyCommand(press(k.toUpperCase()), BOARD), k).toEqual({ kind });

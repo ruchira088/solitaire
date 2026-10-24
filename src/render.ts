@@ -3,7 +3,7 @@
 // gradients; the scene is redrawn every frame.
 
 import { Card, rankLabel, SUIT_GLYPH, suitColor, Suit } from "./cards";
-import { Game, PileId } from "./game";
+import { Game, PileId, vegasRecycleLimit } from "./game";
 import { columnOffsets, Layout, Point } from "./layout";
 import { Animator, Particle } from "./animation";
 import { getFaceArt } from "./courtArt";
@@ -553,7 +553,10 @@ export class Renderer {
     }
 
     // Stock.
-    this.drawPlaceholder(ctx, layout.stock, layout, game.stock.length === 0 ? "↻" : undefined);
+    // An empty stock offers the recycle — unless Vegas has spent the passes, when it
+    // says so rather than inviting a click that does nothing.
+    const stockGlyph = game.stock.length > 0 ? undefined : game.canRecycle() ? "↻" : "✕";
+    this.drawPlaceholder(ctx, layout.stock, layout, stockGlyph);
     const stockTop = game.stock[game.stock.length - 1];
     if (stockTop && !hidden(stockTop)) {
       this.drawCard(ctx, stockTop, layout.stock.x, layout.stock.y, layout, { faceShown: false });
@@ -663,8 +666,12 @@ export class Renderer {
     ctx.font = `600 ${Math.round(layout.cardH * 0.11)}px -apple-system, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    // Vegas adds the passes left, since running out is the rule that bites.
+    const passes = game.vegas
+      ? ` ↻${Math.max(0, vegasRecycleLimit(game.drawCount) - game.recycles)}`
+      : "";
     ctx.fillText(
-      `${game.waste.length}/${total}`,
+      `${game.waste.length}/${total}${passes}`,
       layout.stock.x + layout.cardW / 2,
       layout.stock.y + layout.cardH + layout.cardH * 0.06,
     );

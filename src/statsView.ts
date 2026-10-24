@@ -57,5 +57,23 @@ export function statGroups(s: Stats, today: string): StatGroup[] {
         ["Dailies won", String(s.dailyWins)],
       ],
     },
+    // Only once there's something in it: most players never turn Vegas on, and an
+    // empty bank is a row of noise for them.
+    ...(s.vegasGames > 0
+      ? [
+          {
+            title: "Vegas",
+            rows: [
+              ["Bank", fmtDollars(s.vegasBank)],
+              ["Games", String(s.vegasGames)],
+            ] as [string, string][],
+          },
+        ]
+      : []),
   ];
+}
+
+/** Signed dollars, the sign always shown — a bank reads as a profit or a loss. */
+export function fmtDollars(n: number): string {
+  return n < 0 ? `−$${-n}` : `+$${n}`;
 }

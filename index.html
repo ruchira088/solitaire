@@ -69,7 +69,7 @@
         <div class="stats">
           <div class="stat"><span class="label">Time</span><span id="stat-time" class="value">0:00</span></div>
           <div class="stat"><span class="label">Moves</span><span id="stat-moves" class="value">0</span></div>
-          <div class="stat"><span class="label">Score</span><span id="stat-score" class="value">0</span></div>
+          <div class="stat"><span id="stat-score-label" class="label">Score</span><span id="stat-score" class="value">0</span></div>
         </div>
       </header>
       <!-- role="application" so a screen reader hands the arrow keys to the game
@@ -94,6 +94,7 @@
           <h2 id="win-title">You Win! 🎉</h2>
           <p id="win-score">Score 0</p>
           <p id="win-daily" hidden></p>
+          <p id="win-vegas" hidden></p>
           <div class="dialog-actions">
             <button id="win-new" class="btn" type="button"><span class="ico" aria-hidden="true">🃏</span>New Game</button>
             <button id="win-restart" class="btn" type="button" data-tip="Replay this same deal from the start"><span class="ico" aria-hidden="true">🔄</span>Restart</button>
@@ -107,6 +108,7 @@
         <h2 id="stats-title">Statistics</h2>
         <dl id="stats-list"></dl>
         <div class="dialog-actions">
+          <button id="stats-vegas" class="btn" type="button" aria-pressed="false"><span class="ico" aria-hidden="true">💵</span>Vegas</button>
           <button id="stats-reset" class="btn" type="button"><span class="ico" aria-hidden="true">🧹</span><span id="stats-reset-label">Reset stats</span></button>
           <button id="stats-close" class="btn" type="button">Close</button>
         </div>

@@ -27,7 +27,8 @@ export type Command =
   | { kind: "hint" }
   | { kind: "winnable" }
   | { kind: "home" }
-  | { kind: "chrome" };
+  | { kind: "chrome" }
+  | { kind: "vegas" };
 
 export interface KeyPress {
   key: string;
@@ -60,6 +61,7 @@ const LETTERS: Record<string, Command> = {
   w: { kind: "winnable" },
   a: { kind: "home" },
   t: { kind: "chrome" },
+  v: { kind: "vegas" },
 };
 
 /** The command a key press asks for, or null for one the game leaves alone. A non-null

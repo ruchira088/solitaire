@@ -2,7 +2,7 @@
 // could reach them; they're pure, so they get tested like every other pure module.
 
 import { describe, expect, it } from "vitest";
-import { fmtDuration, statGroups } from "./statsView";
+import { fmtDollars, fmtDuration, statGroups } from "./statsView";
 import { Stats } from "./storage";
 
 const stats = (over: Partial<Stats> = {}): Stats => ({
@@ -20,6 +20,8 @@ const stats = (over: Partial<Stats> = {}): Stats => ({
   bestDailyStreak: 0,
   lastDailyWin: "",
   dailyWonDays: [],
+  vegasBank: 0,
+  vegasGames: 0,
   ...over,
 });
 
@@ -50,6 +52,12 @@ describe("fmtDuration", () => {
 describe("statGroups", () => {
   it("splits the lifetime record from the daily one", () => {
     expect(statGroups(stats(), "2026-09-01").map((g) => g.title)).toEqual(["Games", "Daily deal"]);
+  });
+
+  it("adds a Vegas group only once a Vegas game has been settled", () => {
+    const titles = statGroups(stats({ vegasGames: 2, vegasBank: -24 }), "2026-09-01").map((g) => g.title);
+    expect(titles).toEqual(["Games", "Daily deal", "Vegas"]);
+    expect(row(stats({ vegasGames: 2, vegasBank: -24 }), "2026-09-01", "Vegas", "Bank")).toBe("−$24");
   });
 
   it("shows a dash rather than a rate when nothing has been played", () => {
@@ -89,5 +97,13 @@ describe("statGroups", () => {
     const lapsed = stats({ dailyStreak: 6, bestDailyStreak: 9, lastDailyWin: "2026-01-01" });
     expect(row(lapsed, "2026-09-01", "Daily deal", "Current streak")).toBe("0");
     expect(row(lapsed, "2026-09-01", "Daily deal", "Best streak")).toBe("9");
+  });
+});
+
+describe("fmtDollars", () => {
+  it("always shows the sign, since a bank is a profit or a loss", () => {
+    expect(fmtDollars(13)).toBe("+$13");
+    expect(fmtDollars(0)).toBe("+$0");
+    expect(fmtDollars(-52)).toBe("−$52");
   });
 });
