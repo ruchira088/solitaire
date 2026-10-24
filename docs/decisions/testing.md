@@ -55,8 +55,14 @@ Conventions worth keeping:
   `"vite"` doesn't type a `test` key, and merging them would put test config on the
   path of every production build.
 
-## The size budget
+## Coverage and the size budget
 
+- **Coverage is a report, not a gate.** `npm run test:coverage` (`@vitest/coverage-v8`)
+  is scoped to the pure modules in `vitest.config.ts`. A percentage threshold would
+  reward tests written to move a number; the point is to see *which* branches of the
+  untrusted-input parsers and the rule guards nothing exercises. The first run found
+  two refusal guards in `game.ts` untested. `coverage/` is gitignored. The coverage
+  plugin pins Vitest's exact version as a peer, so the two move together.
 - **`npm run size` holds each built asset to a gzipped ceiling** (`check-size.mjs`),
   roughly 15% over what it measured when last set, and runs in CI after the build.
   A budget that matches no asset, or an emitted script or stylesheet with no budget,

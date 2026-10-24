@@ -234,7 +234,7 @@ dealing over your progress.
 Requires **Node 22.12+** (Vitest 5 — Vite 8 alone would still run on 20.19+); `.nvmrc` pins 24.
 
 ```bash
-npm install      # dev tooling only — Vite, TypeScript, Vitest, SVGO, playwright-core
+npm install      # dev tooling only — Vite, TypeScript, Vitest (+ coverage), SVGO, playwright-core
 npm run dev      # start the dev server with hot reload (opens the browser)
 ```
 
@@ -251,6 +251,7 @@ Tests:
 ```bash
 npm test         # run the suite once
 npm run test:watch
+npm run test:coverage  # the same suite, with a coverage report (coverage/index.html)
 ```
 
 ## How to play
@@ -479,14 +480,16 @@ ENVIRONMENT=production npm run deploy   # production → solitaire.ruchij.com
 - **HTML5 Canvas 2D** for all rendering
 - **Vite 8** for the dev server and production bundling
 - **oxlint** for linting — correctness rules only, no formatting opinions
-- **Vitest** for the pure-logic unit tests, plus a Playwright smoke test that boots
-  the built bundle in real Chrome (`npm run smoke`) to cover the canvas, input and
-  toolbar that unit tests can't reach
+- **Vitest** for the pure-logic unit tests (with `@vitest/coverage-v8` for an on-demand
+  coverage report), plus a Playwright smoke test that boots the built bundle in real
+  Chrome (`npm run smoke`) to cover the canvas, input and toolbar that unit tests
+  can't reach
 - **No runtime dependencies** — the shipped bundle is pure vanilla JS/Canvas, and
   `package.json` has no `dependencies` block at all. Everything installed
-  (TypeScript, Vite, Vitest, plus SVGO and `playwright-core` for the smoke test and
-  the one-off card-art and screenshot tooling) is build-time only — and
-  `npm run size` holds the bundle to a gzipped budget, so it stays that way.
+  (TypeScript, Vite, Vitest and its coverage plugin, plus SVGO and
+  `playwright-core` for the smoke test and the one-off card-art and screenshot
+  tooling) is build-time only — and `npm run size` holds the bundle to a gzipped
+  budget, so it stays that way.
 
 ## Credits
 

@@ -11,6 +11,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs",
@@ -20,6 +21,7 @@
     "cards:optimize": "svgo -f public/cards --config svgo.config.mjs"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.5",
     "oxlint": "^1.82.0",
     "playwright-core": "^1.63.0",
     "svgo": "^4.1.0",

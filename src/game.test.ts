@@ -251,6 +251,23 @@ describe("moveCards", () => {
   });
 });
 
+describe("moves the rules refuse", () => {
+  it("won't put more than one card on a foundation at once", () => {
+    const g = boardOf({
+      foundations: [[up(S, 1)], [], [], []],
+      tableau: [[up(S, 3), up(H, 2)], [], [], [], [], [], []],
+    });
+    expect(g.moveCards(TABLEAU(0), 0, FOUNDATION(0))).toBeNull();
+    expect(g.moves).toBe(0);
+  });
+
+  it("won't auto-move a face-down card, or one with no foundation to go to", () => {
+    expect(boardOf({ tableau: [[dn(S, 1)], [], [], [], [], [], []] }).autoMoveToFoundation(TABLEAU(0))).toBeNull();
+    expect(boardOf({ tableau: [[up(S, 5)], [], [], [], [], [], []] }).autoMoveToFoundation(TABLEAU(0))).toBeNull();
+    expect(boardOf().autoMoveToFoundation(TABLEAU(0))).toBeNull(); // an empty pile
+  });
+});
+
 describe("addTempStack", () => {
   it("costs 50 points, plus the point every move costs", () => {
     const g = boardOf({ score: 120 });

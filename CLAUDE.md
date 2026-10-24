@@ -17,6 +17,7 @@ decision, not a detail.** Everything installed is dev/build tooling:
 | `typescript` | `^7.0.2` | strict-mode checking (`npm run typecheck`) and the `tsc` step ahead of `vite build` |
 | `vite` | `^8.3.0` | dev server + production bundle; `preview` serves `dist/` for the smoke test |
 | `vitest` | `^5.0.0` | the pure-logic suite (`npm test`). Its `engines` field sets the **Node 22.12+** floor (`.nvmrc` pins 24) |
+| `@vitest/coverage-v8` | `^5.0.5` | `npm run test:coverage` — a report, not a gate. Pins Vitest's exact version as a peer, so the two move together |
 | `svgo` | `^4.1.0` | one-off pip/ace face optimisation (`npm run cards:optimize`) |
 | `oxlint` | `^1.82.0` | linting (`npm run lint`). **Not ESLint on purpose** — `typescript-eslint` refuses TypeScript 7 (typescript-eslint#10940) |
 | `playwright-core` | `^1.63.0` | drives *system* Chrome for `scripts/smoke.mjs` (CI), the screenshots and card rasterising. `-core`: no browser downloads |
@@ -38,6 +39,7 @@ npm run lint          # oxlint (correctness rules only)
 npm run typecheck     # tsc --noEmit (strict mode)
 npm test              # vitest run — the pure-logic suite
 npm run test:watch    # vitest in watch mode
+npm run test:coverage # the suite with a coverage report (coverage/, gitignored)
 npm run build         # tsc + vite build → dist/
 npm run size          # gzipped size budget per built asset (needs a build; CI runs it)
 npm run preview       # serve the production build
@@ -67,7 +69,7 @@ gate CI ahead of every deploy (the `build-and-typecheck` job).
   latches off after a failed write. `vitest.config.ts` stays separate from
   `vite.config.ts`.
 
-→ [testing](docs/decisions/testing.md) (including the size budget)
+→ [testing](docs/decisions/testing.md) (including coverage and the size budget)
 
 ## Architecture
 
