@@ -27,7 +27,7 @@ What the theme registry owns, how the three on-board highlights stay distinguish
   why each differs from the others in colour, weight *and* extent rather than in just
   one of the three. A fourth would want the same scrutiny.
 
-- **The ☰ toggle only exists when the bar wraps.** `updateChromeToggle` measures
+- **The ☰ toggle only exists when the bar wraps.** `Preferences.updateChromeToggle` (preferences.ts) measures
   the real layout — a box is on one row exactly when it's no taller than its
   tallest child — and adds `#toolbar.needs-toggle`. It measures with the button
   *in flow* (`.is-measuring`), so its own width counts and the answer can't

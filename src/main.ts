@@ -1,5 +1,8 @@
 // Bootstrap: canvas + HiDPI scaling, the game loop, the deal / auto-complete /
-// win animations, and the toolbar wiring.
+// win animations, and the toolbar wiring. The parts with rules of their own live
+// beside it — key precedence in keyboard.ts, the dead-board warning's lifetime in
+// deadCheck.ts — and the two DOM panels that are self-contained in statsDialog.ts and
+// startOverlay.ts.
 
 import "./styles.css";
 import { Card } from "./cards";
@@ -13,17 +16,6 @@ import { preloadFaceArt } from "./courtArt";
 import { onCardFaceLoad, preloadCardFaces } from "./cardFaces";
 import { initTooltips, setTip } from "./tooltip";
 import {
-  getFelt,
-  getThemeName,
-  isThemeName,
-  nextTheme,
-  setTheme,
-  themeInfo,
-  ThemeName,
-} from "./theme";
-import {
-  isSoundEnabled,
-  setSoundEnabled,
   playDeal,
   playDraw,
   playFanfare,
@@ -34,17 +26,13 @@ import {
 import {
   clearGame,
   currentDailyStreak,
-  hasWonDaily,
   loadGame,
   loadStats,
-  readItem,
   recordAbandon,
   recordGameStart,
   recordWin,
-  resetStats,
   saveGame,
   Stats,
-  writeItem,
 } from "./storage";
 import {
   dailyDayForSeed,
@@ -53,7 +41,6 @@ import {
   encodeSeed,
   parseSeed,
   randomSeed,
-  recentDailyKeys,
 } from "./rng";
 import {
   boardLine,
@@ -65,7 +52,6 @@ import {
   SharedResult,
   shareUrl,
 } from "./share";
-import { statGroups } from "./statsView";
 import { canAnalyse, GameMove, Outcome } from "./solver";
 import type { SolveRequest, SolveResponse } from "./solver.worker";
 import {
@@ -81,6 +67,12 @@ import {
   runName,
   samePile,
 } from "./cursor";
+import { Command, keyCommand } from "./keyboard";
+import { DeadCheck } from "./deadCheck";
+import { ARCHIVE_WINDOW, StatsDialog } from "./statsDialog";
+import { WinPanel } from "./winPanel";
+import { Preferences } from "./preferences";
+import { StartChoice, StartOverlay } from "./startOverlay";
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -110,21 +102,13 @@ let sweepMoves = 0; // cards the current sweep has sent home, so its end knows t
 let timerStart: number | null = null;
 let elapsedFrozen = 0;
 let celebStarted = false;
-let resuming = false; // a saved game was restored; the overlay reveals it instead of dealing
 let started = false; // the start overlay has been dismissed
-let chromeHidden = false; // toolbar folded down to its toggle
-/** Portrait only: which edge the stock/waste/foundation rail sits on. The hand holding
- *  a phone covers the side it's on, and the stock is the pile you tap most. */
-let leftHanded = false;
 /** Set when a game is won: the lifetime stats to show on the win panel, and whether
  *  this game beat the best score. Null until then. */
 let winRecord: { stats: Stats; isRecord: boolean } | null = null;
 /** This deal has been counted in `played`. Undo can take the move count back to 0, so
  *  the flag — not `game.moves` — is what stops a game being counted twice. */
 let countedPlayed = false;
-let resetArmed = false; // the stats reset button is waiting for a confirming click
-let resetTimer = 0;
-let shareTimer = 0; // the Share button's "Copied!" label, reverted after a moment
 /** The board needs repainting. Solitaire spends most of its life as a completely
  *  static picture while the player thinks, and redrawing it 120 times a second to
  *  produce an identical frame is pure battery. So the loop paints only when something
@@ -159,7 +143,7 @@ function resize(): void {
   canvas.height = Math.max(1, Math.round(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   sparesShown = game.spares.length;
-  layout = computeLayout(rect.width, rect.height, sparesShown, leftHanded);
+  layout = computeLayout(rect.width, rect.height, sparesShown, prefs.leftHanded);
   // The rail-side toggle only means something on the portrait board, and this is the
   // one place that knows which layout was actually chosen.
   document.body.classList.toggle("portrait-board", layout.fanX);
@@ -238,36 +222,23 @@ const el = {
   easy: document.getElementById("btn-easy") as HTMLButtonElement,
   addStack: document.getElementById("btn-add-stack") as HTMLButtonElement,
   home: document.getElementById("btn-home") as HTMLButtonElement,
-  sound: document.getElementById("btn-sound") as HTMLButtonElement,
-  startMute: document.getElementById("start-mute") as HTMLButtonElement,
-  theme: document.getElementById("btn-theme") as HTMLButtonElement,
-  chrome: document.getElementById("btn-chrome") as HTMLButtonElement,
-  app: document.getElementById("app") as HTMLElement,
-  toolbar: document.getElementById("toolbar") as HTMLElement,
-  controls: document.querySelector(".controls") as HTMLElement,
   time: document.getElementById("stat-time") as HTMLElement,
   moves: document.getElementById("stat-moves") as HTMLElement,
   score: document.getElementById("stat-score") as HTMLElement,
   restart: document.getElementById("btn-restart") as HTMLButtonElement,
   hint: document.getElementById("btn-hint") as HTMLButtonElement,
   winnable: document.getElementById("btn-winnable") as HTMLButtonElement,
-  hand: document.getElementById("btn-hand") as HTMLButtonElement,
   daily: document.getElementById("btn-daily") as HTMLButtonElement,
   toast: document.getElementById("toast") as HTMLElement,
-  stats: document.getElementById("btn-stats") as HTMLButtonElement,
-  statsOverlay: document.getElementById("stats-overlay") as HTMLElement,
-  statsList: document.getElementById("stats-list") as HTMLElement,
-  statsReset: document.getElementById("stats-reset") as HTMLButtonElement,
-  statsResetLabel: document.getElementById("stats-reset-label") as HTMLElement,
-  statsClose: document.getElementById("stats-close") as HTMLButtonElement,
-  winOverlay: document.getElementById("win-overlay") as HTMLElement,
-  winScore: document.getElementById("win-score") as HTMLElement,
-  winDaily: document.getElementById("win-daily") as HTMLElement,
-  winShare: document.getElementById("win-share") as HTMLButtonElement,
-  winShareLabel: document.getElementById("win-share-label") as HTMLElement,
-  winNew: document.getElementById("win-new") as HTMLButtonElement,
-  winRestart: document.getElementById("win-restart") as HTMLButtonElement,
 };
+
+const prefs = new Preferences({
+  repaint: invalidate,
+  handChanged: () => {
+    resize(); // the piles move; the board is rebuilt from the new layout
+    input.cancelDrag(); // its offsets were measured against the old side
+  },
+});
 
 /** The cards are moving under their own steam and the board must not be changed out
  *  from under them: the opening deal, the auto-complete sweep, or the win cascade.
@@ -478,195 +449,29 @@ function runCelebrationFrame(): void {
   renderer.drawParticles(ctx, particles);
 }
 
-/** The win dialog: the score against the record, and the two ways out. A record gets
- *  its own line and colour; otherwise the score sits next to the one to beat. */
+/** The win dialog's contents. The daily line reads the streak back out of the record
+ *  just written, so a replayed daily correctly doesn't claim another day. */
 function showWinPanel(): void {
-  const record = winRecord?.isRecord ?? false;
-  el.winScore.textContent = record
-    ? `🏆 New best score — ${game.score}`
-    : `Score ${game.score}  ·  Best ${winRecord ? winRecord.stats.bestScore : game.score}`;
-  el.winScore.classList.toggle("is-record", record);
-  // The daily line only appears for the daily, and reads the streak back out of the
-  // record just written, so a replayed daily correctly doesn't claim another day.
-  const streak = winRecord && isDailyGame() ? currentDailyStreak(winRecord.stats, todayKey()) : 0;
-  el.winDaily.hidden = streak === 0;
-  el.winDaily.textContent = `📅 Daily deal · ${streak}-day streak`;
-  resetShareLabel();
-  syncBarHeight();
-  el.winOverlay.hidden = false;
-  el.winNew.focus(); // so Enter/Space plays again without reaching for the mouse
-}
-
-function hideWinPanel(): void {
-  el.winOverlay.hidden = true;
-  resetShareLabel();
-}
-
-/** Copy the result and the deal link. Reads the daily streak back out of the record
- *  written at win time, so a replayed daily reports the streak it actually holds
- *  rather than claiming another day. */
-function currentWinText(): string {
   const daily =
     winRecord && isDailyGame()
       ? { key: todayKey(), streak: currentDailyStreak(winRecord.stats, todayKey()) }
       : undefined;
   // One reading of the clock, shared by the text and the link in it: two calls to
   // `elapsedNow()` can land either side of a second boundary and disagree.
-  const result: SharedResult = {
+  const result: SharedResult = { score: game.score, moves: game.moves, elapsedMs: elapsedNow() };
+  prefs.syncBarHeight();
+  winPanel.show({
     score: game.score,
-    moves: game.moves,
-    elapsedMs: elapsedNow(),
-  };
-  return shareText({
-    ...result,
-    url: shareUrl(location.href, dealLink(), result),
-    code: encodeSeed(game.seed),
-    daily,
+    record: winRecord?.isRecord ?? false,
+    best: winRecord ? winRecord.stats.bestScore : game.score,
+    dailyStreak: daily?.streak ?? 0,
+    shareText: shareText({
+      ...result,
+      url: shareUrl(location.href, dealLink(), result),
+      code: encodeSeed(game.seed),
+      daily,
+    }),
   });
-}
-
-/** The label is the only feedback there is, so a failure has to say so rather than
- *  silently reading as success — clipboard writes are refused outside a secure
- *  context and can be denied by permission policy. */
-async function copyWinResult(): Promise<void> {
-  window.clearTimeout(shareTimer);
-  let ok = false;
-  try {
-    await navigator.clipboard.writeText(currentWinText());
-    ok = true;
-  } catch {
-    ok = false;
-  }
-  el.winShareLabel.textContent = ok ? "Copied!" : "Press ⌘C";
-  el.winShare.classList.toggle("is-copied", ok);
-  if (!ok) selectFallbackText();
-  shareTimer = window.setTimeout(resetShareLabel, 2400);
-}
-
-/** When the clipboard API is unavailable, put the text somewhere the player can copy
- *  it by hand instead of leaving them with a button that does nothing. */
-function selectFallbackText(): void {
-  const area = document.createElement("textarea");
-  area.value = currentWinText();
-  area.setAttribute("aria-label", "Your result — copy this");
-  area.className = "share-fallback";
-  el.winShare.parentElement?.appendChild(area);
-  area.focus();
-  area.select();
-  window.setTimeout(() => area.remove(), 8000);
-}
-
-function resetShareLabel(): void {
-  window.clearTimeout(shareTimer);
-  el.winShareLabel.textContent = "Share";
-  el.winShare.classList.remove("is-copied");
-  el.winOverlay.querySelector(".share-fallback")?.remove();
-}
-
-// ---- Statistics dialog -----------------------------------------------------
-
-/** The archive: the last four weeks of daily deals, ticked where they were won and
- *  clickable to play. It lives inside the statistics dialog rather than behind a new
- *  toolbar button — it *is* the daily record, the toolbar is already full, and the
- *  measured wrap threshold has no room to spare. */
-function renderArchive(s: Stats): HTMLElement {
-  const today = todayKey();
-  const grid = document.createElement("div");
-  grid.className = "archive";
-  // Oldest first, so it reads like a calendar rather than backwards.
-  for (const key of recentDailyKeys(today, ARCHIVE_WINDOW).reverse()) {
-    const won = hasWonDaily(s, key);
-    const isToday = key === today;
-    const cell = document.createElement("button");
-    cell.type = "button";
-    cell.className = "archive-day";
-    cell.classList.toggle("is-won", won);
-    cell.classList.toggle("is-today", isToday);
-    cell.dataset.day = key;
-    cell.textContent = String(Number(key.slice(8, 10)));
-    const state = won ? "won" : "not won";
-    setTip(cell, `${key} — ${state}. Click to play this deal.`);
-    cell.setAttribute("aria-label", `${key}, ${state}${isToday ? ", today" : ""}`);
-    grid.appendChild(cell);
-  }
-  return grid;
-}
-
-function renderStats(): void {
-  const nodes: HTMLElement[] = [];
-  for (const group of statGroups(loadStats(), todayKey())) {
-    // A <dt> spanning both columns: still a definition list, still one grid, and the
-    // heading can't drift out of step with the rows under it.
-    const head = document.createElement("dt");
-    head.className = "stats-group";
-    head.textContent = group.title;
-    nodes.push(head);
-    for (const [label, value] of group.rows) {
-      const dt = document.createElement("dt");
-      dt.textContent = label;
-      const dd = document.createElement("dd");
-      dd.textContent = value;
-      nodes.push(dt, dd);
-    }
-  }
-  el.statsList.replaceChildren(...nodes);
-
-  const stats = loadStats();
-  const wrap = document.createElement("dd");
-  wrap.className = "archive-cell";
-  wrap.appendChild(renderArchive(stats));
-  const head = document.createElement("dt");
-  head.className = "archive-cell";
-  head.textContent = "Last 4 weeks";
-  el.statsList.append(head, wrap);
-}
-
-/** Enforce the dialog's `aria-modal="true"`, which is otherwise only a claim: without
- *  this, Tab walks straight out of the panel into the toolbar behind it, so for anyone
- *  driving the page by keyboard the "modal" dialog isn't modal at all. `#stats-overlay`
- *  is a sibling of `#app` precisely so the whole app can be inerted in one line —
- *  which also takes the board and toolbar out of the accessibility tree, so a screen
- *  reader can't read past the dialog either. */
-function setAppInert(inert: boolean): void {
-  el.app.inert = inert;
-}
-
-function openStats(): void {
-  renderStats();
-  disarmReset(); // a freshly opened dialog never opens half-way through a confirmation
-  el.statsOverlay.hidden = false;
-  setAppInert(true);
-  el.statsClose.focus();
-}
-
-function closeStats(): void {
-  el.statsOverlay.hidden = true;
-  setAppInert(false); // before the focus call below — focus can't land inside inert
-  disarmReset();
-  el.stats.focus(); // back to the button that opened it
-}
-
-/** Wiping the record is destructive and unundoable, so the button asks first and
- *  forgets the question after a few seconds. */
-function armOrResetStats(): void {
-  if (!resetArmed) {
-    resetArmed = true;
-    el.statsReset.classList.add("is-confirming");
-    el.statsResetLabel.textContent = "Confirm reset";
-    resetTimer = window.setTimeout(disarmReset, 4000);
-    return;
-  }
-  disarmReset();
-  resetStats();
-  renderStats();
-  syncDailyButton(); // the ✓ was drawn from the record just wiped
-}
-
-function disarmReset(): void {
-  window.clearTimeout(resetTimer);
-  resetArmed = false;
-  el.statsReset.classList.remove("is-confirming");
-  el.statsResetLabel.textContent = "Reset stats";
 }
 
 // ---- Deal animation --------------------------------------------------------
@@ -750,11 +555,10 @@ function beginGame(deal: () => void): void {
   countedPlayed = false;
   celebration.stop();
   celebStarted = false;
-  hideWinPanel();
+  winPanel.hide();
   winRecord = null;
   autoCompleting = false;
   sweepMoves = 0; // the old board's sweep has nothing left to save
-  resuming = false;
   animator.clear();
   invalidate();
   cursor = null;
@@ -822,10 +626,6 @@ function playArchivedDay(key: string): void {
   if (game.seed === seed && !game.isWon() && game.moves > 0) return;
   beginGame(() => game.deal(seed));
 }
-
-/** How far back the archive looks — four weeks in the grid, and the same window
- *  `currentDailyDay` searches, so anything the grid can offer is recognised when won. */
-const ARCHIVE_WINDOW = 28;
 
 function playDaily(): void {
   if (busy || autoCompleting || input.drag) return;
@@ -905,112 +705,6 @@ function setDrawCount(n: DrawCount): void {
   }
 }
 
-function applyTheme(name: ThemeName): void {
-  setTheme(name);
-  invalidate(); // the felt, vignette, placeholders and card backs are all repainted
-  // One attribute rather than a class per theme: CSS keys its chrome palette off it,
-  // and adding a theme can't leave a stale class behind.
-  document.body.dataset.theme = name;
-  // The button shows where you are and says where you'd go, since with more than two
-  // themes the icon alone can no longer imply the destination.
-  el.theme.textContent = getFelt().icon;
-  const label = `Theme: ${getFelt().label} — click for ${themeInfo(nextTheme(name)).label}`;
-  setTip(el.theme, label);
-  el.theme.setAttribute("aria-label", label);
-  writeItem("solitaire-theme", name);
-}
-
-function toggleTheme(): void {
-  applyTheme(nextTheme(getThemeName()));
-}
-
-function applySound(on: boolean): void {
-  setSoundEnabled(on);
-  const icon = on ? "🔊" : "🔇";
-  const title = on ? "Mute sound effects" : "Unmute sound effects";
-  el.sound.textContent = icon;
-  setTip(el.sound, title);
-  if (el.startMute) {
-    el.startMute.textContent = icon;
-    setTip(el.startMute, title);
-  }
-  writeItem("solitaire-sound", on ? "on" : "off");
-}
-
-function toggleSound(): void {
-  applySound(!isSoundEnabled());
-}
-
-/** True when `box` lays its children out on one line: the content box is then no
- *  taller than its tallest child. Reading the real layout means this doesn't have to
- *  know which responsive rules are in play. */
-function isSingleRow(box: HTMLElement): boolean {
-  const kids = Array.from(box.children) as HTMLElement[];
-  const tallest = Math.max(...kids.map((k) => k.offsetHeight));
-  const cs = getComputedStyle(box);
-  const inner = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-  return inner <= tallest + 1;
-}
-
-/** Publish the toolbar's height, which is what the win panel centres below. Kept
- *  beside the toggle measurement because the same events change both: a window
- *  resize can rewrap the bar, and folding it changes its height outright. */
-function syncBarHeight(): void {
-  document.body.style.setProperty("--bar-h", `${el.toolbar.offsetHeight}px`);
-}
-
-/** The ☰ only earns its place when the buttons and the stats can't share one row.
- *  Measured with the button in flow, so its own width counts and the answer can't
- *  oscillate: a bar that fits *with* the toggle still fits once it's out. While the
- *  bar is folded away the toggle always shows — it's the only way back. */
-function updateChromeToggle(): void {
-  syncBarHeight();
-  if (chromeHidden) {
-    el.toolbar.classList.add("needs-toggle");
-    return;
-  }
-  el.toolbar.classList.add("is-measuring");
-  const fits = isSingleRow(el.toolbar) && isSingleRow(el.controls);
-  el.toolbar.classList.remove("is-measuring");
-  el.toolbar.classList.toggle("needs-toggle", !fits);
-}
-
-/** Fold the buttons away, handing the reclaimed height to the board — the
- *  ResizeObserver on the canvas re-lays the piles out by itself. The glyph stays a
- *  hamburger in both states: an ✕ on a game reads as "quit", and the bar being there
- *  or not is state enough (aria-expanded says so too). */
-function applyChrome(hidden: boolean): void {
-  chromeHidden = hidden;
-  document.body.classList.toggle("chrome-hidden", hidden);
-  const label = hidden ? "Show the toolbar" : "Hide the toolbar";
-  setTip(el.chrome, `${label} (T)`);
-  el.chrome.setAttribute("aria-label", label);
-  el.chrome.setAttribute("aria-expanded", hidden ? "false" : "true");
-  writeItem("solitaire-chrome", hidden ? "hidden" : "shown");
-  updateChromeToggle();
-}
-
-function toggleChrome(): void {
-  applyChrome(!chromeHidden);
-}
-
-/** Which side the portrait rail sits on. A preference rather than a per-game setting:
- *  which hand you hold the phone in doesn't change between deals. */
-function applyHand(left: boolean): void {
-  leftHanded = left;
-  const label = left ? "Rail on the right" : "Rail on the left";
-  setTip(el.hand, `${label} — click to switch sides`);
-  el.hand.setAttribute("aria-label", label);
-  el.hand.setAttribute("aria-pressed", left ? "true" : "false");
-  writeItem("solitaire-hand", left ? "left" : "right");
-  resize(); // the piles move; the board is rebuilt from the new layout
-  input.cancelDrag(); // its offsets were measured against the old side
-}
-
-function toggleHand(): void {
-  applyHand(!leftHanded);
-}
-
 /** Easy mode is per-game, not a saved preference: every new deal starts with it
  *  off, and it only travels with a game via that game's save. */
 function applyEasy(on: boolean): void {
@@ -1052,7 +746,7 @@ function showToast(message: string, ms = 6000): void {
  *  position is dead, nothing otherwise. */
 function settleToast(): void {
   toastTimer = 0;
-  if (deadWarned) {
+  if (deadCheck.warned) {
     el.toast.textContent = DEAD_BOARD;
     el.toast.hidden = false;
   } else {
@@ -1087,71 +781,41 @@ function bumpBoard(): void {
 }
 
 // ---- The dead-board warning ------------------------------------------------
-// Runs unasked after every change, at the fast budget only and on a worker of its own,
-// so it never competes with 💡 for the answer or greys it out. Only a
-// *proven* `unwinnable` shows anything: `unknown` is a shrug, not a warning, and 💡
-// still escalates on demand. Dead boards are the cheap case for the search —
-// with nowhere to go the reachable space is tiny — so this costs least exactly when
-// it has something to say.
+// Runs unasked after every change, on a worker of its own, so it never competes with
+// 💡 for the answer or greys it out. The rules for when it believes an answer and when
+// the warning goes up or down are deadCheck.ts's; this is only the worker and the toast.
 
 let deadWorker: Worker | null = null;
-let deadChecking = false;
-/** A change landed mid-search; the answer in flight is about an older board. */
-let deadRecheck = false;
-/** Whether the warning is currently up. Dead → dead stays quiet — playing on across a
- *  dead board doesn't re-announce it — and a bump leaves it standing until the *next*
- *  verdict says otherwise, so it can't flicker off and on between moves. */
-let deadWarned = false;
 
 function getDeadWorker(): Worker {
   deadWorker ??= new Worker(new URL("./solver.worker.ts", import.meta.url), { type: "module" });
   return deadWorker;
 }
 
-function setDeadWarning(dead: boolean): void {
-  if (dead === deadWarned) return;
-  deadWarned = dead;
-  // A timed line has the toast for now; `settleToast` picks the warning up (or takes it
-  // down) when that line is done.
-  if (toastTimer !== 0) return;
-  settleToast();
-  if (dead) announce(DEAD_BOARD);
-}
+const deadCheck = new DeadCheck({
+  ask: (request, onAnswer, onFail) => {
+    const worker = getDeadWorker();
+    worker.onmessage = (e: MessageEvent<SolveResponse>) => onAnswer(e.data);
+    worker.onerror = () => {
+      deadWorker = null;
+      onFail();
+    };
+    worker.postMessage(request);
+  },
+  // Nothing over the start overlay; the dismissal asks.
+  current: () =>
+    started ? { version: boardVersion, state: game.serialize(), won: game.isWon() } : null,
+  onWarn: (dead) => {
+    // A timed line has the toast for now; `settleToast` picks the warning up (or takes
+    // it down) when that line is done.
+    if (toastTimer !== 0) return;
+    settleToast();
+    if (dead) announce(DEAD_BOARD);
+  },
+});
 
-/** Ask, for the board as it is now. A won board and one under ✦ stacks or easy mode
- *  aren't asked — and *not asking takes the warning down*: a rescue that changes the
- *  rules retires a claim made under the old ones. */
 function checkDead(): void {
-  if (!started) return; // nothing over the start overlay; the dismissal asks
-  const state = game.serialize();
-  if (game.isWon() || !canAnalyse(state)) {
-    setDeadWarning(false);
-    return;
-  }
-  if (deadChecking) {
-    deadRecheck = true;
-    return;
-  }
-  deadChecking = true;
-  const askedAbout = boardVersion;
-  const worker = getDeadWorker();
-  worker.onmessage = (e: MessageEvent<SolveResponse>) => {
-    deadChecking = false;
-    if (deadRecheck) {
-      deadRecheck = false;
-      checkDead();
-    }
-    if (boardVersion !== askedAbout) return; // about a board the player has left
-    setDeadWarning(e.data.outcome === "unwinnable");
-  };
-  worker.onerror = () => {
-    // Quietly: a check that can't run is not a verdict, and nothing was promised.
-    deadWorker = null;
-    deadChecking = false;
-    deadRecheck = false;
-  };
-  const request: SolveRequest = { state, maxNodes: 200_000 };
-  worker.postMessage(request);
+  deadCheck.check();
 }
 
 /** The search runs in a worker: a stubborn position can take several hundred
@@ -1203,7 +867,9 @@ function requestHint(): void {
   }
   const state = game.serialize();
   if (!canAnalyse(state)) {
-    showToast("🤔 Can't suggest a move on a board with ✦ stacks or easy mode — their rules differ.");
+    showToast(
+      "🤔 Can't suggest a move on a board with ✦ stacks or easy mode — their rules differ.",
+    );
     return;
   }
 
@@ -1498,12 +1164,6 @@ for (const type of ["pointerup", "pointercancel"]) {
 // on every platform.
 window.addEventListener("blur", () => input.cancelDrag());
 
-// Whether the bar fits on one row is a function of its width, so re-ask on resize
-// (and on orientation change, which fires the same event). Unlike the board, this only
-// measures the toolbar — and the height it may change feeds the canvas observer, which
-// is debounced.
-window.addEventListener("resize", updateChromeToggle);
-
 // The canvas ResizeObserver is the main signal; these cover the mobile cases where the
 // viewport settles in stages after a rotation and the observer has already fired.
 window.addEventListener("resize", scheduleResize);
@@ -1516,28 +1176,7 @@ el.redo.addEventListener("click", doRedo);
 el.restart.addEventListener("click", restartDeal);
 el.hint.addEventListener("click", requestHint);
 el.winnable.addEventListener("click", newWinnableGame);
-el.hand.addEventListener("click", toggleHand);
 el.daily.addEventListener("click", playDaily);
-el.stats.addEventListener("click", openStats);
-el.statsClose.addEventListener("click", closeStats);
-el.statsList.addEventListener("click", (e) => {
-  const cell = (e.target as HTMLElement).closest<HTMLButtonElement>(".archive-day");
-  if (!cell?.dataset.day) return;
-  closeStats();
-  playArchivedDay(cell.dataset.day);
-});
-el.statsReset.addEventListener("click", armOrResetStats);
-// A click on the backdrop — not the panel — dismisses it, as a modal should.
-el.statsOverlay.addEventListener("click", (e) => {
-  if (e.target === el.statsOverlay) closeStats();
-});
-el.winNew.addEventListener("click", newGame);
-el.winRestart.addEventListener("click", restartDeal);
-el.winShare.addEventListener("click", copyWinResult);
-el.theme.addEventListener("click", toggleTheme);
-el.chrome.addEventListener("click", toggleChrome);
-el.sound.addEventListener("click", toggleSound);
-el.startMute.addEventListener("click", toggleSound);
 el.easy.addEventListener("click", toggleEasy);
 el.addStack.addEventListener("click", addTempStack);
 el.home.addEventListener("click", sendAllHome);
@@ -1554,19 +1193,7 @@ el.drawToggle.addEventListener("click", (e) => {
 /** Arrow keys, Space and Enter belong to the board — but not while a dialog is up,
  *  where they are the browser's for moving between and pressing buttons. */
 function boardHasKeys(): boolean {
-  return !!el.statsOverlay.hidden && !!el.winOverlay.hidden;
-}
-
-/** The statistics dialog is modal, so while it is open *no* board shortcut fires —
- *  not the single letters and not Ctrl+Z either. `boardHasKeys` alone used to gate
- *  only the arrows, Space, F and the digits, so `n` behind an open dialog dealt a new
- *  game and left the panel sitting over it reporting the record of the game it had
- *  just abandoned.
- *
- *  The win panel is deliberately *not* modal — the cascade plays on behind it and the
- *  toolbar stays live — so the shortcuts keep working there, exactly as they did. */
-function modalOpen(): boolean {
-  return !el.statsOverlay.hidden;
+  return !statsDialog.isOpen() && !winPanel.isOpen();
 }
 
 /** Whether a focused control should get Space/Enter instead of the board.
@@ -1581,75 +1208,44 @@ function focusOwnsActivation(): boolean {
   return active.closest("button, a[href], input, select, textarea, [contenteditable]") !== null;
 }
 
-const ARROWS: Record<string, CursorMove> = {
-  ArrowLeft: "left",
-  ArrowRight: "right",
-  ArrowUp: "up",
-  ArrowDown: "down",
-};
+/** Escape, in order of what it is most likely to mean: close the dialog, put down
+ *  what the cursor holds, cancel a drag. */
+function escape(): void {
+  if (statsDialog.isOpen()) statsDialog.close();
+  else if (held) releaseHeld("put down");
+  else input.cancelDrag();
+}
+
+function runCommand(c: Command): void {
+  switch (c.kind) {
+    case "escape": return escape();
+    case "navigate": return navigate(c.move);
+    case "activate": return activateCursor();
+    case "toFoundation": return sendToFoundation();
+    case "column": return jumpToColumn(c.index);
+    case "undo": return doUndo();
+    case "redo": return doRedo();
+    case "newGame": return newGame();
+    case "daily": return playDaily();
+    case "hint": return requestHint();
+    case "winnable": return newWinnableGame();
+    case "home": return sendAllHome();
+    case "chrome": return prefs.toggleChrome();
+  }
+}
 
 window.addEventListener("keydown", (e) => {
   if (!started) return; // the start overlay owns the board until it's dismissed
-  const mod = e.ctrlKey || e.metaKey;
-  const key = e.key.toLowerCase();
-  if (e.key === "Escape") {
-    if (!el.statsOverlay.hidden) closeStats();
-    else if (held) releaseHeld("put down");
-    else input.cancelDrag();
-    return;
-  }
-  // Escape is checked first, since closing the dialog is the one board key it owns.
-  if (modalOpen()) return;
-
-  // ---- keyboard play ----
-  if (!mod && !e.altKey && boardHasKeys()) {
-    const arrow = ARROWS[e.key];
-    if (arrow) {
-      e.preventDefault();
-      // Shift turns up/down into "take more / fewer cards with me", which is a
-      // different question from "which pile", and needs its own gesture.
-      navigate(e.shiftKey && (arrow === "up" || arrow === "down")
-        ? (arrow === "up" ? "deeper" : "shallower")
-        : arrow);
-      return;
-    }
-    if (e.key === " " || e.key === "Enter") {
-      if (focusOwnsActivation()) return; // let the focused button take it
-      e.preventDefault();
-      activateCursor();
-      return;
-    }
-    if (key === "f") {
-      sendToFoundation();
-      return;
-    }
-    if (key >= "1" && key <= "7") {
-      jumpToColumn(Number(key) - 1);
-      return;
-    }
-  }
-  if (mod && key === "z") {
-    e.preventDefault();
-    if (e.shiftKey) doRedo();
-    else doUndo();
-  } else if (mod && key === "y") {
-    e.preventDefault(); // the Windows convention for redo
-    doRedo();
-  } else if (mod || e.altKey) {
-    // Leave browser shortcuts alone — Cmd+N used to also deal a new game.
-  } else if (key === "n") {
-    newGame();
-  } else if (key === "d") {
-    playDaily();
-  } else if (key === "h") {
-    requestHint();
-  } else if (key === "w") {
-    newWinnableGame();
-  } else if (key === "a") {
-    sendAllHome();
-  } else if (key === "t") {
-    toggleChrome();
-  }
+  const command = keyCommand(e, {
+    modalOpen: statsDialog.isOpen(),
+    boardHasKeys: boardHasKeys(),
+    focusOwnsActivation: focusOwnsActivation(),
+  });
+  if (!command) return;
+  // The arrows would scroll, Space would press, and Ctrl+Z/Y would reach the
+  // browser's own undo; the plain letters have no default worth keeping either way.
+  if (command.kind !== "escape") e.preventDefault();
+  runCommand(command);
 });
 
 onCardFaceLoad(invalidate);
@@ -1667,15 +1263,8 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 
 preloadCardFaces();
 preloadFaceArt();
-// ?theme= wins over the saved preference; anything unrecognised — a hand-edited
-// value, or a theme that existed in an older build — falls back rather than breaking.
-const urlTheme = new URLSearchParams(location.search).get("theme");
-const savedTheme = isThemeName(urlTheme) ? urlTheme : readItem("solitaire-theme");
-applyTheme(isThemeName(savedTheme) ? savedTheme : "dark");
-applySound(readItem("solitaire-sound") !== "off");
 // Before resize(), so the board is measured against the bar the user left behind.
-applyChrome(readItem("solitaire-chrome") === "hidden");
-applyHand(readItem("solitaire-hand") === "left");
+prefs.load();
 
 // Pick up a saved game if there is a valid one, replacing the constructor's fresh
 // deal. This has to run before resize(), which sizes the board from the number of
@@ -1693,7 +1282,6 @@ const resumeSaved = saved !== null && (urlSeed === null || urlSeed === saved.sta
 if (resumeSaved) {
   game.restore(saved!.state);
   elapsedFrozen = saved!.elapsed;
-  resuming = true;
   // It was counted as played when it started, possibly in an earlier session.
   countedPlayed = loadStats().pending;
 } else if (urlSeed !== null) {
@@ -1717,57 +1305,39 @@ animator.hideCards(boardCardIds());
 
 requestAnimationFrame(frame);
 
+const winPanel = new WinPanel({ newGame, restart: restartDeal });
+
+const statsDialog = new StatsDialog({
+  today: todayKey,
+  playDay: playArchivedDay,
+  afterReset: syncDailyButton,
+});
+
 // The opening deal waits for a click so its sound can play (browsers block
 // audio until the first user gesture). Clicking unlocks audio, then deals.
-const startOverlay = document.getElementById("start-overlay") as HTMLElement;
-const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
-const startNew = document.getElementById("start-new") as HTMLButtonElement;
-const startTitle = startOverlay.querySelector(".start-title") as HTMLElement;
-const startTip = startOverlay.querySelector(".start-tip") as HTMLElement;
+const startOverlay = new StartOverlay(dismissStartOverlay);
 
-/** Fill in the challenge card and turn the start button into the invitation. The
- *  board it names is `game`'s, not the link's numbers: the deal has already been laid
- *  out from `?deal=`, so what the card describes is what pressing the button plays —
- *  including whether it is a daily, which comes from the seed rather than the URL. */
-function showChallenge(r: SharedResult): void {
-  const chall = document.getElementById("challenge") as HTMLElement;
-  (document.getElementById("challenge-score") as HTMLElement).textContent = String(r.score);
-  (document.getElementById("challenge-time") as HTMLElement).textContent = formatClock(r.elapsedMs);
-  (document.getElementById("challenge-moves") as HTMLElement).textContent = String(r.moves);
-  (document.getElementById("challenge-deal") as HTMLElement).textContent = boardLine({
-    code: encodeSeed(game.seed),
-    drawCount: game.drawCount,
-    dailyKey: dailyDayForSeed(game.seed, todayKey()),
-    todayKey: todayKey(),
-  });
-  chall.hidden = false;
-  startTitle.textContent = `Can you beat ${r.score}?`;
-  startTip.textContent =
-    "The same deal, dealt the same way. Every move costs a point, so a tidy win scores higher than a long one.";
-  startNew.hidden = false; // declining the challenge is a normal thing to want
+if (challenge) {
+  // The board it names is `game`'s, not the link's numbers: the deal has already been
+  // laid out from `?deal=`, so what the card describes is what pressing the button
+  // plays — including whether it is a daily, which comes from the seed.
+  startOverlay.showChallenge(
+    challenge,
+    boardLine({
+      code: encodeSeed(game.seed),
+      drawCount: game.drawCount,
+      dailyKey: dailyDayForSeed(game.seed, todayKey()),
+      todayKey: todayKey(),
+    }),
+  );
 }
 
-if (challenge) showChallenge(challenge);
-
-// Resume wins the button over the challenge when both apply — this board is already
-// on the go, and dealing it again would bin the progress. The card stays up: it is
-// still the score to beat.
-if (resuming) {
-  startTitle.textContent = "Resume game";
-  startTip.textContent = `Game in progress — ${game.moves} moves, ${game.score} points. Your recent moves can still be undone.`;
-  startNew.hidden = false;
-}
-
-/** What the overlay's buttons ask for: pick the restored board back up, reveal the one
- *  already dealt behind the overlay (a fresh boot, or an accepted challenge), or throw
- *  that away for a new deal. */
-type StartChoice = "resume" | "reveal" | "fresh";
+if (resumeSaved) startOverlay.showResume(game.moves, game.score);
 
 function dismissStartOverlay(choice: StartChoice): void {
   unlockAudio();
   started = true;
-  startOverlay.classList.add("is-hiding");
-  setTimeout(() => startOverlay.remove(), 400);
+  startOverlay.dismiss();
   if (choice === "fresh") {
     newGame(); // deals a new seed and discards any save
     return;
@@ -1777,7 +1347,6 @@ function dismissStartOverlay(choice: StartChoice): void {
     checkDead(); // dealt before the overlay, so no bump has asked about it yet
     return;
   }
-  resuming = false;
   animator.clear(); // reveals the restored board; startDeal() assumes a fresh pyramid
   invalidate();
   if (game.moves > 0 && !game.isWon()) timerStart = performance.now();
@@ -1787,9 +1356,6 @@ function dismissStartOverlay(choice: StartChoice): void {
 }
 
 initTooltips();
-
-startBtn.addEventListener("click", () => dismissStartOverlay(resuming ? "resume" : "reveal"));
-startNew.addEventListener("click", () => dismissStartOverlay("fresh"));
 
 // Capture think-time since the last move, and act as a backstop for tab eviction.
 document.addEventListener("visibilitychange", () => {

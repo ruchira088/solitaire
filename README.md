@@ -338,8 +338,12 @@ src/
   animation.ts   tween engine, card flights, win-celebration physics
   input.ts       pointer drag & drop, click-to-draw, double-click auto-move
   cursor.ts      keyboard cursor: navigation and spoken descriptions (pure)
+  keyboard.ts    what a key press means, and when it means nothing (pure)
   solver.ts      can this position be won? depth-first search (pure)
   solver.worker.ts  runs the solver off the main thread
+  deadCheck.ts   the dead-board warning: when to ask, which answers to believe
+  preferences.ts theme, sound, toolbar fold and rail side: buttons + saved values
+  statsDialog.ts / winPanel.ts / startOverlay.ts   the three DOM panels
 public/
   cards/         52 card faces (vector-playing-cards, public domain):
                  12 court cards as WebP, 40 pip/ace faces as SVG

@@ -3,7 +3,7 @@
 
 # Keyboard play and the two dialogs
 
-The board is playable without a pointer, and the stats dialog is modal in fact rather than only in its ARIA.
+The board is playable without a pointer, and the stats dialog is modal in fact rather than only in its ARIA. Key precedence now lives in `keyboard.ts` (`keyCommand`, tested), the modality in `statsDialog.ts`.
 
 - **The board is playable without a pointer.** `cursor.ts` holds a `{pile, depth}`
   cursor and the words for it; `main.ts` binds the keys and `render.ts` rings it. Two
@@ -29,11 +29,11 @@ The board is playable without a pointer, and the stats dialog is modal in fact r
   (`#stats-overlay`) is: it dims the board, and a backdrop click or Escape closes it.
   Escape is checked in the keydown handler *before* the drag cancel.
   Its `aria-modal="true"` is **enforced, not merely claimed**, in two places that both
-  had to be added: `modalOpen()` returns the keydown handler early so *no* board
-  shortcut fires through it — `boardHasKeys` gates only the arrows, Space, F and the
-  digits, so `n` behind an open dialog used to deal a new game and leave the panel
-  sitting over it reporting the record it had just abandoned — and `setAppInert` marks
-  `#app` inert while it is up, since Tab otherwise walks straight out of the panel into
+  had to be added: `keyCommand` (keyboard.ts) answers nothing but Escape while
+  `modalOpen` is set, so *no* board shortcut fires through it — `boardHasKeys` gates
+  only the arrows, Space, F and the digits, so `n` behind an open dialog used to deal a
+  new game and leave the panel sitting over it reporting the record it had just
+  abandoned — and `StatsDialog.open` (statsDialog.ts) marks `#app` inert while it is up, since Tab otherwise walks straight out of the panel into
   the toolbar, and inert also takes the board out of the accessibility tree. That is
   why `#stats-overlay` is a **sibling of `#app`** rather than inside it: one line
   inerts everything behind the dialog. Both are checked by `npm run smoke`.

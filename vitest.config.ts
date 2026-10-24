@@ -26,6 +26,8 @@ export default defineConfig({
         "src/statsView.ts",
         "src/cursor.ts",
         "src/solver.ts",
+        "src/keyboard.ts",
+        "src/deadCheck.ts",
       ],
       reporter: ["text", "html"],
       reportsDirectory: "coverage",

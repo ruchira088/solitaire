@@ -1,0 +1,150 @@
+// The statistics dialog: the lifetime record and the archive of daily deals. All DOM,
+// so it isn't unit-tested — the words it shows come from statsView.ts, which is — and
+// `npm run smoke` checks it opens, closes, and is genuinely modal.
+//
+// The modality is enforced here, not merely claimed by `aria-modal="true"`: `#app` is
+// made inert while it is up, which stops Tab walking out of the panel into the toolbar
+// and takes the board out of the accessibility tree. `#stats-overlay` is a sibling of
+// `#app` precisely so that is one line. main.ts's key handling asks `isOpen()` so no
+// board shortcut fires through it either.
+
+import { recentDailyKeys } from "./rng";
+import { statGroups } from "./statsView";
+import { hasWonDaily, loadStats, resetStats, Stats } from "./storage";
+import { setTip } from "./tooltip";
+
+/** How far back the archive looks — four weeks in the grid, and the same window
+ *  main.ts searches when deciding whether a won board was a daily, so anything the
+ *  grid can offer is recognised when won. */
+export const ARCHIVE_WINDOW = 28;
+
+export interface StatsDialogDeps {
+  today: () => string;
+  playDay: (key: string) => void;
+  /** After a reset: the 📅 button's ✓ was drawn from the record just wiped. */
+  afterReset: () => void;
+}
+
+const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+
+export class StatsDialog {
+  private readonly button = byId<HTMLButtonElement>("btn-stats");
+  private readonly overlay = byId("stats-overlay");
+  private readonly list = byId("stats-list");
+  private readonly reset = byId<HTMLButtonElement>("stats-reset");
+  private readonly resetLabel = byId("stats-reset-label");
+  private readonly closeBtn = byId<HTMLButtonElement>("stats-close");
+  private readonly app = byId("app");
+  private resetArmed = false;
+  private resetTimer = 0;
+
+  constructor(private deps: StatsDialogDeps) {
+    this.button.addEventListener("click", () => this.open());
+    this.closeBtn.addEventListener("click", () => this.close());
+    this.reset.addEventListener("click", () => this.armOrReset());
+    this.list.addEventListener("click", (e) => {
+      const day = (e.target as HTMLElement).closest<HTMLButtonElement>(".archive-day")?.dataset.day;
+      if (!day) return;
+      this.close();
+      deps.playDay(day);
+    });
+    // A click on the backdrop — not the panel — dismisses it, as a modal should.
+    this.overlay.addEventListener("click", (e) => {
+      if (e.target === this.overlay) this.close();
+    });
+  }
+
+  isOpen(): boolean {
+    return !this.overlay.hidden;
+  }
+
+  open(): void {
+    this.render();
+    this.disarm(); // a freshly opened dialog never opens half-way through a confirmation
+    this.overlay.hidden = false;
+    this.app.inert = true;
+    this.closeBtn.focus();
+  }
+
+  close(): void {
+    this.overlay.hidden = true;
+    this.app.inert = false; // before the focus call below — focus can't land inside inert
+    this.disarm();
+    this.button.focus(); // back to the button that opened it
+  }
+
+  private render(): void {
+    const today = this.deps.today();
+    const stats = loadStats();
+    const nodes: HTMLElement[] = [];
+    for (const group of statGroups(stats, today)) {
+      // A <dt> spanning both columns: still a definition list, still one grid, and the
+      // heading can't drift out of step with the rows under it.
+      nodes.push(heading("dt", "stats-group", group.title));
+      for (const [label, value] of group.rows) {
+        nodes.push(heading("dt", "", label), heading("dd", "", value));
+      }
+    }
+
+    const wrap = document.createElement("dd");
+    wrap.className = "archive-cell";
+    wrap.appendChild(this.archive(stats, today));
+    nodes.push(heading("dt", "archive-cell", "Last 4 weeks"), wrap);
+    this.list.replaceChildren(...nodes);
+  }
+
+  /** The last four weeks of daily deals, ticked where they were won and clickable to
+   *  play. It lives in this dialog rather than behind a toolbar button: it *is* the
+   *  daily record, and the measured wrap threshold has no room to spare. */
+  private archive(s: Stats, today: string): HTMLElement {
+    const grid = document.createElement("div");
+    grid.className = "archive";
+    // Oldest first, so it reads like a calendar rather than backwards.
+    for (const key of recentDailyKeys(today, ARCHIVE_WINDOW).reverse()) {
+      const won = hasWonDaily(s, key);
+      const isToday = key === today;
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "archive-day";
+      cell.classList.toggle("is-won", won);
+      cell.classList.toggle("is-today", isToday);
+      cell.dataset.day = key;
+      cell.textContent = String(Number(key.slice(8, 10)));
+      const state = won ? "won" : "not won";
+      setTip(cell, `${key} — ${state}. Click to play this deal.`);
+      cell.setAttribute("aria-label", `${key}, ${state}${isToday ? ", today" : ""}`);
+      grid.appendChild(cell);
+    }
+    return grid;
+  }
+
+  /** Wiping the record is destructive and unundoable, so the button asks first and
+   *  forgets the question after a few seconds. */
+  private armOrReset(): void {
+    if (!this.resetArmed) {
+      this.resetArmed = true;
+      this.reset.classList.add("is-confirming");
+      this.resetLabel.textContent = "Confirm reset";
+      this.resetTimer = window.setTimeout(() => this.disarm(), 4000);
+      return;
+    }
+    this.disarm();
+    resetStats();
+    this.render();
+    this.deps.afterReset();
+  }
+
+  private disarm(): void {
+    window.clearTimeout(this.resetTimer);
+    this.resetArmed = false;
+    this.reset.classList.remove("is-confirming");
+    this.resetLabel.textContent = "Reset stats";
+  }
+}
+
+function heading(tag: "dt" | "dd", className: string, text: string): HTMLElement {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  node.textContent = text;
+  return node;
+}

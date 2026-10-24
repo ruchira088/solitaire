@@ -58,8 +58,9 @@ visual or behavioural, run the app and look at it (see Verifying).
 gate CI ahead of every deploy (the `build-and-typecheck` job).
 
 - **Vitest covers the pure modules only**: `game`, `cards`, `rng`, `layout`, `storage`,
-  `share`, `statsView`, `cursor`, `solver` and `tooltip.ts`'s `parseTip`. Canvas/DOM
-  modules aren't mocked — that only buys assertions about the mock.
+  `share`, `statsView`, `cursor`, `solver`, `keyboard`,
+  `deadCheck`, and `tooltip.ts`'s `parseTip`. Canvas/DOM modules aren't
+  mocked — that only buys assertions about the mock.
 - **`npm run smoke` covers the rest**, against the *built* bundle in real Chrome, every
   assertion through the DOM and every action through a toolbar button or key. Its
   load-bearing check is that the canvas painted. Kept out of vitest on purpose.
@@ -91,15 +92,19 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/courtArt.ts` | Procedural J/Q/K + Ace fallback art (used until SVGs decode) |
 | `src/animation.ts` | Tween engine, card flights, win-celebration physics |
 | `src/input.ts` | Pointer drag & drop, click-to-draw, double-click auto-move |
+| `src/keyboard.ts` | What a key press means, and when it means nothing — **pure** |
 | `src/theme.ts` | Theme registry: felt, placeholders **and card backs** |
+| `src/preferences.ts` | Theme, sound, toolbar fold, rail side: the buttons and their saved values |
 | `src/sound.ts` | WebAudio sound effects (deal tick, etc.) |
 | `src/storage.ts` | `localStorage`: preferences, the game save, stats |
 | `src/share.ts` | The shared result's text, links and `win=` payload — **pure** |
 | `src/statsView.ts` | The stats dialog's rows and formatting — **pure** |
+| `src/statsDialog.ts` / `src/winPanel.ts` / `src/startOverlay.ts` | The three DOM panels |
 | `src/cursor.ts` | Keyboard cursor: navigation and spoken descriptions — **pure** |
 | `src/tooltip.ts` | The custom tooltip on every `data-tip` trigger; `parseTip` is **pure** |
 | `src/solver.ts` | Can this position be won? Iterative DFS — **pure** |
 | `src/solver.worker.ts` | Runs the solver off the main thread |
+| `src/deadCheck.ts` | The dead-board warning's bookkeeping, behind an injected `ask` |
 
 ### Key design invariants
 
@@ -140,9 +145,9 @@ logic, rendering, animation, and input kept cleanly separated.
 - **The board is playable without a pointer.** A cursor's `depth` is the bottom of the
   run you'd pick up; the cursor is re-seated after every change (`clampCursor`) and
   drawn only while `keyboardActive`.
-- **Key precedence, in the keydown handler**: Escape first, nothing else while the
-  stats dialog is open, board keys only with no dialog up, no single letters with a
-  modifier held.
+- **Key precedence is `keyCommand`'s** (keyboard.ts, tested): Escape first, nothing
+  else while the stats dialog is open, board keys only with no dialog up, no single
+  letters with a modifier held.
 - **The stats dialog is modal in fact**: no shortcut fires through it, and `#app` is
   inert while it's up — which is why `#stats-overlay` is a sibling of `#app`. The win
   panel is deliberately *not* modal.

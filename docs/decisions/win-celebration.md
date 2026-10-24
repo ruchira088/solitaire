@@ -23,7 +23,7 @@ The cascade is the reward, so the dialog over it is deliberately not modal.
   real buttons — focusable, keyboard-reachable, styled by the same `.btn` rules. Three
   things it has to get right: the wrapper is `pointer-events: none` so the cascade
   keeps running and the toolbar stays clickable; it centres inside the *board* via
-  `--bar-h` (which `syncBarHeight` publishes) because a viewport-centred panel sits on
+  `--bar-h` (which `Preferences.syncBarHeight` publishes) because a viewport-centred panel sits on
   the toolbar on a short landscape phone; and the panel re-declares the dark palette
   (`--text`, `--btn-bg-*`) since it stays dark in both themes and light-theme buttons
   would otherwise be dark-on-dark. It opens from `startCelebration` and closes in

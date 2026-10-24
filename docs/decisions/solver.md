@@ -55,7 +55,7 @@
   worker rather than on the frame loop.
 
 - **The dead-board warning runs unasked, and only a proof shows it.** `bumpBoard()` is
-  the one place `boardVersion` moves, and it schedules `checkDead()` — so every board
+  the one place `boardVersion` moves, and it schedules the `DeadCheck` (deadCheck.ts) — so every board
   change (moves, undo/redo, a new deal, the draw toggle, Easy on/off) is checked and a
   path that changes the board without asking can't be written. The check runs the
   **fast pass only** (200k nodes, no escalation, no `wantMove`) on a **worker of its
@@ -69,7 +69,10 @@
   re-announce. A check that is *skipped* (won, or `canAnalyse` false) takes the warning
   down: Easy mode and a ✦ stack are two of the rescues the message offers, and taking
   one retires a claim made under the old rules. A timed toast (a 💡 answer) borrows the
-  element and `settleToast` hands it back. The wording is shared with 💡's dead
+  element and `settleToast` hands it back. The bookkeeping — one search at a time, a
+  stale answer dropped, dead → dead silent, a skipped check taking the warning down —
+  is `DeadCheck`'s, tested against a fake solver in `deadCheck.test.ts`; main.ts keeps
+  only the worker and the toast. The wording is shared with 💡's dead
   answers through `RESCUES`, and `npm run smoke` loads `?deal=R` — dead from the first
   card, proven in ~2.5k nodes — to see the warning arrive unprompted and leave on Easy.
 
