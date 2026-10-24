@@ -23,7 +23,9 @@ decision, not a detail.** Everything installed is dev/build tooling:
 | `playwright-core` | `^1.63.0` | drives *system* Chrome for `scripts/smoke.mjs` (CI), the screenshots and card rasterising. `-core`: no browser downloads |
 
 **When any of this changes, update the table *and* README** (the `npm install` comment,
-the Node requirement, the Tech stack list).
+the Node requirement, the Tech stack list). `npm run lint` runs
+`scripts/check-docs.mjs`, which fails when they disagree with `package.json` — a new
+package also needs a label there.
 
 Dependabot groups minor/patch bumps per ecosystem and leaves majors ungrouped, on
 purpose; its branches stop before deploy. `cdk-deploy`'s `aws-cdk-lib` bundles its own
@@ -35,7 +37,7 @@ keyed on the resolved commit. → [dependencies](docs/decisions/dependencies.md)
 
 ```bash
 npm run dev           # Vite dev server with hot reload
-npm run lint          # oxlint (correctness rules only)
+npm run lint          # oxlint (correctness rules only), then the docs-vs-package.json check
 npm run typecheck     # tsc --noEmit (strict mode)
 npm test              # vitest run — the pure-logic suite
 npm run test:watch    # vitest in watch mode
@@ -69,7 +71,7 @@ gate CI ahead of every deploy (the `build-and-typecheck` job).
   latches off after a failed write. `vitest.config.ts` stays separate from
   `vite.config.ts`.
 
-→ [testing](docs/decisions/testing.md) (including coverage and the size budget)
+→ [testing](docs/decisions/testing.md) (including coverage, the size budget and the docs check)
 
 ## Architecture
 

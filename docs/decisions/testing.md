@@ -55,7 +55,7 @@ Conventions worth keeping:
   `"vite"` doesn't type a `test` key, and merging them would put test config on the
   path of every production build.
 
-## Coverage and the size budget
+## Coverage, the size budget and the docs check
 
 - **Coverage is a report, not a gate.** `npm run test:coverage` (`@vitest/coverage-v8`)
   is scoped to the pure modules in `vitest.config.ts`. A percentage threshold would
@@ -68,3 +68,8 @@ Conventions worth keeping:
   A budget that matches no asset, or an emitted script or stylesheet with no budget,
   fails too — a renamed or split chunk must not quietly fall out of the check.
   Raising a ceiling is allowed; it should be a decision made with the number in view.
+- **`npm run lint` ends with `check-docs.mjs`**, which fails when CLAUDE.md's dependency
+  table, README's `npm install` line, its Tech stack majors, or the Node floor (read
+  from the installed Vitest's `engines`) disagree with `package.json`. It caught
+  README's install line missing oxlint on its first run. It checks only what those
+  passages state as fact; the prose around them is for people to keep true.

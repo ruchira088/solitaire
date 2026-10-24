@@ -234,7 +234,7 @@ dealing over your progress.
 Requires **Node 22.12+** (Vitest 5 — Vite 8 alone would still run on 20.19+); `.nvmrc` pins 24.
 
 ```bash
-npm install      # dev tooling only — Vite, TypeScript, Vitest (+ coverage), SVGO, playwright-core
+npm install      # dev tooling only — Vite, TypeScript, Vitest (+ coverage), oxlint, SVGO, playwright-core
 npm run dev      # start the dev server with hot reload (opens the browser)
 ```
 
@@ -252,6 +252,7 @@ Tests:
 npm test         # run the suite once
 npm run test:watch
 npm run test:coverage  # the same suite, with a coverage report (coverage/index.html)
+npm run lint     # oxlint, then a check that README and CLAUDE.md match package.json
 ```
 
 ## How to play
@@ -347,6 +348,7 @@ art/
 scripts/
   smoke.mjs             boots the built bundle in Chrome and checks it plays (CI)
   check-size.mjs        gzipped size budget per built asset (CI)
+  check-docs.mjs        README / CLAUDE.md agree with package.json (part of lint)
   rasterize-cards.mjs   one-off court-card rasteriser
 ```
 
@@ -486,7 +488,7 @@ ENVIRONMENT=production npm run deploy   # production → solitaire.ruchij.com
   can't reach
 - **No runtime dependencies** — the shipped bundle is pure vanilla JS/Canvas, and
   `package.json` has no `dependencies` block at all. Everything installed
-  (TypeScript, Vite, Vitest and its coverage plugin, plus SVGO and
+  (TypeScript, Vite, Vitest and its coverage plugin, oxlint, plus SVGO and
   `playwright-core` for the smoke test and the one-off card-art and screenshot
   tooling) is build-time only — and `npm run size` holds the bundle to a gzipped
   budget, so it stays that way.
