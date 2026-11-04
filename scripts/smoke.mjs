@@ -158,6 +158,59 @@ try {
   await page.waitForTimeout(500);
   check("undo takes the move back", (await moves()) === "0", `moves = ${await moves()}`);
 
+  // Anything that would throw away a game in progress asks first, and every way of
+  // saying no — or of hitting the key again — leaves the game exactly where it was.
+  const dealNow = () => new URL(page.url()).searchParams.get("deal");
+  const confirmUp = () => page.isVisible("#confirm-panel");
+  await page.click("#btn-add-stack");
+  await page.waitForTimeout(500);
+  const dealAtStake = dealNow();
+  await page.click("#btn-new");
+  check("New Game asks before abandoning a game in progress", await confirmUp());
+  check(
+    "…with Keep playing as the safe default",
+    await page.evaluate(() => document.activeElement?.id === "confirm-keep"),
+  );
+  await page.keyboard.press("n");
+  await page.waitForTimeout(300);
+  check("a second N lands on the question, not the game", (await confirmUp()) && dealNow() === dealAtStake);
+  const confirmTabbed = [];
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press("Tab");
+    confirmTabbed.push(await page.evaluate(() => document.activeElement?.id ?? ""));
+  }
+  check(
+    "Tab stays inside the confirmation",
+    confirmTabbed.every((id) => id === "" || id === "confirm-keep" || id === "confirm-go"),
+    confirmTabbed.join(" -> "),
+  );
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  check(
+    "Escape keeps the game",
+    !(await confirmUp()) && dealNow() === dealAtStake && (await moves()) === "1",
+    `${await moves()} moves, deal ${dealNow()}`,
+  );
+  await page.keyboard.press("w");
+  check("W asks too", await confirmUp());
+  await page.click("#confirm-keep");
+  await page.click("#btn-restart");
+  check(
+    "Restart asks too, naming what it will do",
+    (await confirmUp()) && (await page.textContent("#confirm-go")) === "Restart",
+  );
+  await page.click("#confirm-go");
+  await page.waitForTimeout(800);
+  check(
+    "confirming does it",
+    !(await confirmUp()) && dealNow() === dealAtStake && (await moves()) === "0",
+    `${await moves()} moves, deal ${dealNow()}`,
+  );
+  await page.click("#btn-new");
+  await page.waitForTimeout(800);
+  check("an untouched deal is replaced without asking", !(await confirmUp()) && dealNow() !== dealAtStake);
+  await page.waitForTimeout(1500); // the deal is still landing, and 📅 ignores a busy board
+
   // The daily deal is wired end to end: it deals, and it puts its code in the address.
   await page.click("#btn-daily");
   await page.waitForTimeout(800);
@@ -490,6 +543,8 @@ try {
     timeout: 15000,
   });
   await page.click("#toast-action");
+  check("showing a solution asks first — it abandons the game", await page.isVisible("#confirm-panel"));
+  await page.click("#confirm-go");
   const playing = await page
     .waitForFunction(() => document.getElementById("toast-text").textContent.startsWith("▶ Playing"), null, {
       timeout: 15000,

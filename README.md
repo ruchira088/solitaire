@@ -299,7 +299,7 @@ The goal is to build all four foundations up from Ace to King, one per suit.
 | **Start a winnable deal** | **🎲** (or `W`) shuffles until it finds a board proved winnable under your current draw mode. |
 | **Swap the rail's side** | **🤚**, on phone-portrait screens only, moves the stock, waste and foundations to the other edge for left-handed play. |
 | **Share a win** | The **Share** button on the win dialog copies your result and a link to the deal. Opening that link shows the score, time and moves to beat, then deals the same board. |
-| **New game** | The **New Game** button, or `N`. |
+| **New game** | The **New Game** button, or `N`. Anything that would abandon a game in progress — this, **Restart**, 🎲, 📅 and the rest — asks first. |
 | **Replay a deal** | **Restart** re-deals the same layout from the start. |
 | **Share a deal** | Copy the page URL — it always carries the current deal (`?deal=…`), plus `&draw=3` when you're playing Draw 3 and `&vegas=1` under Vegas rules. A result is never in it: only the **Share** button adds `&win=…`, and accepting a challenge clears it again. |
 | **Hide the toolbar** | The **☰** button at the far left of the bar, or `T` — offered when the bar can't fit on one row. The board grows into the freed space, the stats stay visible, and everything stays playable with the buttons folded away. |

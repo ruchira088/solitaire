@@ -114,6 +114,16 @@
         </div>
       </div>
     </div>
+    <div id="confirm-overlay" hidden>
+      <div id="confirm-panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-detail">
+        <h2 id="confirm-title">Abandon this game?</h2>
+        <p id="confirm-detail"></p>
+        <div class="dialog-actions">
+          <button id="confirm-keep" class="btn" type="button">Keep playing</button>
+          <button id="confirm-go" class="btn" type="button"></button>
+        </div>
+      </div>
+    </div>
     <div id="start-overlay">
       <!-- Where a shared win lands. A `?win=` the parser accepts fills this in with the
            sender's result and the board it was scored on, and the start button below

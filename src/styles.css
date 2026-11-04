@@ -529,7 +529,8 @@ body.chrome-hidden .chrome-toggle:focus-visible {
    focusable, hoverable, keyboard-reachable, and styled by the same `.btn` rules as
    the toolbar. */
 #win-panel,
-#stats-panel {
+#stats-panel,
+#confirm-panel {
   /* These panels are dark in both themes, so they carry the dark palette for the
      buttons inside them — `.btn` reads these, and the light theme's
      dark-on-translucent-black treatment is invisible here. */
@@ -556,15 +557,21 @@ body.chrome-hidden .chrome-toggle:focus-visible {
 }
 
 #win-title,
-#stats-title {
+#stats-title,
+#confirm-title {
   margin: 0;
   font-size: 30px;
   font-weight: 700;
   color: #ffe9a8;
 }
 
-#stats-title {
+#stats-title,
+#confirm-title {
   font-size: 22px;
+}
+
+#confirm-detail {
+  margin: 0;
 }
 
 /* The panel arrives a beat after the cards start falling, and pops rather than
@@ -806,7 +813,8 @@ body.chrome-hidden .chrome-toggle:focus-visible {
 
 /* A menu rather than a celebration, so this one is properly modal: it dims the board
    and a click on the backdrop closes it (Escape does too, see main.ts). */
-#stats-overlay {
+#stats-overlay,
+#confirm-overlay {
   position: fixed;
   inset: 0;
   z-index: 8;
@@ -818,7 +826,8 @@ body.chrome-hidden .chrome-toggle:focus-visible {
   -webkit-backdrop-filter: blur(6px);
 }
 
-#stats-overlay[hidden] {
+#stats-overlay[hidden],
+#confirm-overlay[hidden] {
   display: none;
 }
 

@@ -6,7 +6,7 @@
 
 import "./styles.css";
 import { Card } from "./cards";
-import { DrawCount, Game, MAX_SPARES, PileId } from "./game";
+import { DrawCount, Game, GameState, MAX_SPARES, PileId } from "./game";
 import { computeLayout, Layout } from "./layout";
 import { Animator, Celebration, Easings } from "./animation";
 import { CursorView, Renderer } from "./render";
@@ -76,6 +76,7 @@ import {
 import { Command, keyCommand } from "./keyboard";
 import { DeadCheck } from "./deadCheck";
 import { Replay } from "./replay";
+import { ConfirmDialog } from "./confirmDialog";
 import { ARCHIVE_WINDOW, StatsDialog } from "./statsDialog";
 import { WinPanel } from "./winPanel";
 import { Preferences } from "./preferences";
@@ -627,11 +628,45 @@ function newGame(): void {
   beginGame(() => game.deal());
 }
 
+/** Whether replacing the board would cost the player a game. A won game is over and a
+ *  replay was never theirs; an untouched deal, or one undone back to the start, has
+ *  nothing to lose. */
+function gameAtStake(): boolean {
+  return game.moves > 0 && !game.isWon() && !demoGame;
+}
+
+/** Every way of throwing away a game the player asked for goes through here, named for
+ *  what the confirm button will do. It sits at each action's entry and not in
+ *  `beginGame`, which also serves the win panel, the resume card and Esc out of a
+ *  replay — and which 🎲 and "Show a solution" only reach after a search, too late to
+ *  put a question up. */
+function confirmAbandon(action: string, run: () => void): void {
+  if (!gameAtStake()) {
+    run();
+    return;
+  }
+  input.cancelDrag(); // N mid-drag: the card can't stay in hand behind a modal dialog
+  confirmDialog.ask(
+    action,
+    game.vegas ? "It will count as a loss, and its $52 stake is gone." : "It will count as a loss.",
+    run,
+  );
+}
+
+function askNewGame(): void {
+  confirmAbandon("Deal a new game", newGame);
+}
+
 /** Replay the same layout from the start. Not undoable — `deal()` clears history —
  *  so it's guarded like the other board-destroying actions. */
 function restartDeal(): void {
   if (busy || autoCompleting || input.drag) return;
   beginGame(() => game.restartDeal());
+}
+
+function askRestart(): void {
+  if (busy || autoCompleting || input.drag) return;
+  confirmAbandon("Restart", restartDeal);
 }
 
 // ---- The daily deal --------------------------------------------------------
@@ -670,7 +705,7 @@ function playArchivedDay(key: string): void {
   if (busy || autoCompleting || input.drag) return;
   const seed = dailySeed(key);
   if (game.seed === seed && !game.isWon() && game.moves > 0) return;
-  beginGame(() => game.deal(seed));
+  confirmAbandon("Play that day's deal", () => beginGame(() => game.deal(seed)));
 }
 
 function playDaily(): void {
@@ -678,7 +713,7 @@ function playDaily(): void {
   // Already on it and part-way through: the button's job is done, and re-dealing
   // here would silently throw the progress away. New Game and Restart both remain.
   if (isDailyGame() && !game.isWon() && game.moves > 0) return;
-  beginGame(() => game.deal(dailySeed(todayKey())));
+  confirmAbandon("Play today's deal", () => beginGame(() => game.deal(dailySeed(todayKey()))));
 }
 
 /** Reflect today's state on the 📅 button. Called at the four points that can change
@@ -707,11 +742,13 @@ function dealLink(): DealLink {
 /** Play a board someone sent you, under the draw count and rules it was scored with. */
 function playChallenge(c: Challenge): void {
   if (busy || autoCompleting || input.drag) return;
-  beginGame(() => {
-    game.vegas = c.vegas;
-    game.deal(c.seed);
-    setDrawCount(c.drawCount);
-  });
+  confirmAbandon("Play the challenge", () =>
+    beginGame(() => {
+      game.vegas = c.vegas;
+      game.deal(c.seed);
+      setDrawCount(c.drawCount);
+    }),
+  );
 }
 
 /** The board is still untouched, so its rules can still be changed. */
@@ -1045,7 +1082,10 @@ function newWinnableGame(): void {
     showToast("🤔 Can't vouch for a deal under Vegas rules — the solver doesn't model the pass limit.");
     return;
   }
+  confirmAbandon("Deal a winnable game", findWinnableDeal);
+}
 
+function findWinnableDeal(): void {
   solverBusy = true;
   syncSolverButtons();
   showToast("🎲 Looking for a deal that can be won…", 60_000);
@@ -1125,7 +1165,10 @@ function showSolution(): void {
   // The opening position, under the rules the solver models.
   const opening = new Game(game.drawCount, game.seed).serialize();
   if (!canAnalyse(opening)) return;
+  confirmAbandon("Show a solution", () => findSolutionLine(opening));
+}
 
+function findSolutionLine(opening: GameState): void {
   solverBusy = true;
   syncSolverButtons();
   showToast("▶ Looking for a winning line from the deal…", 60_000);
@@ -1371,10 +1414,10 @@ window.addEventListener("resize", scheduleResize);
 window.addEventListener("orientationchange", scheduleResize);
 window.visualViewport?.addEventListener("resize", scheduleResize);
 
-el.newGame.addEventListener("click", newGame);
+el.newGame.addEventListener("click", askNewGame);
 el.undo.addEventListener("click", doUndo);
 el.redo.addEventListener("click", doRedo);
-el.restart.addEventListener("click", restartDeal);
+el.restart.addEventListener("click", askRestart);
 el.hint.addEventListener("click", requestHint);
 el.winnable.addEventListener("click", newWinnableGame);
 el.daily.addEventListener("click", playDaily);
@@ -1398,10 +1441,14 @@ el.drawToggle.addEventListener("click", (e) => {
   }
 });
 
+function modalOpen(): boolean {
+  return statsDialog.isOpen() || confirmDialog.isOpen();
+}
+
 /** Arrow keys, Space and Enter belong to the board — but not while a dialog is up,
  *  where they are the browser's for moving between and pressing buttons. */
 function boardHasKeys(): boolean {
-  return !statsDialog.isOpen() && !winPanel.isOpen();
+  return !modalOpen() && !winPanel.isOpen();
 }
 
 /** Whether a focused control should get Space/Enter instead of the board.
@@ -1416,10 +1463,11 @@ function focusOwnsActivation(): boolean {
   return active.closest("button, a[href], input, select, textarea, [contenteditable]") !== null;
 }
 
-/** Escape, in order of what it is most likely to mean: close the dialog, stop the
+/** Escape, in order of what it is most likely to mean: close a dialog, stop the
  *  replay, put down what the cursor holds, cancel a drag. */
 function escape(): void {
-  if (statsDialog.isOpen()) statsDialog.close();
+  if (confirmDialog.isOpen()) confirmDialog.close();
+  else if (statsDialog.isOpen()) statsDialog.close();
   else if (replay.active) stopSolution();
   else if (held) releaseHeld("put down");
   else input.cancelDrag();
@@ -1434,7 +1482,7 @@ function runCommand(c: Command): void {
     case "column": return jumpToColumn(c.index);
     case "undo": return doUndo();
     case "redo": return doRedo();
-    case "newGame": return newGame();
+    case "newGame": return askNewGame();
     case "daily": return playDaily();
     case "hint": return requestHint();
     case "winnable": return newWinnableGame();
@@ -1447,7 +1495,7 @@ function runCommand(c: Command): void {
 window.addEventListener("keydown", (e) => {
   if (!started) return; // the start overlay owns the board until it's dismissed
   const command = keyCommand(e, {
-    modalOpen: statsDialog.isOpen(),
+    modalOpen: modalOpen(),
     boardHasKeys: boardHasKeys(),
     focusOwnsActivation: focusOwnsActivation(),
   });
@@ -1519,6 +1567,8 @@ animator.hideCards(boardCardIds());
 requestAnimationFrame(frame);
 
 const winPanel = new WinPanel({ newGame, restart: restartDeal });
+
+const confirmDialog = new ConfirmDialog();
 
 const statsDialog = new StatsDialog({
   today: todayKey,

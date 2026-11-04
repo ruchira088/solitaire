@@ -100,7 +100,7 @@ logic, rendering, animation, and input kept cleanly separated.
 | `src/share.ts` | The shared result's text, links and `win=` payload — **pure** |
 | `src/challenges.ts` | Challenge links opened, and whether they've been beaten — **pure** |
 | `src/statsView.ts` | The stats dialog's rows and formatting — **pure** |
-| `src/statsDialog.ts` / `src/winPanel.ts` / `src/startOverlay.ts` | The three DOM panels |
+| `src/statsDialog.ts` / `src/winPanel.ts` / `src/startOverlay.ts` / `src/confirmDialog.ts` | The four DOM panels |
 | `src/cursor.ts` | Keyboard cursor: navigation and spoken descriptions — **pure** |
 | `src/tooltip.ts` | The custom tooltip on every `data-tip` trigger; `parseTip` is **pure** |
 | `src/solver.ts` | Can this position be won? Iterative DFS; `toGameLine` for replays — **pure** |
@@ -157,6 +157,8 @@ logic, rendering, animation, and input kept cleanly separated.
 - **The stats dialog is modal in fact**: no shortcut fires through it, and `#app` is
   inert while it's up — which is why `#stats-overlay` is a sibling of `#app`. The win
   panel is deliberately *not* modal.
+- **A new way to abandon a game goes through `confirmAbandon`**, at the action, before
+  any search — not in `beginGame`. Keep playing holds the focus.
 
 → [keyboard and dialogs](docs/decisions/keyboard-and-dialogs.md)
 

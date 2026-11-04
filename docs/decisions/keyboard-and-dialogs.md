@@ -1,7 +1,7 @@
 <!-- Moved out of CLAUDE.md, which keeps a one-line rule pointing here. This is the
      reasoning behind that rule: read it before changing what the rule protects. -->
 
-# Keyboard play and the two dialogs
+# Keyboard play and the dialogs
 
 The board is playable without a pointer, and the stats dialog is modal in fact rather than only in its ARIA. Key precedence now lives in `keyboard.ts` (`keyCommand`, tested), the modality in `statsDialog.ts`.
 
@@ -37,5 +37,18 @@ The board is playable without a pointer, and the stats dialog is modal in fact r
   the toolbar, and inert also takes the board out of the accessibility tree. That is
   why `#stats-overlay` is a **sibling of `#app`** rather than inside it: one line
   inerts everything behind the dialog. Both are checked by `npm run smoke`.
-  The two panels share the card look, the `.dialog-actions` row, and the re-declared
+  The confirmation (`#confirm-overlay`, confirmDialog.ts) is modal the same way and for
+  the same reasons, so `modalOpen()` in main.ts asks about both.
+  The panels share the card look, the `.dialog-actions` row, and the re-declared
   dark palette.
+
+- **Abandoning a game asks first, at the action, not in `beginGame`.** New Game, 🎲,
+  Restart, 📅, an archive day, a challenge and "Show a solution" all go through
+  `confirmAbandon`, which asks only when `gameAtStake()` — a move made, not won, not a
+  replay. `beginGame` is the wrong home: it also serves the win panel, the resume card
+  and Esc out of a replay, none of which abandon anything, and 🎲 and "Show a solution"
+  reach it only after a search, when a question would come out of nowhere. So they ask
+  *before* searching, and a search that then finds nothing leaves the board alone.
+  Reset stats' click-twice arming was not reused: the slip being guarded against here
+  includes a double-click, which sails through it. That is also why **Keep playing**
+  takes the focus — a second `N`, Enter or Space must land safely.
