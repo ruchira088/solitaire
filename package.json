@@ -21,9 +21,9 @@
     "cards:optimize": "svgo -f public/cards --config svgo.config.mjs"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^5.0.5",
-    "oxlint": "^1.82.0",
-    "playwright-core": "^1.63.0",
+    "@vitest/coverage-v8": "^5.1.1",
+    "oxlint": "^1.94.0",
+    "playwright-core": "^1.65.1",
     "svgo": "^4.1.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
